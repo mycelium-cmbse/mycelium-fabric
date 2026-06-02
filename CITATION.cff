@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+
+title: "mycelium fabric"
+abstract: "mycelium fabric: A SysML Modeling API implementation"
+version: "0.0.1"
+date-released: "2026-02-02"
+url: "https://github.com/mycelium-cmbse/mycelium-fabric"
+
+authors:
+  - given-names: "Sam"
+    family-names: "Gerené"
+    affiliation: "Starion Group S.A."
+    orcid: "https://orcid.org/0009-0000-1848-550X"
+  - given-names: Antoine
+    family-names: Théate
+    affiliation: "Starion Group S.A."
+  - name: "Starion Group S.A."
+
+repository-code: "https://github.com/mycelium-cmbse/mycelium-fabric"
+license: "Apache-2.0"
+
+preferred-citation:
+  type: software
+  title: "mycelium fabric."
+  authors:
+    - given-names: "Sam"
+      family-names: "Gerené"
+      orcid: "https://orcid.org/0009-0000-1848-550X"
+    - given-names: Antoine
+      family-names: Théate
+      affiliation: "Starion Group S.A."
+    - name: "Starion Group S.A."
+  version: "0.0.1"
+  url: "https://github.com/mycelium-cmbse/mycelium-fabric"
+  date-released: "2026-06-02"
