@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>14.0</LangVersion>
+        <Version>0.0.1</Version>
+        <Description>The Mycelium Fabric Concurrent Server project.</Description>
+        <Company>Starion Group S.A.</Company>
+        <Copyright>Copyright © Starion Group S.A.</Copyright>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <RepositoryUrl>https://github.com/mycelium-cmbse/mycelium-fabric.git</RepositoryUrl>
+        <RepositoryType>Git</RepositoryType>
+        <Authors>Sam Gerene, Antoine Théate, Régis André, Tanase-Marius Manafu, Omrane Haj Mohamed</Authors>
+        <RequireLicenseAcceptance>true</RequireLicenseAcceptance>
+        <PackageReleaseNotes>
+
+        </PackageReleaseNotes>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <GenerateSBOM>true</GenerateSBOM>
+        <UserSecretsId>dotnet-Mycelium.Fabric.ConcurrentServer-6ffe8f96-3c98-4ae8-a41a-cb3b2d805c39</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9"/>
+    </ItemGroup>
+
+</Project>
