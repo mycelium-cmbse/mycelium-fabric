@@ -1,0 +1,44 @@
+name: "Code scanning - action"
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 18 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  CodeQL-Build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+      with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+        fetch-depth: 2
+
+    # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: csharp
+
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Install dependencies
+      run: dotnet restore Mycelium.Fabric.sln
+
+    - name: Build
+      run: dotnet build Mycelium.Fabric.sln --configuration Release --no-restore
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4

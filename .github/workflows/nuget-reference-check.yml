@@ -1,0 +1,184 @@
+name: "nuget package reference check"
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 8 * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  nuget-package-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup .NET Environment
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Mycelium.Fabric.sln
+
+      - name: Check for outdated packages
+        id: outdated
+        run: |
+          set -e
+
+          IGNORE_PACKAGES="Microsoft\.NETCore\.Platforms|Microsoft\.NETCore\.Targets"
+
+          dotnet list Mycelium.Fabric.sln package --outdated --include-transitive > outdated-raw.log
+
+          grep -v -E "$IGNORE_PACKAGES" outdated-raw.log > outdated.log || true
+
+          echo "=== Full outdated packages report ==="
+          cat outdated.log
+
+          awk '
+            /^Project .*.Tests/ { skip=1; next }
+            /^Project / { skip=0 }
+            !skip { print }
+          ' outdated.log > outdated-issue.log
+
+          if grep -q "^ *>" outdated-issue.log; then
+            echo "Outdated packages found in non-test projects"
+            echo "outdated=true" >> $GITHUB_OUTPUT
+          else
+            echo "No outdated packages found in non-test projects"
+            echo "outdated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for deprecated packages
+        id: deprecated
+        run: |
+          set -e
+
+          dotnet list Mycelium.Fabric.sln package --deprecated --include-transitive > deprecated.log
+
+          echo "=== Full deprecated packages report ==="
+          cat deprecated.log
+
+          awk '
+            /^Project .*.Tests/ { skip=1; next }
+            /^Project / { skip=0 }
+            !skip { print }
+          ' deprecated.log > deprecated-issue.log
+
+          if grep -q "^ *>" deprecated-issue.log; then
+            echo "Deprecated packages found in non-test projects"
+            echo "deprecated=true" >> $GITHUB_OUTPUT
+          else
+            echo "No deprecated packages found in non-test projects"
+            echo "deprecated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for vulnerable packages
+        id: vulnerable
+        run: |
+          set -e
+
+          dotnet list Mycelium.Fabric.sln package --vulnerable --include-transitive > vulnerabilities.log
+
+          echo "=== Full vulnerable packages report ==="
+          cat vulnerabilities.log
+
+          awk '
+            /^Project .*.Tests/ { skip=1; next }
+            /^Project / { skip=0 }
+            !skip { print }
+          ' vulnerabilities.log > vulnerabilities-issue.log
+
+          if grep -q "^ *>" vulnerabilities-issue.log; then
+            echo "Security vulnerabilities found in non-test projects"
+            echo "vulnerable=true" >> $GITHUB_OUTPUT
+          else
+            echo "No security vulnerabilities found in non-test projects"
+            echo "vulnerable=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Synchronize NuGet package issue
+        if: github.event_name != 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            const issueTitle = 'NuGet Package Issues Detected';
+
+            const hasOutdated = '${{ steps.outdated.outputs.outdated }}' === 'true';
+            const hasDeprecated = '${{ steps.deprecated.outputs.deprecated }}' === 'true';
+            const hasVulnerable = '${{ steps.vulnerable.outputs.vulnerable }}' === 'true';
+
+            const hasIssues = hasOutdated || hasDeprecated || hasVulnerable;
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+
+            const existingIssue = issues.find(issue => issue.title === issueTitle);
+
+            if (!hasIssues) {
+              if (existingIssue) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssue.number,
+                  body: 'NuGet package check is clean again. Closing this issue automatically.',
+                });
+
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssue.number,
+                  state: 'closed',
+                });
+              }
+
+              return;
+            }
+
+            let issueBody = `### NuGet Package Issues Detected in [Mycelium.Fabric](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY})\n\n`;
+
+            if (hasOutdated) {
+              const outdatedLog = fs.readFileSync('outdated-issue.log', 'utf8');
+              issueBody += `#### Outdated Packages\n\`\`\`\n${outdatedLog}\n\`\`\`\n\n`;
+            }
+
+            if (hasDeprecated) {
+              const deprecatedLog = fs.readFileSync('deprecated-issue.log', 'utf8');
+              issueBody += `#### Deprecated Packages\n\`\`\`\n${deprecatedLog}\n\`\`\`\n\n`;
+            }
+
+            if (hasVulnerable) {
+              const vulnerabilitiesLog = fs.readFileSync('vulnerabilities-issue.log', 'utf8');
+              issueBody += `#### Vulnerable Packages\n\`\`\`\n${vulnerabilitiesLog}\n\`\`\`\n\n`;
+            }
+
+            issueBody += '**Action Required:** Please review and update the affected packages.';
+
+            if (existingIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `New check results:\n\n${issueBody}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+              });
+            }
