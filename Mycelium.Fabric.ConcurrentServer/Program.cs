@@ -1,18 +1,21 @@
 // ------------------------------------------------------------------------------------------------
 //  <copyright file="Program.cs" company="Starion Group S.A.">
-// 
+//
 //    Copyright 2026 Starion Group S.A.
 //    SPDX-License-Identifier: Apache-2.0
-// 
+//
 //  </copyright>
 //  ------------------------------------------------------------------------------------------------
 
 namespace Mycelium.Fabric.ConcurrentServer
 {
-    using Microsoft.Extensions.Hosting;
+    using Carter;
+
+    using Microsoft.AspNetCore.Builder;
+    using Microsoft.Extensions.DependencyInjection;
 
     /// <summary>
-    /// Entry class of this application 
+    /// Entry class of this application
     /// </summary>
     public static class Program
     {
@@ -22,10 +25,16 @@ namespace Mycelium.Fabric.ConcurrentServer
         /// <param name="args">The launch arguments</param>
         public static void Main(string[] args)
         {
-            var builder = Host.CreateApplicationBuilder(args);
+            var builder = WebApplication.CreateBuilder(args);
 
-            var host = builder.Build();
-            host.Run();
+            builder.Services.AddLogging();
+            builder.Services.AddCarter();
+
+            var app = builder.Build();
+
+            app.MapCarter();
+
+            app.Run();
         }
     }
 }
