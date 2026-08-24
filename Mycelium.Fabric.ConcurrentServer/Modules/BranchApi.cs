@@ -44,7 +44,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetBranchesByProject(HttpContext context, Guid projectId, ILogger<BranchApi> logger)
         {
-            logger.LogInformation("getBranchesByProject invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getBranchesByProject invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "getBranchesByProject");
         }
