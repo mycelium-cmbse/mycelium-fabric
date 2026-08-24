@@ -27,6 +27,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
     {
         private Mock<ILogger<MetaApi>> logger;
 
+        private const string DatatypeId = "https://a.uri";
+        
         [SetUp]
         public void SetUp()
         {
@@ -69,9 +71,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         [Test]
         public async Task VerifyGetDatatypeById()
         {
-            Assert.That(() => MetaApi.GetDatatypeById(null, Mock.Of<ILogger<MetaApi>>()), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(() => MetaApi.GetDatatypeById(null, Mock.Of<ILogger<MetaApi>>(), DatatypeId), Throws.TypeOf<ArgumentNullException>());
 
-            var invocation = await HandlerInvocation.CaptureAsync(context => MetaApi.GetDatatypeById(context, this.logger.Object));
+            var invocation = await HandlerInvocation.CaptureAsync(context => MetaApi.GetDatatypeById(context, this.logger.Object, DatatypeId));
 
             invocation.AssertNotYetImplemented("getDatatypeById");
 
