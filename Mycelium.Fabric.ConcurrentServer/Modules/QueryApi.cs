@@ -50,7 +50,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetQueriesByProject(HttpContext context, Guid projectId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("getQueriesByProject invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getQueriesByProject invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "getQueriesByProject");
         }
@@ -74,7 +77,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task PostQueryByProject(HttpContext context, Guid projectId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("postQueryByProject invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("postQueryByProject invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "postQueryByProject");
         }
@@ -98,7 +104,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetQueryByProjectAndId(HttpContext context, Guid projectId, Guid queryId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("getQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            }
 
             return NotYetImplemented(context, "getQueryByProjectAndId");
         }
@@ -123,7 +132,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task PutQueryByProjectAndId(HttpContext context, Guid projectId, Guid queryId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("putQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("putQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            }
 
             return NotYetImplemented(context, "putQueryByProjectAndId");
         }
@@ -148,7 +160,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task DeleteQueryByProjectAndId(HttpContext context, Guid projectId, Guid queryId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("deleteQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("deleteQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            }
 
             return NotYetImplemented(context, "deleteQueryByProjectAndId");
         }
@@ -175,7 +190,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetQueryResultsByProjectIdQueryId(HttpContext context, Guid projectId, Guid queryId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("getQueryResultsByProjectIdQueryId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getQueryResultsByProjectIdQueryId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+            }
 
             return NotYetImplemented(context, "getQueryResultsByProjectIdQueryId");
         }
@@ -201,7 +219,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetQueryResultsByProjectIdQuery(HttpContext context, Guid projectId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("getQueryResultsByProjectIdQuery invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getQueryResultsByProjectIdQuery invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "getQueryResultsByProjectIdQuery");
         }
@@ -224,7 +245,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetQueryResultsByProjectIdQueryPost(HttpContext context, Guid projectId, ILogger<QueryApi> logger)
         {
-            logger.LogInformation("getQueryResultsByProjectIdQueryPost invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getQueryResultsByProjectIdQueryPost invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "getQueryResultsByProjectIdQueryPost");
         }

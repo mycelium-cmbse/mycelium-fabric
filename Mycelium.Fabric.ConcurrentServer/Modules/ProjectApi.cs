@@ -43,7 +43,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetProjects(HttpContext context, ILogger<ProjectApi> logger)
         {
-            logger.LogInformation("getProjects invoked");
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getProjects invoked");
+            }
 
             return NotYetImplemented(context, "getProjects");
         }
@@ -63,7 +66,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task PostProject(HttpContext context, ILogger<ProjectApi> logger)
         {
-            logger.LogInformation("postProject invoked");
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("postProject invoked");
+            }
 
             return NotYetImplemented(context, "postProject");
         }
@@ -87,7 +93,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetProjectById(HttpContext context, Guid projectId, ILogger<ProjectApi> logger)
         {
-            logger.LogInformation("getProjectById invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getProjectById invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "getProjectById");
         }
@@ -112,7 +121,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task PutProjectById(HttpContext context, Guid projectId, ILogger<ProjectApi> logger)
         {
-            logger.LogInformation("putProjectById invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("putProjectById invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "putProjectById");
         }
@@ -145,7 +157,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task DeleteProjectById(HttpContext context, Guid projectId, ILogger<ProjectApi> logger)
         {
-            logger.LogInformation("deleteProjectById invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("deleteProjectById invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "deleteProjectById");
         }

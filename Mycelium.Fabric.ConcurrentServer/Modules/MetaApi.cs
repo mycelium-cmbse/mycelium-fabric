@@ -50,7 +50,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetDatatypes(HttpContext context, ILogger<MetaApi> logger)
         {
-            logger.LogInformation("getDatatypes invoked");
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getDatatypes invoked");
+            }
 
             return NotYetImplemented(context, "getDatatypes");
         }
@@ -70,7 +73,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetDatatypeById(HttpContext context, ILogger<MetaApi> logger, string datatypeId)
         {
-            logger.LogInformation("getDatatypeById invoked");
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getDatatypeById invoked");
+            }
 
             return NotYetImplemented(context, "getDatatypeById");
         }

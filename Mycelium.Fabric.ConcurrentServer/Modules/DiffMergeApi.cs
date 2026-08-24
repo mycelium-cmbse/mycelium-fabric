@@ -58,7 +58,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task Merge(HttpContext context, Guid projectId, Guid targetBranchId, ILogger<DiffMergeApi> logger)
         {
-            logger.LogInformation("merge invoked for project {ProjectId} and target branch {TargetBranchId}", projectId, targetBranchId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("merge invoked for project {ProjectId} and target branch {TargetBranchId}", projectId, targetBranchId);
+            }
 
             return NotYetImplemented(context, "merge");
         }
@@ -96,7 +99,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task Diff(HttpContext context, Guid projectId, Guid compareCommitId, ILogger<DiffMergeApi> logger)
         {
-            logger.LogInformation("diff invoked for project {ProjectId} and compare commit {CompareCommitId}", projectId, compareCommitId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("diff invoked for project {ProjectId} and compare commit {CompareCommitId}", projectId, compareCommitId);
+            }
 
             return NotYetImplemented(context, "diff");
         }

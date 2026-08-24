@@ -29,6 +29,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
     /// <param name="Problem">The RFC 7807 payload deserialized from the response body.</param>
     internal sealed record HandlerInvocation(int StatusCode, string ContentType, ProblemDetails Problem)
     {
+        private static readonly JsonSerializerOptions JsonSerializerOptions = new (JsonSerializerDefaults.Web);
+        
         /// <summary>
         /// The request path the handlers are invoked against.
         /// </summary>
@@ -47,11 +49,16 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
 
             var context = new DefaultHttpContext
             {
-                RequestServices = services.BuildServiceProvider()
+                RequestServices = services.BuildServiceProvider(),
+                Request =
+                {
+                    Path = RequestPath
+                },
+                Response =
+                {
+                    Body = new MemoryStream()
+                }
             };
-
-            context.Request.Path = RequestPath;
-            context.Response.Body = new MemoryStream();
 
             await handler(context);
 
@@ -59,11 +66,12 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
 
             var problem = await JsonSerializer.DeserializeAsync<ProblemDetails>(
                 context.Response.Body,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                JsonSerializerOptions);
 
             return new HandlerInvocation(context.Response.StatusCode, context.Response.ContentType, problem);
         }
 
+#pragma warning disable CA1873
         /// <summary>
         /// Verifies that the handler emitted exactly one <see cref="LogLevel.Information"/> entry naming
         /// the supplied operation.
@@ -82,7 +90,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
                     It.IsAny<Func<It.IsAnyType, Exception, string>>()),
                 Times.Once);
         }
-
+#pragma warning restore CA1873
+        
         /// <summary>
         /// Gets the <c>operationId</c> extension member carried by the RFC 7807 payload.
         /// </summary>

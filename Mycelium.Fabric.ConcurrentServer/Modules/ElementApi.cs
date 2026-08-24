@@ -49,7 +49,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetElementsByProjectCommit(HttpContext context, Guid projectId, Guid commitId, ILogger<ElementApi> logger)
         {
-            logger.LogInformation("getElementsByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getElementsByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+            }
 
             return NotYetImplemented(context, "getElementsByProjectCommit");
         }
@@ -74,7 +77,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetElementByProjectCommitId(HttpContext context, Guid projectId, Guid commitId, Guid elementId, ILogger<ElementApi> logger)
         {
-            logger.LogInformation("getElementByProjectCommitId invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", projectId, commitId, elementId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getElementByProjectCommitId invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", projectId, commitId, elementId);
+            }
 
             return NotYetImplemented(context, "getElementByProjectCommitId");
         }
@@ -112,7 +118,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetProjectUsageByProjectCommitElement(HttpContext context, Guid projectId, Guid commitId, Guid elementId, ILogger<ElementApi> logger)
         {
-            logger.LogInformation("getProjectUsageByProjectCommitElement invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", projectId, commitId, elementId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getProjectUsageByProjectCommitElement invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", projectId, commitId, elementId);
+            }
 
             return NotYetImplemented(context, "getProjectUsageByProjectCommitElement");
         }
@@ -136,7 +145,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetRootsByProjectCommit(HttpContext context, Guid projectId, Guid commitId, ILogger<ElementApi> logger)
         {
-            logger.LogInformation("getRootsByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getRootsByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+            }
 
             return NotYetImplemented(context, "getRootsByProjectCommit");
         }

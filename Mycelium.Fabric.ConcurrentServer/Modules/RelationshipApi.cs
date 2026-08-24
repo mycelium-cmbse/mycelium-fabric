@@ -53,7 +53,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetRelationshipsByProjectCommitRelatedElement(HttpContext context, Guid projectId, Guid commitId, Guid relatedElementId, ILogger<RelationshipApi> logger)
         {
-            logger.LogInformation("getRelationshipsByProjectCommitRelatedElement invoked for project {ProjectId}, commit {CommitId} and related element {RelatedElementId}", projectId, commitId, relatedElementId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getRelationshipsByProjectCommitRelatedElement invoked for project {ProjectId}, commit {CommitId} and related element {RelatedElementId}", projectId, commitId, relatedElementId);
+            }
 
             return NotYetImplemented(context, "getRelationshipsByProjectCommitRelatedElement");
         }

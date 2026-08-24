@@ -44,8 +44,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetTagsByProject(HttpContext context, Guid projectId, ILogger<TagApi> logger)
         {
-            logger.LogInformation("getTagsByProject invoked for project {ProjectId}", projectId);
-
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getTagsByProject invoked for project {ProjectId}", projectId);
+            }
+            
             return NotYetImplemented(context, "getTagsByProject");
         }
 
@@ -67,7 +70,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task PostTagByProject(HttpContext context, Guid projectId, ILogger<TagApi> logger)
         {
-            logger.LogInformation("postTagByProject invoked for project {ProjectId}", projectId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("postTagByProject invoked for project {ProjectId}", projectId);
+            }
 
             return NotYetImplemented(context, "postTagByProject");
         }
@@ -93,7 +99,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task GetTagByProjectAndId(HttpContext context, Guid projectId, Guid tagId, ILogger<TagApi> logger)
         {
-            logger.LogInformation("getTagByProjectAndId invoked for project {ProjectId} and tag {TagId}", projectId, tagId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("getTagByProjectAndId invoked for project {ProjectId} and tag {TagId}", projectId, tagId);
+            }
 
             return NotYetImplemented(context, "getTagByProjectAndId");
         }
@@ -118,7 +127,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public static Task DeleteTagByProjectAndId(HttpContext context, Guid projectId, Guid tagId, ILogger<TagApi> logger)
         {
-            logger.LogInformation("deleteTagByProjectAndId invoked for project {ProjectId} and tag {TagId}", projectId, tagId);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("deleteTagByProjectAndId invoked for project {ProjectId} and tag {TagId}", projectId, tagId);
+            }
 
             return NotYetImplemented(context, "deleteTagByProjectAndId");
         }
