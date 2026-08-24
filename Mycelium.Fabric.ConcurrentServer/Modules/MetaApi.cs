@@ -61,21 +61,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         /// </summary>
         /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
         /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
+        /// <param name="datatypeId">The string identifier for the datatype that shall be retrieved.</param>
         /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
-        /// <remarks>
-        /// The <c>datatypeId</c> route segment carries no <c>:guid</c> constraint, unlike the identifiers
-        /// on the specification-derived routes — a metaclass is identified by name rather than by a record
-        /// id. It is therefore <b>not</b> bound as a method parameter here, since only guid-constrained
-        /// segments are. Binding it as a <c>string</c> is an open decision.
-        /// <para>
         /// Not a specification endpoint; see the remarks on <see cref="MetaApi"/> for provenance. Not yet
         /// implemented — answers <c>500</c> with an RFC 7807 payload.
-        /// </para>
-        /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetDatatypeById(HttpContext context, ILogger<MetaApi> logger)
+        public static Task GetDatatypeById(HttpContext context, ILogger<MetaApi> logger, string datatypeId)
         {
             logger.LogInformation("getDatatypeById invoked");
 
