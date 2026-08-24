@@ -34,7 +34,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
     [GeneratedCode("Mycelium.SDK", "latest")]
     public partial class BranchApi : ICarterModule
     {
-        /// <inheritdoc />
+        /// <summary>
+        /// Invoked at startup to add routes to the HTTP pipeline
+        /// </summary>
+        /// <remarks>Implementations of <see cref="ICarterModule"/> should not inject constructor dependencies. All dependencies should be supplied in the route <see cref="RequestDelegate"/></remarks>
+        /// <param name="app">An instance of <see cref="IEndpointRouteBuilder"/></param>
         public void AddRoutes(IEndpointRouteBuilder app)
         {
             app.MapGet("/projects/{projectId:guid}/branches", GetBranchesByProject)
