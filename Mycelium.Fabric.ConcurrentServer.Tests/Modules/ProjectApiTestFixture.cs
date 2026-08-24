@@ -33,6 +33,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         public void SetUp()
         {
             this.logger = new Mock<ILogger<ProjectApi>>();
+            this.logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         }
 
         [Test]

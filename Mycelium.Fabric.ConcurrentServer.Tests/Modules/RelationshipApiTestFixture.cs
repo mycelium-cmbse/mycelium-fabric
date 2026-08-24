@@ -37,7 +37,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         public void SetUp()
         {
             this.logger = new Mock<ILogger<RelationshipApi>>();
+            this.logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         }
+        
 
         [Test]
         public void VerifyAddRoutes()
