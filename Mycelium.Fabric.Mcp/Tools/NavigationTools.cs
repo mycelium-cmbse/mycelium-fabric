@@ -54,6 +54,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The <see cref="ModelOverview"/> of the model.</returns>
         [McpServerTool(Name = "get_model_overview", ReadOnly = true)]
         [Description("Gives an overview of the loaded model: its top-level elements, the total number of elements and the most frequent element types. Call it first to discover the model.")]
+        [return: Description("The top-level elements of the model, its total and named element counts, and its most frequent element types with their counts.")]
         public ModelOverview GetModelOverview()
         {
             var elements = this.modelProvider.GetElements();
