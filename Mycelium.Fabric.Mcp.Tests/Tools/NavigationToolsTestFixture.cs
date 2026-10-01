@@ -21,12 +21,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Extensions;
 
+    using System.IO;
+    using System.Linq;
+
+    using ModelContextProtocol;
+
     /// <summary>
     /// Suite of tests for the <see cref="NavigationTools"/> class.
     /// </summary>
     [TestFixture]
     public class NavigationToolsTestFixture
     {
+        /// <summary>
+        /// The <c>ElementId</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private const string PayloadSubsystemId = "95a8c184-a12e-1125-c0ee-bbe7a025de5b";
+
+        /// <summary>
+        /// The <c>ElementId</c> of the <c>camera</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private const string CameraId = "558a0ae4-8585-66a3-9bc6-52322650941c";
+
         private Mock<IModelProvider> modelProvider;
 
         [SetUp]
@@ -85,6 +100,71 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 this.modelProvider.VerifyGet(provider => provider.Elements, Times.Exactly(2));
                 this.modelProvider.VerifyGet(provider => provider.RootElements, Times.Exactly(2));
             }
+        }
+
+        [Test]
+        public void VerifyGetElementDetails()
+        {
+            var tools = new NavigationTools(this.modelProvider.Object);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => tools.GetElementDetails("unknown-id"), Throws.TypeOf<McpException>().With.Message.Contains("unknown-id"));
+                Assert.That(() => tools.GetElementDetails(" "), Throws.TypeOf<McpException>());
+            }
+
+            tools = CreateSatelliteTools();
+
+            var camera = tools.GetElementDetails(CameraId);
+            var payloadSubsystem = tools.GetElementDetails(PayloadSubsystemId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(camera.ElementId, Is.EqualTo(CameraId));
+                Assert.That(camera.Name, Is.EqualTo("camera"));
+                Assert.That(camera.ShortName, Is.Null);
+                Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
+                Assert.That(camera.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera"));
+                Assert.That(camera.OwnerId, Is.EqualTo(PayloadSubsystemId));
+                Assert.That(camera.OwnerName, Is.EqualTo("payloadSubsystem"));
+                Assert.That(camera.ChildCount, Is.EqualTo(0));
+                Assert.That(camera.Documentation, Is.Null);
+                Assert.That(payloadSubsystem.Documentation, Is.EqualTo("Payload: the imaging instrument and its data storage."));
+            }
+        }
+
+        [Test]
+        public void VerifyListChildren()
+        {
+            var tools = new NavigationTools(this.modelProvider.Object);
+
+            Assert.That(() => tools.ListChildren("unknown-id"), Throws.TypeOf<McpException>());
+
+            tools = CreateSatelliteTools();
+
+            var children = tools.ListChildren(PayloadSubsystemId);
+            var camera = children.Single(child => child.Name == "camera");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(children.Select(child => child.Name), Is.SupersetOf(["camera", "massMemory"]));
+                Assert.That(camera.ElementId, Is.EqualTo(CameraId));
+                Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
+                Assert.That(camera.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera"));
+                Assert.That(tools.ListChildren(CameraId), Is.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Creates <see cref="NavigationTools"/> that work on the <c>Satellite.json</c> test model.
+        /// </summary>
+        /// <returns>The <see cref="NavigationTools"/> on the loaded model.</returns>
+        private static NavigationTools CreateSatelliteTools()
+        {
+            var satelliteModelProvider = new InMemoryModelProvider();
+            satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+
+            return new NavigationTools(satelliteModelProvider);
         }
     }
 }
