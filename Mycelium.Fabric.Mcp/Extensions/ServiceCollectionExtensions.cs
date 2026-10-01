@@ -21,31 +21,36 @@ namespace Mycelium.Fabric.Mcp.Extensions
     /// </summary>
     public static class ServiceCollectionExtensions
     {
-        /// <summary>
-        /// Registers the MCP server, its tools, and an <see cref="InMemoryModelProvider"/> that loads the model
-        /// from the given JSON file.
-        /// </summary>
         /// <param name="services">The <see cref="IServiceCollection"/> to register the services in.</param>
-        /// <param name="modelFilePath">The path of the JSON file that contains the model.</param>
-        /// <returns>
-        /// The <see cref="IMcpServerBuilder"/> of the registered server, on which the host chooses the transport.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="services"/> is <c>null</c>.
-        /// </exception>
-        /// <exception cref="ArgumentException">
-        /// Thrown when <paramref name="modelFilePath"/> is <c>null</c>, empty or white space.
-        /// </exception>
-        public static IMcpServerBuilder AddFabricMcpServer(this IServiceCollection services, string modelFilePath)
+        extension(IServiceCollection services)
         {
-            ArgumentNullException.ThrowIfNull(services);
-            ArgumentException.ThrowIfNullOrWhiteSpace(modelFilePath);
+            /// <summary>
+            /// Registers the MCP server, its tools, and an <see cref="InMemoryModelProvider"/> that loads the model
+            /// from the given JSON file.
+            /// </summary>
+            /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
+            /// <returns>
+            /// The <see cref="IMcpServerBuilder"/> of the registered server, on which the host chooses the transport.
+            /// </returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="services"/> or <paramref name="modelPath"/> is <c>null</c>.
+            /// </exception>
+            public IMcpServerBuilder AddFabricMcpServer(Uri modelPath)
+            {
+                ArgumentNullException.ThrowIfNull(services);
+                ArgumentNullException.ThrowIfNull(modelPath);
 
-            services.AddSingleton<IModelProvider>(_ => new InMemoryModelProvider(modelFilePath));
+                services.AddSingleton<IModelProvider>(_ =>
+                {
+                    var modelProvider = new InMemoryModelProvider();
+                    modelProvider.LoadModel(modelPath);
+                    return modelProvider;
+                });
 
-            return services
-                .AddMcpServer()
-                .WithTools<NavigationTools>();
+                return services
+                    .AddMcpServer()
+                    .WithTools<NavigationTools>();
+            }
         }
     }
 }

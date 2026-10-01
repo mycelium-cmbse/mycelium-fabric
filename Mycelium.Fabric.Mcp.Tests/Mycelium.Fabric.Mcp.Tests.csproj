@@ -38,7 +38,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Update="Data\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Update="Data\*.json" CopyToOutputDirectory="Always" />
     </ItemGroup>
 
     <ItemGroup>

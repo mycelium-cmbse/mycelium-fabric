@@ -18,9 +18,5 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="ElementCount">The total number of elements in the model.</param>
     /// <param name="NamedElementCount">The number of elements that have a declared name.</param>
     /// <param name="MostFrequentTypes">The most frequent element types, with the number of elements of each type.</param>
-    public sealed record ModelOverview(
-        IReadOnlyList<string> TopLevelElements,
-        int ElementCount,
-        int NamedElementCount,
-        IReadOnlyDictionary<string, int> MostFrequentTypes);
+    public sealed record ModelOverview(IReadOnlyList<string> TopLevelElements, int ElementCount, int NamedElementCount, IReadOnlyDictionary<string, int> MostFrequentTypes);
 }

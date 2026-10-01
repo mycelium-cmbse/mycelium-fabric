@@ -22,33 +22,40 @@ namespace Mycelium.Fabric.Mcp.Services
 
     /// <summary>
     /// An <see cref="IModelProvider"/> that loads a SysML v2 model from a JSON file of the Systems Modeling
-    /// API and keeps it in memory.
+    /// API and keeps it in memory. It holds no element until <see cref="LoadModel"/> is called.
     /// </summary>
     public class InMemoryModelProvider : IModelProvider
     {
         /// <summary>
         /// All the elements of the loaded model.
         /// </summary>
-        private readonly List<IElement> elements;
+        private List<IElement> elements = [];
 
         /// <summary>
         /// The elements of the loaded model that have no owner.
         /// </summary>
-        private readonly List<IElement> rootElements;
+        private List<IElement> rootElements = [];
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="InMemoryModelProvider"/> class by loading the model
-        /// stored in the given JSON file.
+        /// Loads the model stored at the given location, replacing the model loaded before.
         /// </summary>
-        /// <param name="filePath">The path of the JSON file that contains the model.</param>
-        /// <exception cref="ArgumentException">
-        /// Thrown when <paramref name="filePath"/> is <c>null</c>, empty or white space.
+        /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="modelPath"/> is <c>null</c>.
         /// </exception>
-        public InMemoryModelProvider(string filePath)
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="modelPath"/> is not an absolute file <see cref="Uri"/>.
+        /// </exception>
+        public void LoadModel(Uri modelPath)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+            ArgumentNullException.ThrowIfNull(modelPath);
 
-            using var stream = File.OpenRead(filePath);
+            if (!modelPath.IsAbsoluteUri || !modelPath.IsFile)
+            {
+                throw new ArgumentException("The model path must be an absolute file URI.", nameof(modelPath));
+            }
+
+            using var stream = File.OpenRead(modelPath.LocalPath);
 
             var dtos = new DeSerializer()
                 .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
@@ -58,22 +65,30 @@ namespace Mycelium.Fabric.Mcp.Services
             var assembler = new Assembler();
             assembler.Synchronize(dtos);
 
-            this.elements = assembler.Cache.Values
+            var loadedElements = assembler.Cache.Values
                 .Select(lazyElement => lazyElement.Value)
                 .ToList();
 
-            this.rootElements = this.elements
+            this.rootElements = loadedElements
                 .Where(element => element.OwningRelationship == null && element is not IRelationship { OwningRelatedElement: not null })
                 .ToList();
+
+            this.elements = loadedElements;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets all the elements of the model.
+        /// </summary>
+        /// <returns>A read-only list of every <see cref="IElement"/> in the model.</returns>
         public IReadOnlyList<IElement> GetElements()
         {
             return this.elements;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the root elements of the model, that is the elements that have no owner.
+        /// </summary>
+        /// <returns>A read-only list of the root <see cref="IElement"/>s of the model.</returns>
         public IReadOnlyList<IElement> GetRootElements()
         {
             return this.rootElements;

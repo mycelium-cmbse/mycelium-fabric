@@ -28,12 +28,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     [TestFixture]
     public class ServiceCollectionExtensionsTestFixture
     {
-        private string satelliteModelFilePath;
+        private Uri satelliteModelPath;
 
         [SetUp]
         public void SetUp()
         {
-            this.satelliteModelFilePath = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json");
+            this.satelliteModelPath = new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json"));
         }
 
         [Test]
@@ -41,11 +41,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         {
             var services = new ServiceCollection();
 
-            Assert.That(() => ((IServiceCollection)null).AddFabricMcpServer(this.satelliteModelFilePath), Throws.TypeOf<ArgumentNullException>());
-            Assert.That(() => services.AddFabricMcpServer(" "), Throws.TypeOf<ArgumentException>());
-            Assert.That(services, Has.Count.EqualTo(0));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IServiceCollection)null).AddFabricMcpServer(this.satelliteModelPath), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => services.AddFabricMcpServer(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(services, Has.Count.EqualTo(0));
+            }
 
-            var serverBuilder = services.AddFabricMcpServer(this.satelliteModelFilePath);
+            var serverBuilder = services.AddFabricMcpServer(this.satelliteModelPath);
 
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
@@ -61,7 +64,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var serviceProvider = new Mock<IServiceProvider>();
             var modelProvider = modelProviderRegistrations[0].ImplementationFactory(serviceProvider.Object);
 
-            Assert.That(modelProvider, Is.InstanceOf<InMemoryModelProvider>());
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(modelProvider, Is.InstanceOf<InMemoryModelProvider>());
+                Assert.That(((IModelProvider)modelProvider).GetElements(), Has.Count.EqualTo(548));
+            }
         }
     }
 }

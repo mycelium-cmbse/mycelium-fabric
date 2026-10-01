@@ -38,8 +38,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void VerifyConstructor()
         {
-            Assert.That(() => new NavigationTools(null), Throws.TypeOf<ArgumentNullException>());
-            Assert.That(() => new NavigationTools(this.modelProvider.Object), Throws.Nothing);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => new NavigationTools(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new NavigationTools(this.modelProvider.Object), Throws.Nothing);
+            }
         }
 
         [Test]
@@ -79,10 +82,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(overview.NamedElementCount, Is.EqualTo(1));
                 Assert.That(overview.MostFrequentTypes, Has.Count.EqualTo(4));
                 Assert.That(overview.MostFrequentTypes["PartUsage"], Is.EqualTo(1));
+                this.modelProvider.Verify(provider => provider.GetElements(), Times.Exactly(2));
+                this.modelProvider.Verify(provider => provider.GetRootElements(), Times.Exactly(2));
             }
-
-            this.modelProvider.Verify(provider => provider.GetElements(), Times.Exactly(2));
-            this.modelProvider.Verify(provider => provider.GetRootElements(), Times.Exactly(2));
         }
     }
 }

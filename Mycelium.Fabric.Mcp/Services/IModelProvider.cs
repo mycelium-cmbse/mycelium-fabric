@@ -9,6 +9,7 @@
 
 namespace Mycelium.Fabric.Mcp.Services
 {
+    using System;
     using System.Collections.Generic;
 
     using SysML2.NET.Core.POCO.Root.Elements;
@@ -17,12 +18,24 @@ namespace Mycelium.Fabric.Mcp.Services
     /// Provides read access to the SysML v2 model that the MCP tools work on.
     /// </summary>
     /// <remarks>
-    /// The operations mirror the <c>ElementNavigationService</c> of the Systems Modeling API and Services 1.0
+    /// The read operations mirror the <c>ElementNavigationService</c> of the Systems Modeling API and Services 1.0
     /// (§7.2.2): <c>getElements</c> and <c>getRootElements</c>. The project and commit scoping of the
-    /// specification is left out for now, since a provider serves a single model.
+    /// specification is left out for now, since a provider serves a single model at a time.
     /// </remarks>
     public interface IModelProvider
     {
+        /// <summary>
+        /// Loads the model stored at the given location, replacing the model loaded before.
+        /// </summary>
+        /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="modelPath"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="modelPath"/> is not an absolute file <see cref="Uri"/>.
+        /// </exception>
+        void LoadModel(Uri modelPath);
+
         /// <summary>
         /// Gets all the elements of the model.
         /// </summary>

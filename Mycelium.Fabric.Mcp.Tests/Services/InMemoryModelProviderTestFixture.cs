@@ -22,49 +22,70 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     [TestFixture]
     public class InMemoryModelProviderTestFixture
     {
-        private string satelliteModelFilePath;
+        private string dataDirectory;
 
-        private string emptyModelFilePath;
+        private Uri satelliteModelPath;
+
+        private Uri emptyModelPath;
+
+        private InMemoryModelProvider modelProvider;
 
         [SetUp]
         public void SetUp()
         {
-            var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
+            this.dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
+            this.satelliteModelPath = new Uri(Path.Combine(this.dataDirectory, "Satellite.json"));
+            this.emptyModelPath = new Uri(Path.Combine(this.dataDirectory, "Empty.json"));
 
-            this.satelliteModelFilePath = Path.Combine(dataDirectory, "Satellite.json");
-            this.emptyModelFilePath = Path.Combine(dataDirectory, "Empty.json");
+            this.modelProvider = new InMemoryModelProvider();
         }
 
         [Test]
         public void VerifyConstructor()
         {
-            Assert.That(() => new InMemoryModelProvider(null), Throws.TypeOf<ArgumentNullException>());
-            Assert.That(() => new InMemoryModelProvider(" "), Throws.TypeOf<ArgumentException>());
-            Assert.That(() => new InMemoryModelProvider("Missing.json"), Throws.TypeOf<FileNotFoundException>());
-            Assert.That(() => new InMemoryModelProvider(this.satelliteModelFilePath), Throws.Nothing);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.modelProvider.GetElements(), Has.Count.EqualTo(0));
+                Assert.That(this.modelProvider.GetRootElements(), Has.Count.EqualTo(0));
+            }
+        }
+
+        [Test]
+        public void VerifyLoadModel()
+        {
+            var missingModelPath = new Uri(Path.Combine(this.dataDirectory, "Missing.json"));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.modelProvider.LoadModel(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.modelProvider.LoadModel(new Uri("Satellite.json", UriKind.Relative)), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => this.modelProvider.LoadModel(new Uri("https://example.com/Satellite.json")), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => this.modelProvider.LoadModel(missingModelPath), Throws.TypeOf<FileNotFoundException>());
+                Assert.That(() => this.modelProvider.LoadModel(this.satelliteModelPath), Throws.Nothing);
+            }
         }
 
         [Test]
         public void VerifyGetElements()
         {
-            var modelProvider = new InMemoryModelProvider(this.emptyModelFilePath);
+            this.modelProvider.LoadModel(this.satelliteModelPath);
 
-            Assert.That(modelProvider.GetElements(), Has.Count.EqualTo(0));
+            Assert.That(this.modelProvider.GetElements(), Has.Count.EqualTo(548));
 
-            modelProvider = new InMemoryModelProvider(this.satelliteModelFilePath);
+            this.modelProvider.LoadModel(this.emptyModelPath);
 
-            Assert.That(modelProvider.GetElements(), Has.Count.EqualTo(548));
+            Assert.That(this.modelProvider.GetElements(), Has.Count.EqualTo(0));
         }
 
         [Test]
         public void VerifyGetRootElements()
         {
-            var modelProvider = new InMemoryModelProvider(this.emptyModelFilePath);
+            this.modelProvider.LoadModel(this.emptyModelPath);
 
-            Assert.That(modelProvider.GetRootElements(), Has.Count.EqualTo(0));
+            Assert.That(this.modelProvider.GetRootElements(), Has.Count.EqualTo(0));
 
-            modelProvider = new InMemoryModelProvider(this.satelliteModelFilePath);
-            var rootElements = modelProvider.GetRootElements();
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+            var rootElements = this.modelProvider.GetRootElements();
 
             using (Assert.EnterMultipleScope())
             {
