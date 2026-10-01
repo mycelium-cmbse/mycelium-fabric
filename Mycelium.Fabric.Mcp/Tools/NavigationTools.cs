@@ -34,6 +34,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         private const int MaximumTypeCount = 15;
 
         /// <summary>
+        /// The maximum number of elements returned by <see cref="FindElementsByName"/>.
+        /// </summary>
+        private const int MaximumSearchResultCount = 20;
+
+        /// <summary>
         /// The <see cref="IModelProvider"/> that gives access to the model.
         /// </summary>
         private readonly IModelProvider modelProvider;
@@ -80,6 +85,41 @@ namespace Mycelium.Fabric.Mcp.Tools
                 ElementCount: elements.Count,
                 NamedElementCount: elements.Count(element => !string.IsNullOrWhiteSpace(element.DeclaredName)),
                 MostFrequentTypes: mostFrequentTypes);
+        }
+
+        /// <summary>
+        /// Finds the elements whose declared name contains the given text, ignoring case.
+        /// </summary>
+        /// <param name="text">The text to look for in the names of the elements.</param>
+        /// <returns>
+        /// The <see cref="SearchResult"/> that gives the number of matching elements and the first ones, sorted by name.
+        /// </returns>
+        /// <exception cref="McpException">
+        /// Thrown when <paramref name="text"/> is <c>null</c>, empty or white space.
+        /// </exception>
+        [McpServerTool(Name = "find_elements_by_name", ReadOnly = true)]
+        [Description("Finds the elements whose name contains a text, ignoring case. Use it to get the identifier of an element from its name.")]
+        [return: Description("The total number of matching elements and the first 20 of them, sorted by name, with their identifier, name, type and qualified name.")]
+        public SearchResult FindElementsByName([Description("The text to look for in the names of the elements, for example 'camera'.")] string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new McpException("The text to look for must not be empty.");
+            }
+
+            var matches = this.modelProvider.Elements
+                .Where(element => element.DeclaredName != null && element.DeclaredName.Contains(text, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(element => element.DeclaredName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var firstMatches = matches
+                .Take(MaximumSearchResultCount)
+                .Select(CreateSummary)
+                .ToList();
+
+            return new SearchResult(
+                TotalFound: matches.Count,
+                Elements: firstMatches);
         }
 
         /// <summary>

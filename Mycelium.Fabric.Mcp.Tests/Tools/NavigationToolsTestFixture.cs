@@ -10,6 +10,11 @@
 namespace Mycelium.Fabric.Mcp.Tests.Tools
 {
     using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
+
+    using ModelContextProtocol;
 
     using Moq;
 
@@ -17,14 +22,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Tools;
 
     using SysML2.NET.Core.POCO.Kernel.Packages;
+    using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Extensions;
-
-    using System.IO;
-    using System.Linq;
-
-    using ModelContextProtocol;
 
     /// <summary>
     /// Suite of tests for the <see cref="NavigationTools"/> class.
@@ -100,6 +101,34 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 this.modelProvider.VerifyGet(provider => provider.Elements, Times.Exactly(2));
                 this.modelProvider.VerifyGet(provider => provider.RootElements, Times.Exactly(2));
             }
+        }
+
+        [Test]
+        public void VerifyFindElementsByName()
+        {
+            // An unnamed part and 25 named parts, more than the 20 results the tool returns.
+            var elements = new List<IElement> { new PartUsage() };
+            elements.AddRange(Enumerable.Range(0, 25).Select(index => new PartUsage { DeclaredName = $"part{index:D2}" }));
+
+            this.modelProvider.Setup(provider => provider.Elements).Returns(elements);
+
+            var tools = new NavigationTools(this.modelProvider.Object);
+            var result = tools.FindElementsByName("PART");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => tools.FindElementsByName(" "), Throws.TypeOf<McpException>());
+                Assert.That(result.TotalFound, Is.EqualTo(25));
+                Assert.That(result.Elements, Has.Count.EqualTo(20));
+                Assert.That(result.Elements[0].Name, Is.EqualTo("part00"));
+                Assert.That(tools.FindElementsByName("unknown").TotalFound, Is.EqualTo(0));
+            }
+
+            tools = CreateSatelliteTools();
+
+            var cameras = tools.FindElementsByName("camera");
+
+            Assert.That(cameras.Elements.Select(element => element.Name), Is.SupersetOf(["camera", "OpticalCamera"]));
         }
 
         [Test]
