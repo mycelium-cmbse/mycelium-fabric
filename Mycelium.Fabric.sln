@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.ConcurrentS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.ConcurrentServer", "Mycelium.Fabric.ConcurrentServer\Mycelium.Fabric.ConcurrentServer.csproj", "{ADBD3954-026D-440F-9274-64DF5B6CE37B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.Mcp", "Mycelium.Fabric.Mcp\Mycelium.Fabric.Mcp.csproj", "{90BD24F7-C06C-4F2A-97A0-85FE84EEC832}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.Mcp.Tests", "Mycelium.Fabric.Mcp.Tests\Mycelium.Fabric.Mcp.Tests.csproj", "{118109F2-4B25-4905-961E-91AD1B292497}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,16 @@ Global
 		{ADBD3954-026D-440F-9274-64DF5B6CE37B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ADBD3954-026D-440F-9274-64DF5B6CE37B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ADBD3954-026D-440F-9274-64DF5B6CE37B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90BD24F7-C06C-4F2A-97A0-85FE84EEC832}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90BD24F7-C06C-4F2A-97A0-85FE84EEC832}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90BD24F7-C06C-4F2A-97A0-85FE84EEC832}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90BD24F7-C06C-4F2A-97A0-85FE84EEC832}.Release|Any CPU.Build.0 = Release|Any CPU
+		{118109F2-4B25-4905-961E-91AD1B292497}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{118109F2-4B25-4905-961E-91AD1B292497}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{118109F2-4B25-4905-961E-91AD1B292497}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{118109F2-4B25-4905-961E-91AD1B292497}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 EndGlobal
