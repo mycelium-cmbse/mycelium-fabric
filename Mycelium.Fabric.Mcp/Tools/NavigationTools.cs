@@ -57,9 +57,9 @@ namespace Mycelium.Fabric.Mcp.Tools
         [return: Description("The top-level elements of the model, its total and named element counts, and its most frequent element types with their counts.")]
         public ModelOverview GetModelOverview()
         {
-            var elements = this.modelProvider.GetElements();
+            var elements = this.modelProvider.Elements;
 
-            var topLevelElements = this.modelProvider.GetRootElements()
+            var topLevelElements = this.modelProvider.RootElements
                 .SelectMany(rootElement => rootElement.ownedElement ?? [])
                 .Select(element => element.DeclaredName ?? element.GetType().Name)
                 .ToList();

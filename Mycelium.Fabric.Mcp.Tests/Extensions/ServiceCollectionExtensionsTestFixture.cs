@@ -67,7 +67,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(modelProvider, Is.InstanceOf<InMemoryModelProvider>());
-                Assert.That(((IModelProvider)modelProvider).GetElements(), Has.Count.EqualTo(548));
+                Assert.That(((IModelProvider)modelProvider).Elements, Has.Count.EqualTo(548));
             }
         }
     }

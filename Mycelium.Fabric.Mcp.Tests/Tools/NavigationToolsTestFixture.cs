@@ -48,8 +48,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void VerifyGetModelOverview()
         {
-            this.modelProvider.Setup(provider => provider.GetElements()).Returns([]);
-            this.modelProvider.Setup(provider => provider.GetRootElements()).Returns([]);
+            this.modelProvider.Setup(provider => provider.Elements).Returns([]);
+            this.modelProvider.Setup(provider => provider.RootElements).Returns([]);
 
             var tools = new NavigationTools(this.modelProvider.Object);
             var overview = tools.GetModelOverview();
@@ -70,8 +70,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             rootNamespace.AssignOwnership(membership, package);
 
-            this.modelProvider.Setup(provider => provider.GetElements()).Returns([rootNamespace, membership, package, part]);
-            this.modelProvider.Setup(provider => provider.GetRootElements()).Returns([rootNamespace]);
+            this.modelProvider.Setup(provider => provider.Elements).Returns([rootNamespace, membership, package, part]);
+            this.modelProvider.Setup(provider => provider.RootElements).Returns([rootNamespace]);
 
             overview = tools.GetModelOverview();
 
@@ -82,8 +82,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(overview.NamedElementCount, Is.EqualTo(1));
                 Assert.That(overview.MostFrequentTypes, Has.Count.EqualTo(4));
                 Assert.That(overview.MostFrequentTypes["PartUsage"], Is.EqualTo(1));
-                this.modelProvider.Verify(provider => provider.GetElements(), Times.Exactly(2));
-                this.modelProvider.Verify(provider => provider.GetRootElements(), Times.Exactly(2));
+                this.modelProvider.VerifyGet(provider => provider.Elements, Times.Exactly(2));
+                this.modelProvider.VerifyGet(provider => provider.RootElements, Times.Exactly(2));
             }
         }
     }
