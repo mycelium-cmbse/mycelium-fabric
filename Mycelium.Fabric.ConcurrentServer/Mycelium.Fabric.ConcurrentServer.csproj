@@ -23,7 +23,10 @@
 
     <ItemGroup>
         <PackageReference Include="Carter" Version="10.0.0" />
+        <PackageReference Include="ErrorOr" Version="2.1.1" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+        <PackageReference Include="SysML2.NET.Serializer.Json" Version="0.24.1" />
+        <PackageReference Include="SysML2.NET.Serializer.MessagePack" Version="0.24.1" />
     </ItemGroup>
 
 </Project>
