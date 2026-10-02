@@ -27,14 +27,19 @@ namespace Mycelium.Fabric.Mcp.Services
     public class InMemoryModelProvider : IModelProvider
     {
         /// <summary>
-        /// All the elements of the loaded model.
+        /// The elements of the loaded model, indexed by their <c>Id</c>.
         /// </summary>
-        private List<IElement> elements = [];
+        private Dictionary<Guid, IElement> elementsById = [];
 
         /// <summary>
-        /// The elements of the loaded model that have no owner.
+        /// Gets all the elements of the loaded model.
         /// </summary>
-        private List<IElement> rootElements = [];
+        public IReadOnlyList<IElement> Elements { get; private set; } = [];
+
+        /// <summary>
+        /// Gets the root elements of the loaded model, that is the elements that have no owner.
+        /// </summary>
+        public IReadOnlyList<IElement> RootElements { get; private set; } = [];
 
         /// <summary>
         /// Loads the model stored at the given location, replacing the model loaded before.
@@ -69,29 +74,28 @@ namespace Mycelium.Fabric.Mcp.Services
                 .Select(lazyElement => lazyElement.Value)
                 .ToList();
 
-            this.rootElements = loadedElements
+            var loadedRootElements = loadedElements
                 .Where(element => element.OwningRelationship == null && element is not IRelationship { OwningRelatedElement: not null })
                 .ToList();
 
-            this.elements = loadedElements;
+            var loadedElementsById = loadedElements.ToDictionary(element => element.Id);
+
+            this.Elements = loadedElements;
+            this.RootElements = loadedRootElements;
+            this.elementsById = loadedElementsById;
         }
 
         /// <summary>
-        /// Gets all the elements of the model.
+        /// Gets the element of the loaded model that has the given identifier.
         /// </summary>
-        /// <returns>A read-only list of every <see cref="IElement"/> in the model.</returns>
-        public IReadOnlyList<IElement> GetElements()
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
+        /// <returns>
+        /// The <see cref="IElement"/> that has the given identifier, or <c>null</c> when the loaded model contains no
+        /// such element.
+        /// </returns>
+        public IElement GetElementById(Guid elementId)
         {
-            return this.elements;
-        }
-
-        /// <summary>
-        /// Gets the root elements of the model, that is the elements that have no owner.
-        /// </summary>
-        /// <returns>A read-only list of the root <see cref="IElement"/>s of the model.</returns>
-        public IReadOnlyList<IElement> GetRootElements()
-        {
-            return this.rootElements;
+            return this.elementsById.GetValueOrDefault(elementId);
         }
     }
 }

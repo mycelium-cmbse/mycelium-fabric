@@ -22,6 +22,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     [TestFixture]
     public class InMemoryModelProviderTestFixture
     {
+        /// <summary>
+        /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid PayloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
+
         private string dataDirectory;
 
         private Uri satelliteModelPath;
@@ -45,8 +50,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(this.modelProvider.GetElements(), Has.Count.EqualTo(0));
-                Assert.That(this.modelProvider.GetRootElements(), Has.Count.EqualTo(0));
+                Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
+                Assert.That(this.modelProvider.RootElements, Has.Count.EqualTo(0));
+                Assert.That(this.modelProvider.GetElementById(PayloadSubsystemId), Is.Null);
             }
         }
 
@@ -66,26 +72,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         }
 
         [Test]
-        public void VerifyGetElements()
+        public void VerifyElements()
         {
             this.modelProvider.LoadModel(this.satelliteModelPath);
 
-            Assert.That(this.modelProvider.GetElements(), Has.Count.EqualTo(548));
+            Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(548));
 
             this.modelProvider.LoadModel(this.emptyModelPath);
 
-            Assert.That(this.modelProvider.GetElements(), Has.Count.EqualTo(0));
+            Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
         }
 
         [Test]
-        public void VerifyGetRootElements()
+        public void VerifyRootElements()
         {
             this.modelProvider.LoadModel(this.emptyModelPath);
 
-            Assert.That(this.modelProvider.GetRootElements(), Has.Count.EqualTo(0));
+            Assert.That(this.modelProvider.RootElements, Has.Count.EqualTo(0));
 
             this.modelProvider.LoadModel(this.satelliteModelPath);
-            var rootElements = this.modelProvider.GetRootElements();
+            var rootElements = this.modelProvider.RootElements;
 
             using (Assert.EnterMultipleScope())
             {
@@ -93,6 +99,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(rootElements[0], Is.InstanceOf<INamespace>());
                 Assert.That(rootElements[0].OwningRelationship, Is.Null);
             }
+        }
+
+        [Test]
+        public void VerifyGetElementById()
+        {
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+
+            var payloadSubsystem = this.modelProvider.GetElementById(PayloadSubsystemId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.modelProvider.GetElementById(Guid.NewGuid()), Is.Null);
+                Assert.That(payloadSubsystem, Is.Not.Null);
+                Assert.That(payloadSubsystem.Id, Is.EqualTo(PayloadSubsystemId));
+                Assert.That(payloadSubsystem.DeclaredName, Is.EqualTo("payloadSubsystem"));
+            }
+
+            this.modelProvider.LoadModel(this.emptyModelPath);
+
+            Assert.That(this.modelProvider.GetElementById(PayloadSubsystemId), Is.Null);
         }
     }
 }

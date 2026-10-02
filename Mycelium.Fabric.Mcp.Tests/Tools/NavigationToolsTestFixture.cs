@@ -10,6 +10,11 @@
 namespace Mycelium.Fabric.Mcp.Tests.Tools
 {
     using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
+
+    using ModelContextProtocol;
 
     using Moq;
 
@@ -17,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Tools;
 
     using SysML2.NET.Core.POCO.Kernel.Packages;
+    using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Extensions;
@@ -27,6 +33,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     [TestFixture]
     public class NavigationToolsTestFixture
     {
+        /// <summary>
+        /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid PayloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>camera</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid CameraId = Guid.Parse("558a0ae4-8585-66a3-9bc6-52322650941c");
+
         private Mock<IModelProvider> modelProvider;
 
         [SetUp]
@@ -48,8 +64,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void VerifyGetModelOverview()
         {
-            this.modelProvider.Setup(provider => provider.GetElements()).Returns([]);
-            this.modelProvider.Setup(provider => provider.GetRootElements()).Returns([]);
+            this.modelProvider.Setup(provider => provider.Elements).Returns([]);
+            this.modelProvider.Setup(provider => provider.RootElements).Returns([]);
 
             var tools = new NavigationTools(this.modelProvider.Object);
             var overview = tools.GetModelOverview();
@@ -70,8 +86,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             rootNamespace.AssignOwnership(membership, package);
 
-            this.modelProvider.Setup(provider => provider.GetElements()).Returns([rootNamespace, membership, package, part]);
-            this.modelProvider.Setup(provider => provider.GetRootElements()).Returns([rootNamespace]);
+            this.modelProvider.Setup(provider => provider.Elements).Returns([rootNamespace, membership, package, part]);
+            this.modelProvider.Setup(provider => provider.RootElements).Returns([rootNamespace]);
 
             overview = tools.GetModelOverview();
 
@@ -82,9 +98,109 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(overview.NamedElementCount, Is.EqualTo(1));
                 Assert.That(overview.MostFrequentTypes, Has.Count.EqualTo(4));
                 Assert.That(overview.MostFrequentTypes["PartUsage"], Is.EqualTo(1));
-                this.modelProvider.Verify(provider => provider.GetElements(), Times.Exactly(2));
-                this.modelProvider.Verify(provider => provider.GetRootElements(), Times.Exactly(2));
+                this.modelProvider.VerifyGet(provider => provider.Elements, Times.Exactly(2));
+                this.modelProvider.VerifyGet(provider => provider.RootElements, Times.Exactly(2));
             }
+        }
+
+        [Test]
+        public void VerifyFindElementsByName()
+        {
+            // An unnamed part and 25 named parts, more than one page of 20 results.
+            var elements = new List<IElement> { new PartUsage() };
+            elements.AddRange(Enumerable.Range(0, 25).Select(index => new PartUsage { DeclaredName = $"part{index:D2}" }));
+
+            this.modelProvider.Setup(provider => provider.Elements).Returns(elements);
+
+            var tools = new NavigationTools(this.modelProvider.Object);
+            var firstPage = tools.FindElementsByName("PART");
+            var lastPage = tools.FindElementsByName("PART", 20);
+            var smallPage = tools.FindElementsByName("part", 2, 3);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => tools.FindElementsByName(" "), Throws.TypeOf<McpException>());
+                Assert.That(() => tools.FindElementsByName("part", -1), Throws.TypeOf<McpException>());
+                Assert.That(() => tools.FindElementsByName("part", 0, 0), Throws.TypeOf<McpException>());
+                Assert.That(() => tools.FindElementsByName("part", 0, 21), Throws.TypeOf<McpException>());
+                Assert.That(firstPage.TotalFound, Is.EqualTo(25));
+                Assert.That(firstPage.Elements, Has.Count.EqualTo(20));
+                Assert.That(firstPage.Elements[0].Name, Is.EqualTo("part00"));
+                Assert.That(firstPage.NextOffset, Is.EqualTo(20));
+                Assert.That(lastPage.Elements.Select(element => element.Name), Is.EqualTo(["part20", "part21", "part22", "part23", "part24"]));
+                Assert.That(lastPage.NextOffset, Is.Null);
+                Assert.That(smallPage.Elements.Select(element => element.Name), Is.EqualTo(["part02", "part03", "part04"]));
+                Assert.That(smallPage.NextOffset, Is.EqualTo(5));
+                Assert.That(tools.FindElementsByName("unknown").TotalFound, Is.EqualTo(0));
+            }
+
+            tools = CreateSatelliteTools();
+
+            var cameras = tools.FindElementsByName("camera");
+
+            Assert.That(cameras.Elements.Select(element => element.Name), Is.SupersetOf(["camera", "OpticalCamera"]));
+        }
+
+        [Test]
+        public void VerifyGetElementDetails()
+        {
+            var tools = new NavigationTools(this.modelProvider.Object);
+            var unknownId = Guid.NewGuid();
+
+            Assert.That(() => tools.GetElementDetails(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
+
+            tools = CreateSatelliteTools();
+
+            var camera = tools.GetElementDetails(CameraId);
+            var payloadSubsystem = tools.GetElementDetails(PayloadSubsystemId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(camera.Id, Is.EqualTo(CameraId));
+                Assert.That(camera.Name, Is.EqualTo("camera"));
+                Assert.That(camera.ShortName, Is.Null);
+                Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
+                Assert.That(camera.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera"));
+                Assert.That(camera.OwnerId, Is.EqualTo(PayloadSubsystemId));
+                Assert.That(camera.OwnerName, Is.EqualTo("payloadSubsystem"));
+                Assert.That(camera.ChildCount, Is.EqualTo(0));
+                Assert.That(camera.Documentation, Is.Null);
+                Assert.That(payloadSubsystem.Documentation, Is.EqualTo("Payload: the imaging instrument and its data storage."));
+            }
+        }
+
+        [Test]
+        public void VerifyListChildren()
+        {
+            var tools = new NavigationTools(this.modelProvider.Object);
+
+            Assert.That(() => tools.ListChildren(Guid.NewGuid()), Throws.TypeOf<McpException>());
+
+            tools = CreateSatelliteTools();
+
+            var children = tools.ListChildren(PayloadSubsystemId);
+            var camera = children.Single(child => child.Name == "camera");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(children.Select(child => child.Name), Is.SupersetOf(["camera", "massMemory"]));
+                Assert.That(camera.Id, Is.EqualTo(CameraId));
+                Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
+                Assert.That(camera.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera"));
+                Assert.That(tools.ListChildren(CameraId), Is.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Creates <see cref="NavigationTools"/> that work on the <c>Satellite.json</c> test model.
+        /// </summary>
+        /// <returns>The <see cref="NavigationTools"/> on the loaded model.</returns>
+        private static NavigationTools CreateSatelliteTools()
+        {
+            var satelliteModelProvider = new InMemoryModelProvider();
+            satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+
+            return new NavigationTools(satelliteModelProvider);
         }
     }
 }
