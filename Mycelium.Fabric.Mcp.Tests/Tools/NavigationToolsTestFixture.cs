@@ -106,21 +106,31 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void VerifyFindElementsByName()
         {
-            // An unnamed part and 25 named parts, more than the 20 results the tool returns.
+            // An unnamed part and 25 named parts, more than one page of 20 results.
             var elements = new List<IElement> { new PartUsage() };
             elements.AddRange(Enumerable.Range(0, 25).Select(index => new PartUsage { DeclaredName = $"part{index:D2}" }));
 
             this.modelProvider.Setup(provider => provider.Elements).Returns(elements);
 
             var tools = new NavigationTools(this.modelProvider.Object);
-            var result = tools.FindElementsByName("PART");
+            var firstPage = tools.FindElementsByName("PART");
+            var lastPage = tools.FindElementsByName("PART", 20);
+            var smallPage = tools.FindElementsByName("part", 2, 3);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(() => tools.FindElementsByName(" "), Throws.TypeOf<McpException>());
-                Assert.That(result.TotalFound, Is.EqualTo(25));
-                Assert.That(result.Elements, Has.Count.EqualTo(20));
-                Assert.That(result.Elements[0].Name, Is.EqualTo("part00"));
+                Assert.That(() => tools.FindElementsByName("part", -1), Throws.TypeOf<McpException>());
+                Assert.That(() => tools.FindElementsByName("part", 0, 0), Throws.TypeOf<McpException>());
+                Assert.That(() => tools.FindElementsByName("part", 0, 21), Throws.TypeOf<McpException>());
+                Assert.That(firstPage.TotalFound, Is.EqualTo(25));
+                Assert.That(firstPage.Elements, Has.Count.EqualTo(20));
+                Assert.That(firstPage.Elements[0].Name, Is.EqualTo("part00"));
+                Assert.That(firstPage.NextOffset, Is.EqualTo(20));
+                Assert.That(lastPage.Elements.Select(element => element.Name), Is.EqualTo(["part20", "part21", "part22", "part23", "part24"]));
+                Assert.That(lastPage.NextOffset, Is.Null);
+                Assert.That(smallPage.Elements.Select(element => element.Name), Is.EqualTo(["part02", "part03", "part04"]));
+                Assert.That(smallPage.NextOffset, Is.EqualTo(5));
                 Assert.That(tools.FindElementsByName("unknown").TotalFound, Is.EqualTo(0));
             }
 

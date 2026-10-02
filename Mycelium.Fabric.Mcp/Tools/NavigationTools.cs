@@ -34,7 +34,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         private const int MaximumTypeCount = 15;
 
         /// <summary>
-        /// The maximum number of elements returned by <see cref="FindElementsByName"/>.
+        /// The maximum number of elements returned by one call of <see cref="FindElementsByName"/>.
         /// </summary>
         private const int MaximumSearchResultCount = 20;
 
@@ -80,31 +80,45 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .Take(MaximumTypeCount)
                 .ToDictionary(group => group.Key, group => group.Count());
 
-            return new ModelOverview(
-                TopLevelElements: topLevelElements,
-                ElementCount: elements.Count,
-                NamedElementCount: elements.Count(element => !string.IsNullOrWhiteSpace(element.DeclaredName)),
-                MostFrequentTypes: mostFrequentTypes);
+            var namedElementCount = elements.Count(element => !string.IsNullOrWhiteSpace(element.DeclaredName));
+
+            return new ModelOverview(topLevelElements, elements.Count, namedElementCount, mostFrequentTypes);
         }
 
         /// <summary>
-        /// Finds the elements whose declared name contains the given text, ignoring case.
+        /// Finds the elements whose declared name contains the given text, ignoring case, one page at a time.
         /// </summary>
         /// <param name="text">The text to look for in the names of the elements.</param>
+        /// <param name="offset">The number of matching elements to skip, 0 for the first page.</param>
+        /// <param name="limit">The maximum number of elements of the page, from 1 to <see cref="MaximumSearchResultCount"/>.</param>
         /// <returns>
-        /// The <see cref="SearchResult"/> that gives the number of matching elements and the first ones, sorted by name.
+        /// The <see cref="SearchResult"/> that gives the number of matching elements, the requested page of them sorted by
+        /// name, and the offset of the next page.
         /// </returns>
         /// <exception cref="McpException">
-        /// Thrown when <paramref name="text"/> is <c>null</c>, empty or white space.
+        /// Thrown when <paramref name="text"/> is <c>null</c>, empty or white space, when <paramref name="offset"/> is
+        /// negative, or when <paramref name="limit"/> is out of range.
         /// </exception>
         [McpServerTool(Name = "find_elements_by_name", ReadOnly = true)]
-        [Description("Finds the elements whose name contains a text, ignoring case. Use it to get the identifier of an element from its name.")]
-        [return: Description("The total number of matching elements and the first 20 of them, sorted by name, with their identifier, name, type and qualified name.")]
-        public SearchResult FindElementsByName([Description("The text to look for in the names of the elements, for example 'camera'.")] string text)
+        [Description("Finds the elements whose name contains a text, ignoring case. Use it to get the identifier of an element from its name. The results are paged: when nextOffset is not null, call the tool again with this offset to get the next page.")]
+        [return: Description("The total number of matching elements, one page of them sorted by name with their identifier, name, type and qualified name, and the offset of the next page (null on the last page).")]
+        public SearchResult FindElementsByName([Description("The text to look for in the names of the elements, for example 'camera'.")] string text,
+            [Description("The number of matching elements to skip: 0 for the first page, then the nextOffset of the previous result.")] int offset = 0,
+            [Description("The maximum number of elements to return, from 1 to 20.")] int limit = MaximumSearchResultCount)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
                 throw new McpException("The text to look for must not be empty.");
+            }
+
+            if (offset < 0)
+            {
+                throw new McpException("The offset must be 0 or greater.");
+            }
+
+            if (limit < 1 || limit > MaximumSearchResultCount)
+            {
+                throw new McpException($"The limit must be between 1 and {MaximumSearchResultCount}.");
             }
 
             var matches = this.modelProvider.Elements
@@ -112,14 +126,15 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .OrderBy(element => element.DeclaredName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var firstMatches = matches
-                .Take(MaximumSearchResultCount)
+            var page = matches
+                .Skip(offset)
+                .Take(limit)
                 .Select(CreateSummary)
                 .ToList();
 
-            return new SearchResult(
-                TotalFound: matches.Count,
-                Elements: firstMatches);
+            int? nextOffset = offset + page.Count < matches.Count ? offset + page.Count : null;
+
+            return new SearchResult(matches.Count, page, nextOffset);
         }
 
         /// <summary>

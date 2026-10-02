@@ -15,6 +15,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// The result of the <c>find_elements_by_name</c> tool: the elements whose name matches the searched text.
     /// </summary>
     /// <param name="TotalFound">The total number of matching elements, which can be greater than the number of returned elements.</param>
-    /// <param name="Elements">The first matching elements, sorted by name.</param>
-    public sealed record SearchResult(int TotalFound, IReadOnlyList<ElementSummary> Elements);
+    /// <param name="Elements">The matching elements of the requested page, sorted by name.</param>
+    /// <param name="NextOffset">The offset that gives the next page, or <c>null</c> when this page is the last one.</param>
+    public sealed record SearchResult(int TotalFound, IReadOnlyList<ElementSummary> Elements, int? NextOffset);
 }
