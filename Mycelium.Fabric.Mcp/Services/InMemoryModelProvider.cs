@@ -27,9 +27,9 @@ namespace Mycelium.Fabric.Mcp.Services
     public class InMemoryModelProvider : IModelProvider
     {
         /// <summary>
-        /// The elements of the loaded model, indexed by their <see cref="IElement.ElementId"/>.
+        /// The elements of the loaded model, indexed by their <c>Id</c>.
         /// </summary>
-        private Dictionary<string, IElement> elementsById = [];
+        private Dictionary<Guid, IElement> elementsById = [];
 
         /// <summary>
         /// Gets all the elements of the loaded model.
@@ -78,7 +78,7 @@ namespace Mycelium.Fabric.Mcp.Services
                 .Where(element => element.OwningRelationship == null && element is not IRelationship { OwningRelatedElement: not null })
                 .ToList();
 
-            var loadedElementsById = loadedElements.ToDictionary(element => element.ElementId);
+            var loadedElementsById = loadedElements.ToDictionary(element => element.Id);
 
             this.Elements = loadedElements;
             this.RootElements = loadedRootElements;
@@ -88,18 +88,13 @@ namespace Mycelium.Fabric.Mcp.Services
         /// <summary>
         /// Gets the element of the loaded model that has the given identifier.
         /// </summary>
-        /// <param name="elementId">The <see cref="IElement.ElementId"/> of the element.</param>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <returns>
         /// The <see cref="IElement"/> that has the given identifier, or <c>null</c> when the loaded model contains no
         /// such element.
         /// </returns>
-        /// <exception cref="ArgumentException">
-        /// Thrown when <paramref name="elementId"/> is <c>null</c>, empty or white space.
-        /// </exception>
-        public IElement GetElementById(string elementId)
+        public IElement GetElementById(Guid elementId)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(elementId);
-
             return this.elementsById.GetValueOrDefault(elementId);
         }
     }

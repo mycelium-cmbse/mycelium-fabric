@@ -23,9 +23,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     public class InMemoryModelProviderTestFixture
     {
         /// <summary>
-        /// The <c>ElementId</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
+        /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
         /// </summary>
-        private const string PayloadSubsystemId = "95a8c184-a12e-1125-c0ee-bbe7a025de5b";
+        private static readonly Guid PayloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
 
         private string dataDirectory;
 
@@ -110,11 +110,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => this.modelProvider.GetElementById(null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => this.modelProvider.GetElementById(" "), Throws.TypeOf<ArgumentException>());
-                Assert.That(this.modelProvider.GetElementById("unknown-id"), Is.Null);
+                Assert.That(this.modelProvider.GetElementById(Guid.NewGuid()), Is.Null);
                 Assert.That(payloadSubsystem, Is.Not.Null);
-                Assert.That(payloadSubsystem.ElementId, Is.EqualTo(PayloadSubsystemId));
+                Assert.That(payloadSubsystem.Id, Is.EqualTo(PayloadSubsystemId));
                 Assert.That(payloadSubsystem.DeclaredName, Is.EqualTo("payloadSubsystem"));
             }
 

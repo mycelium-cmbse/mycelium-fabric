@@ -125,7 +125,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <summary>
         /// Gives the details of the element that has the given identifier.
         /// </summary>
-        /// <param name="elementId">The <see cref="IElement.ElementId"/> of the element.</param>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <returns>The <see cref="ElementDetails"/> of the element.</returns>
         /// <exception cref="McpException">
         /// Thrown when no element of the model has the given identifier.
@@ -133,26 +133,18 @@ namespace Mycelium.Fabric.Mcp.Tools
         [McpServerTool(Name = "get_element_details", ReadOnly = true)]
         [Description("Gives the details of an element from its identifier: type, name, short name, qualified name, owner, number of children and documentation.")]
         [return: Description("The details of the element, including the identifier of its owner to navigate up the model.")]
-        public ElementDetails GetElementDetails([Description("The identifier (ElementId) of the element, as returned by the other tools.")] string elementId)
+        public ElementDetails GetElementDetails([Description("The identifier (Id, a GUID) of the element, as returned by the other tools.")] Guid elementId)
         {
             var element = this.GetElement(elementId);
 
-            return new ElementDetails(
-                ElementId: element.ElementId,
-                Name: element.DeclaredName,
-                ShortName: element.DeclaredShortName,
-                Type: DescribeType(element),
-                QualifiedName: element.qualifiedName,
-                OwnerId: element.owner?.ElementId,
-                OwnerName: element.owner?.DeclaredName,
-                ChildCount: element.ownedElement?.Count ?? 0,
-                Documentation: GetDocumentation(element));
+            return new ElementDetails(element.Id, element.DeclaredName, element.DeclaredShortName, DescribeType(element), element.qualifiedName,
+                element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, GetDocumentation(element));
         }
 
         /// <summary>
         /// Lists the elements directly owned by the element that has the given identifier.
         /// </summary>
-        /// <param name="elementId">The <see cref="IElement.ElementId"/> of the parent element.</param>
+        /// <param name="elementId">The <c>Id</c> of the parent element.</param>
         /// <returns>An <see cref="ElementSummary"/> for each child of the element.</returns>
         /// <exception cref="McpException">
         /// Thrown when no element of the model has the given identifier.
@@ -160,7 +152,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         [McpServerTool(Name = "list_children", ReadOnly = true)]
         [Description("Lists the direct children (owned elements) of an element from its identifier.")]
         [return: Description("The identifier, name, type and qualified name of each child of the element.")]
-        public IReadOnlyList<ElementSummary> ListChildren([Description("The identifier (ElementId) of the parent element, as returned by the other tools.")] string elementId)
+        public IReadOnlyList<ElementSummary> ListChildren([Description("The identifier (Id, a GUID) of the parent element, as returned by the other tools.")] Guid elementId)
         {
             var element = this.GetElement(elementId);
 
@@ -172,15 +164,15 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <summary>
         /// Gets the element that has the given identifier, or fails with a message the AI assistant can act on.
         /// </summary>
-        /// <param name="elementId">The <see cref="IElement.ElementId"/> of the element.</param>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <returns>The <see cref="IElement"/> that has the given identifier.</returns>
         /// <exception cref="McpException">
         /// Thrown when no element of the model has the given identifier. Unlike other exceptions, the message of an
         /// <see cref="McpException"/> is sent back to the AI assistant.
         /// </exception>
-        private IElement GetElement(string elementId)
+        private IElement GetElement(Guid elementId)
         {
-            var element = string.IsNullOrWhiteSpace(elementId) ? null : this.modelProvider.GetElementById(elementId);
+            var element = this.modelProvider.GetElementById(elementId);
 
             if (element == null)
             {
@@ -197,11 +189,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The <see cref="ElementSummary"/> of the element.</returns>
         private static ElementSummary CreateSummary(IElement element)
         {
-            return new ElementSummary(
-                ElementId: element.ElementId,
-                Name: element.DeclaredName,
-                Type: DescribeType(element),
-                QualifiedName: element.qualifiedName);
+            return new ElementSummary(element.Id, element.DeclaredName, DescribeType(element), element.qualifiedName);
         }
 
         /// <summary>

@@ -50,14 +50,11 @@ namespace Mycelium.Fabric.Mcp.Services
         /// <summary>
         /// Gets the element of the loaded model that has the given identifier.
         /// </summary>
-        /// <param name="elementId">The <see cref="IElement.ElementId"/> of the element.</param>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <returns>
         /// The <see cref="IElement"/> that has the given identifier, or <c>null</c> when the loaded model contains no
         /// such element.
         /// </returns>
-        /// <exception cref="ArgumentException">
-        /// Thrown when <paramref name="elementId"/> is <c>null</c>, empty or white space.
-        /// </exception>
-        IElement GetElementById(string elementId);
+        IElement GetElementById(Guid elementId);
     }
 }

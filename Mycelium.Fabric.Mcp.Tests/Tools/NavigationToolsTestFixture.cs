@@ -34,14 +34,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     public class NavigationToolsTestFixture
     {
         /// <summary>
-        /// The <c>ElementId</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
+        /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
         /// </summary>
-        private const string PayloadSubsystemId = "95a8c184-a12e-1125-c0ee-bbe7a025de5b";
+        private static readonly Guid PayloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
 
         /// <summary>
-        /// The <c>ElementId</c> of the <c>camera</c> part in <c>Satellite.json</c>.
+        /// The <c>Id</c> of the <c>camera</c> part in <c>Satellite.json</c>.
         /// </summary>
-        private const string CameraId = "558a0ae4-8585-66a3-9bc6-52322650941c";
+        private static readonly Guid CameraId = Guid.Parse("558a0ae4-8585-66a3-9bc6-52322650941c");
 
         private Mock<IModelProvider> modelProvider;
 
@@ -135,12 +135,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void VerifyGetElementDetails()
         {
             var tools = new NavigationTools(this.modelProvider.Object);
+            var unknownId = Guid.NewGuid();
 
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(() => tools.GetElementDetails("unknown-id"), Throws.TypeOf<McpException>().With.Message.Contains("unknown-id"));
-                Assert.That(() => tools.GetElementDetails(" "), Throws.TypeOf<McpException>());
-            }
+            Assert.That(() => tools.GetElementDetails(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
 
             tools = CreateSatelliteTools();
 
@@ -149,7 +146,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(camera.ElementId, Is.EqualTo(CameraId));
+                Assert.That(camera.Id, Is.EqualTo(CameraId));
                 Assert.That(camera.Name, Is.EqualTo("camera"));
                 Assert.That(camera.ShortName, Is.Null);
                 Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
@@ -167,7 +164,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         {
             var tools = new NavigationTools(this.modelProvider.Object);
 
-            Assert.That(() => tools.ListChildren("unknown-id"), Throws.TypeOf<McpException>());
+            Assert.That(() => tools.ListChildren(Guid.NewGuid()), Throws.TypeOf<McpException>());
 
             tools = CreateSatelliteTools();
 
@@ -177,7 +174,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(children.Select(child => child.Name), Is.SupersetOf(["camera", "massMemory"]));
-                Assert.That(camera.ElementId, Is.EqualTo(CameraId));
+                Assert.That(camera.Id, Is.EqualTo(CameraId));
                 Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
                 Assert.That(camera.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera"));
                 Assert.That(tools.ListChildren(CameraId), Is.Empty);
