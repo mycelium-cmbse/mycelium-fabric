@@ -53,5 +53,22 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// <see cref="SysML2.NET.PIM.Operator.equalto"/> with this flag set.
         /// </remarks>
         public bool Inverse { get; set; }
+
+        /// <summary>
+        /// Negates this condition.
+        /// </summary>
+        /// <returns>
+        /// A copy of this condition whose negation flag is the opposite of this one's.
+        /// </returns>
+        public override SearchFilter Negate()
+        {
+            return new PrimitiveSearchFilter
+            {
+                Property = this.Property,
+                Operator = this.Operator,
+                Value = this.Value,
+                Inverse = !this.Inverse
+            };
+        }
     }
 }

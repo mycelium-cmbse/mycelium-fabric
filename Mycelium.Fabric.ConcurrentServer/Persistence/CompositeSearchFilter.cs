@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.ConcurrentServer.Persistence
 {
     using System.Collections.Generic;
+    using System.Linq;
 
     using SysML2.NET.PIM;
 
@@ -34,5 +35,25 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// Gets or sets the logical operator the conditions are joined with.
         /// </summary>
         public JoinOperator Operator { get; set; }
+
+        /// <summary>
+        /// Negates this condition.
+        /// </summary>
+        /// <returns>
+        /// A copy of this condition in which every part is negated and the logical operator is the
+        /// other one.
+        /// </returns>
+        /// <remarks>
+        /// De Morgan's law: the negation of a conjunction is the disjunction of the negations, and the
+        /// negation of a disjunction is the conjunction of the negations.
+        /// </remarks>
+        public override SearchFilter Negate()
+        {
+            return new CompositeSearchFilter
+            {
+                Filters = [.. this.Filters.Select(filter => filter.Negate())],
+                Operator = this.Operator == JoinOperator.AND ? JoinOperator.OR : JoinOperator.AND
+            };
+        }
     }
 }
