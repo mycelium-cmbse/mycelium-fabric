@@ -11,9 +11,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 {
     using System;
     using System.IO;
+    using System.Linq;
 
     using ModelContextProtocol;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
 
     using SysML2.NET.Core.POCO.Root.Namespaces;
@@ -28,6 +30,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
         /// </summary>
         private static readonly Guid PayloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>camera</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid CameraId = Guid.Parse("558a0ae4-8585-66a3-9bc6-52322650941c");
 
         private string dataDirectory;
 
@@ -134,6 +141,54 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             {
                 Assert.That(() => this.modelProvider.GetRequiredElementById(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
                 Assert.That(this.modelProvider.GetRequiredElementById(PayloadSubsystemId).DeclaredName, Is.EqualTo("payloadSubsystem"));
+            }
+        }
+
+        [Test]
+        public void VerifyApplyChanges()
+        {
+            Assert.That(() => this.modelProvider.ApplyChanges(null), Throws.TypeOf<ArgumentNullException>());
+
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+
+            var elements = this.modelProvider.Elements;
+            var camera = this.modelProvider.GetElementById(CameraId);
+
+            var refusal = this.modelProvider.ApplyChanges(
+            [
+                new ModelChange { Kind = ChangeKind.Rename, Element = CameraId.ToString(), Name = "mainCamera" },
+                new ModelChange { Kind = ChangeKind.Delete, Element = Guid.NewGuid().ToString() }
+            ]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(refusal.Applied, Is.False);
+                Assert.That(this.modelProvider.Elements, Is.SameAs(elements));
+                Assert.That(this.modelProvider.GetElementById(CameraId).DeclaredName, Is.EqualTo("camera"));
+            }
+
+            var result = this.modelProvider.ApplyChanges([new ModelChange { Kind = ChangeKind.Rename, Element = CameraId.ToString(), Name = "mainCamera" }]);
+            var renamedCamera = this.modelProvider.GetElementById(CameraId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True);
+                Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(548));
+                Assert.That(renamedCamera.qualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::mainCamera"));
+                Assert.That(renamedCamera, Is.Not.SameAs(camera));
+                Assert.That(camera.DeclaredName, Is.EqualTo("camera"));
+            }
+
+            this.modelProvider.LoadModel(this.emptyModelPath);
+            this.modelProvider.ApplyChanges([new ModelChange { Kind = ChangeKind.CreatePackage, Name = "Spacecraft" }]);
+
+            var rootElements = this.modelProvider.RootElements;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(rootElements, Has.Count.EqualTo(1));
+                Assert.That(rootElements[0], Is.TypeOf<Namespace>());
+                Assert.That(rootElements[0].ownedElement.Select(element => element.DeclaredName), Is.EqualTo(["Spacecraft"]));
             }
         }
     }

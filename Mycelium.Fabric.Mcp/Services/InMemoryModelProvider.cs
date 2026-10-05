@@ -13,8 +13,12 @@ namespace Mycelium.Fabric.Mcp.Services
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
+    using System.Threading;
 
     using ModelContextProtocol;
+
+    using Mycelium.Fabric.Mcp.Changes;
 
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Dal;
@@ -26,8 +30,23 @@ namespace Mycelium.Fabric.Mcp.Services
     /// An <see cref="IModelProvider"/> that loads a SysML v2 model from a JSON file of the Systems Modeling
     /// API and keeps it in memory. It holds no element until <see cref="LoadModel"/> is called.
     /// </summary>
+    /// <remarks>
+    /// The model is kept twice: as DTOs, which hold identifiers and can be copied and modified, and as the POCOs that
+    /// SysML2.NET builds from them, which the tools navigate. A batch of changes is applied to a copy of the DTOs, from which
+    /// new POCOs replace the current ones only when the whole batch succeeds.
+    /// </remarks>
     public class InMemoryModelProvider : IModelProvider
     {
+        /// <summary>
+        /// The lock that prevents two batches of changes, or a batch and a load, from modifying the model at the same time.
+        /// </summary>
+        private readonly Lock modelLock = new();
+
+        /// <summary>
+        /// The DTOs of the loaded model, from which its elements are built.
+        /// </summary>
+        private List<DtoElement> elementDtos = [];
+
         /// <summary>
         /// The elements of the loaded model, indexed by their <c>Id</c>.
         /// </summary>
@@ -64,27 +83,39 @@ namespace Mycelium.Fabric.Mcp.Services
 
             using var stream = File.OpenRead(modelPath.LocalPath);
 
-            var dtos = new DeSerializer()
-                .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
-                .OfType<DtoElement>()
-                .ToList();
+            var dtos = ReadElementDtos(stream);
 
-            var assembler = new Assembler();
-            assembler.Synchronize(dtos);
+            lock (this.modelLock)
+            {
+                this.SetModel(dtos);
+            }
+        }
 
-            var loadedElements = assembler.Cache.Values
-                .Select(lazyElement => lazyElement.Value)
-                .ToList();
+        /// <summary>
+        /// Applies a batch of changes to the loaded model, all or nothing: when one change is invalid, the model is left
+        /// unchanged and the problems are returned.
+        /// </summary>
+        /// <param name="changes">The changes to apply, in order.</param>
+        /// <returns>The <see cref="ApplyChangesResult"/> that tells whether the batch has been applied.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="changes"/> is <c>null</c>.
+        /// </exception>
+        public ApplyChangesResult ApplyChanges(IReadOnlyList<ModelChange> changes)
+        {
+            ArgumentNullException.ThrowIfNull(changes);
 
-            var loadedRootElements = loadedElements
-                .Where(element => element.OwningRelationship == null && element is not IRelationship { OwningRelatedElement: not null })
-                .ToList();
+            lock (this.modelLock)
+            {
+                var applier = new ModelChangeApplier(this.CopyElementDtos());
+                var result = applier.Apply(changes);
 
-            var loadedElementsById = loadedElements.ToDictionary(element => element.Id);
+                if (result.Applied)
+                {
+                    this.SetModel([.. applier.Elements]);
+                }
 
-            this.Elements = loadedElements;
-            this.RootElements = loadedRootElements;
-            this.elementsById = loadedElementsById;
+                return result;
+            }
         }
 
         /// <summary>
@@ -114,6 +145,59 @@ namespace Mycelium.Fabric.Mcp.Services
         {
             return this.GetElementById(elementId)
                 ?? throw new McpException($"No element has the identifier '{elementId}'. Use find_elements_by_name or list_children to get a valid identifier.");
+        }
+
+        /// <summary>
+        /// Reads the DTOs of the elements stored in a JSON stream of the Systems Modeling API.
+        /// </summary>
+        /// <param name="stream">The <see cref="Stream"/> that contains the JSON.</param>
+        /// <returns>The DTOs of the elements.</returns>
+        private static List<DtoElement> ReadElementDtos(Stream stream)
+        {
+            return new DeSerializer()
+                .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
+                .OfType<DtoElement>()
+                .ToList();
+        }
+
+        /// <summary>
+        /// Copies the DTOs of the loaded model, by writing them to JSON and reading them back, so that a batch of changes can
+        /// modify the copy without touching the loaded model.
+        /// </summary>
+        /// <returns>The copied DTOs.</returns>
+        private List<DtoElement> CopyElementDtos()
+        {
+            using var stream = new MemoryStream();
+
+            new Serializer().Serialize(this.elementDtos, SerializationModeKind.JSON, false, stream, new JsonWriterOptions());
+            stream.Position = 0;
+
+            return ReadElementDtos(stream);
+        }
+
+        /// <summary>
+        /// Replaces the loaded model by the one made of the given DTOs, whose POCOs are built by SysML2.NET.
+        /// </summary>
+        /// <param name="dtos">The DTOs of the new model.</param>
+        private void SetModel(List<DtoElement> dtos)
+        {
+            var assembler = new Assembler();
+            assembler.Synchronize(dtos);
+
+            var loadedElements = assembler.Cache.Values
+                .Select(lazyElement => lazyElement.Value)
+                .ToList();
+
+            var loadedRootElements = loadedElements
+                .Where(element => element.OwningRelationship == null && element is not IRelationship { OwningRelatedElement: not null })
+                .ToList();
+
+            var loadedElementsById = loadedElements.ToDictionary(element => element.Id);
+
+            this.elementDtos = dtos;
+            this.Elements = loadedElements;
+            this.RootElements = loadedRootElements;
+            this.elementsById = loadedElementsById;
         }
     }
 }
