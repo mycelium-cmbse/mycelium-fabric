@@ -49,7 +49,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
                 return services
                     .AddMcpServer()
-                    .WithTools<NavigationTools>();
+                    .WithTools<NavigationTools>()
+                    .WithTools<BudgetTools>();
             }
         }
     }

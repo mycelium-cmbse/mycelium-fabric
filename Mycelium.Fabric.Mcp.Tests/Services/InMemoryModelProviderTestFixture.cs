@@ -12,6 +12,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using System;
     using System.IO;
 
+    using ModelContextProtocol;
+
     using Mycelium.Fabric.Mcp.Services;
 
     using SysML2.NET.Core.POCO.Root.Namespaces;
@@ -119,6 +121,20 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.LoadModel(this.emptyModelPath);
 
             Assert.That(this.modelProvider.GetElementById(PayloadSubsystemId), Is.Null);
+        }
+
+        [Test]
+        public void VerifyGetRequiredElementById()
+        {
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+
+            var unknownId = Guid.NewGuid();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.modelProvider.GetRequiredElementById(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
+                Assert.That(this.modelProvider.GetRequiredElementById(PayloadSubsystemId).DeclaredName, Is.EqualTo("payloadSubsystem"));
+            }
         }
     }
 }

@@ -58,7 +58,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(serverBuilder, Is.Not.Null);
                 Assert.That(modelProviderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(modelProviderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(4));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(7));
             }
 
             var serviceProvider = new Mock<IServiceProvider>();

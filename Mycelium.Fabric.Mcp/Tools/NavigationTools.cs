@@ -17,9 +17,9 @@ namespace Mycelium.Fabric.Mcp.Tools
     using ModelContextProtocol;
     using ModelContextProtocol.Server;
 
+    using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
-    using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Root.Elements;
 
     /// <summary>
@@ -150,10 +150,10 @@ namespace Mycelium.Fabric.Mcp.Tools
         [return: Description("The details of the element, including the identifier of its owner to navigate up the model.")]
         public ElementDetails GetElementDetails([Description("The identifier (Id, a GUID) of the element, as returned by the other tools.")] Guid elementId)
         {
-            var element = this.GetElement(elementId);
+            var element = this.modelProvider.GetRequiredElementById(elementId);
 
-            return new ElementDetails(element.Id, element.DeclaredName, element.DeclaredShortName, DescribeType(element), element.qualifiedName,
-                element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, GetDocumentation(element));
+            return new ElementDetails(element.Id, element.DeclaredName, element.DeclaredShortName, element.DescribeType(), element.qualifiedName,
+                element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, element.GetDocumentationBodies());
         }
 
         /// <summary>
@@ -169,32 +169,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         [return: Description("The identifier, name, type and qualified name of each child of the element.")]
         public IReadOnlyList<ElementSummary> ListChildren([Description("The identifier (Id, a GUID) of the parent element, as returned by the other tools.")] Guid elementId)
         {
-            var element = this.GetElement(elementId);
+            var element = this.modelProvider.GetRequiredElementById(elementId);
 
             return (element.ownedElement ?? [])
                 .Select(CreateSummary)
                 .ToList();
-        }
-
-        /// <summary>
-        /// Gets the element that has the given identifier, or fails with a message the AI assistant can act on.
-        /// </summary>
-        /// <param name="elementId">The <c>Id</c> of the element.</param>
-        /// <returns>The <see cref="IElement"/> that has the given identifier.</returns>
-        /// <exception cref="McpException">
-        /// Thrown when no element of the model has the given identifier. Unlike other exceptions, the message of an
-        /// <see cref="McpException"/> is sent back to the AI assistant.
-        /// </exception>
-        private IElement GetElement(Guid elementId)
-        {
-            var element = this.modelProvider.GetElementById(elementId);
-
-            if (element == null)
-            {
-                throw new McpException($"No element has the identifier '{elementId}'. Use find_elements_by_name or list_children to get a valid identifier.");
-            }
-
-            return element;
         }
 
         /// <summary>
@@ -204,36 +183,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The <see cref="ElementSummary"/> of the element.</returns>
         private static ElementSummary CreateSummary(IElement element)
         {
-            return new ElementSummary(element.Id, element.DeclaredName, DescribeType(element), element.qualifiedName);
-        }
-
-        /// <summary>
-        /// Describes the type of the given element: its metaclass, followed by its definition when it is typed by
-        /// an <see cref="IFeatureTyping"/> (for example <c>PartUsage : OpticalCamera</c>).
-        /// </summary>
-        /// <param name="element">The <see cref="IElement"/> to describe.</param>
-        /// <returns>The description of the type of the element.</returns>
-        private static string DescribeType(IElement element)
-        {
-            var definition = (element.OwnedRelationship ?? [])
-                .OfType<IFeatureTyping>()
-                .FirstOrDefault()?.Type;
-
-            return definition == null ? element.GetType().Name : $"{element.GetType().Name} : {definition.DeclaredName}";
-        }
-
-        /// <summary>
-        /// Gets the documentation of the given element, joining the bodies of its documentation comments.
-        /// </summary>
-        /// <param name="element">The <see cref="IElement"/> whose documentation is read.</param>
-        /// <returns>The documentation of the element, or <c>null</c> when it has none.</returns>
-        private static string GetDocumentation(IElement element)
-        {
-            var bodies = (element.documentation ?? [])
-                .Select(documentation => documentation.Body)
-                .ToList();
-
-            return bodies.Count == 0 ? null : string.Join("\n", bodies);
+            return new ElementSummary(element.Id, element.DeclaredName, element.DescribeType(), element.qualifiedName);
         }
     }
 }
