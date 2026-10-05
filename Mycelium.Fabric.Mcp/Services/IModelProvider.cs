@@ -12,6 +12,8 @@ namespace Mycelium.Fabric.Mcp.Services
     using System;
     using System.Collections.Generic;
 
+    using ModelContextProtocol;
+
     using SysML2.NET.Core.POCO.Root.Elements;
 
     /// <summary>
@@ -56,5 +58,17 @@ namespace Mycelium.Fabric.Mcp.Services
         /// such element.
         /// </returns>
         IElement GetElementById(Guid elementId);
+
+        /// <summary>
+        /// Gets the element of the loaded model that has the given identifier, or fails with a message the AI assistant can
+        /// act on.
+        /// </summary>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
+        /// <returns>The <see cref="IElement"/> that has the given identifier.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when the loaded model contains no such element. Unlike other exceptions, the message of an
+        /// <see cref="McpException"/> is sent back to the AI assistant.
+        /// </exception>
+        IElement GetRequiredElementById(Guid elementId);
     }
 }

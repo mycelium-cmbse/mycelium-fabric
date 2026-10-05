@@ -59,6 +59,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void SetUp()
         {
             this.modelProvider = new Mock<IModelProvider>();
+            this.modelProvider.Setup(provider => provider.GetRequiredElementById(It.IsAny<Guid>())).Throws(new McpException("No element has this identifier."));
         }
 
         [Test]
@@ -85,11 +86,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(package.Definition, Is.Null);
+                Assert.That(package.Types, Is.Empty);
                 Assert.That(package.Attributes, Has.Count.EqualTo(0));
                 Assert.That(camera.Id, Is.EqualTo(CameraId));
                 Assert.That(camera.Name, Is.EqualTo("camera"));
-                Assert.That(camera.Definition, Is.EqualTo("OpticalCamera"));
+                Assert.That(camera.Types, Is.EqualTo(["OpticalCamera"]));
                 Assert.That(camera.Attributes.Select(attribute => attribute.Name), Is.EqualTo(["mass", "power"]));
                 Assert.That(camera.Attributes[0].Value, Is.EqualTo(38));
                 Assert.That(camera.Attributes[0].Documentation, Is.EqualTo("Dry mass of the unit [kg]."));
@@ -106,7 +107,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             part.AssignOwnership(new FeatureMembership(), mass);
             mass.AssignOwnership(new FeatureValue(), new LiteralInteger { Value = 2 });
 
-            this.modelProvider.Setup(provider => provider.GetElementById(part.Id)).Returns(part);
+            this.modelProvider.Setup(provider => provider.GetRequiredElementById(part.Id)).Returns(part);
 
             var tools = new BudgetTools(this.modelProvider.Object);
             var partMass = tools.SumAttribute(part.Id, "mass");
@@ -117,7 +118,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(() => tools.SumAttribute(Guid.NewGuid(), "mass"), Throws.TypeOf<McpException>());
                 Assert.That(partMass.Total, Is.EqualTo(2));
                 Assert.That(partMass.Contributions[0].Id, Is.EqualTo(part.Id));
-                Assert.That(partMass.Contributions[0].Definition, Is.Null);
+                Assert.That(partMass.Contributions[0].Types, Is.Empty);
             }
 
             tools = CreateSatelliteTools();
@@ -133,7 +134,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(payloadMass.ContributorCount, Is.EqualTo(2));
                 Assert.That(payloadMass.Contributions.Select(contribution => contribution.Value), Is.EquivalentTo([38, 1.5]));
                 Assert.That(cameraContribution.QualifiedName, Is.EqualTo(CameraQualifiedName));
-                Assert.That(cameraContribution.Definition, Is.EqualTo("OpticalCamera"));
+                Assert.That(cameraContribution.Types, Is.EqualTo(["OpticalCamera"]));
             }
         }
 

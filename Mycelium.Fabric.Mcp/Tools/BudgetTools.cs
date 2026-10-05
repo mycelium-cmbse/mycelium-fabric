@@ -20,7 +20,9 @@ namespace Mycelium.Fabric.Mcp.Tools
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
+    using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Parts;
 
     /// <summary>
@@ -55,7 +57,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Gives the attributes of the element that has the given identifier, including those of its definition.
+        /// Gives the attributes of the element that has the given identifier, including those inherited from its types.
         /// </summary>
         /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <returns>The <see cref="AttributeValues"/> of the element.</returns>
@@ -64,16 +66,16 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </exception>
         [McpServerTool(Name = "get_attribute_values", ReadOnly = true)]
         [Description("Gives the attributes of an element (mass, power, data rate, capacity...) with their value and documentation, which gives the unit. For a part typed by a definition (for example reactionWheel1 : ReactionWheel), it includes the attributes of the definition.")]
-        [return: Description("The identifier, name and definition of the element, and each attribute with its value (null when it is not a number) and documentation.")]
+        [return: Description("The identifier, name and types of the element, and each attribute with its value (null when it is not a number) and documentation.")]
         public AttributeValues GetAttributeValues([Description("The identifier (Id, a GUID) of the element, as returned by the other tools.")] Guid elementId)
         {
             var element = this.modelProvider.GetRequiredElementById(elementId);
 
-            var attributes = element.GetAttributes()
-                .Select(attribute => new AttributeValue(attribute.DeclaredName, attribute.GetNumericValue(), attribute.GetDocumentation()))
+            var attributes = GetAttributes(element)
+                .Select(attribute => new AttributeValue(attribute.DeclaredName, attribute.GetNumericValue(), attribute.GetDocumentationBodies()))
                 .ToList();
 
-            return new AttributeValues(element.Id, element.DeclaredName, element.GetDefinition()?.DeclaredName, attributes);
+            return new AttributeValues(element.Id, element.DeclaredName, element.GetTypeNames(), attributes);
         }
 
         /// <summary>
@@ -88,7 +90,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </exception>
         [McpServerTool(Name = "sum_attribute", ReadOnly = true)]
         [Description("Computes the sum of a numeric attribute (for example 'mass' or 'power') over an element and all its sub-parts, using the values of their definitions. Gives the total and the contribution of each part. Use it for any mass or power budget instead of adding the values yourself.")]
-        [return: Description("The total, the number of contributing parts, and the contribution of each part with its identifier, qualified name, definition and value.")]
+        [return: Description("The total, the number of contributing parts, and the contribution of each part with its identifier, qualified name, types and value.")]
         public SumResult SumAttribute([Description("The identifier (Id, a GUID) of the root element of the sum, for example the satellite or a subsystem.")] Guid elementId,
             [Description("The name of the attribute to add up, for example 'mass' or 'power'.")] string attributeName)
         {
@@ -144,7 +146,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
         /// <summary>
         /// Collects the contributions of the given element and its sub-parts to the sum of an attribute. An element that has
-        /// a numeric value for the attribute, directly or through its definition, contributes this value and its own
+        /// a numeric value for the attribute, owned or inherited from its types, contributes this value and its own
         /// sub-parts are not visited, so that no value is counted twice.
         /// </summary>
         /// <param name="element">The <see cref="IElement"/> whose contributions are collected.</param>
@@ -152,19 +154,31 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The <see cref="Contribution"/> of each contributing part.</returns>
         private static List<Contribution> CollectContributions(IElement element, string attributeName)
         {
-            var value = element.GetAttributes()
+            var value = GetAttributes(element)
                 .FirstOrDefault(attribute => attribute.DeclaredName == attributeName)?
                 .GetNumericValue();
 
             if (value != null)
             {
-                return [new Contribution(element.Id, element.qualifiedName, element.GetDefinition()?.DeclaredName, value.Value)];
+                return [new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Value)];
             }
 
             return (element.ownedElement ?? [])
                 .OfType<IPartUsage>()
                 .SelectMany(part => CollectContributions(part, attributeName))
                 .ToList();
+        }
+
+        /// <summary>
+        /// Gets the attributes of the given element: the <see cref="IAttributeUsage"/>s among the features of its
+        /// <see cref="IType"/>, owned or inherited (for example the attributes of <c>OpticalCamera</c> for
+        /// <c>camera : OpticalCamera</c>).
+        /// </summary>
+        /// <param name="element">The <see cref="IElement"/> whose attributes are read.</param>
+        /// <returns>The attributes of the element, empty when it is not an <see cref="IType"/>.</returns>
+        private static IEnumerable<IAttributeUsage> GetAttributes(IElement element)
+        {
+            return element is IType type ? (type.feature ?? []).OfType<IAttributeUsage>() : [];
         }
     }
 }

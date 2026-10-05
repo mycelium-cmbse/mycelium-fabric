@@ -153,7 +153,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             var element = this.modelProvider.GetRequiredElementById(elementId);
 
             return new ElementDetails(element.Id, element.DeclaredName, element.DeclaredShortName, element.DescribeType(), element.qualifiedName,
-                element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, element.GetDocumentation());
+                element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, element.GetDocumentationBodies());
         }
 
         /// <summary>

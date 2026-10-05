@@ -17,7 +17,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// </summary>
     /// <param name="Id">The identifier of the element.</param>
     /// <param name="Name">The declared name of the element, or <c>null</c> when it has none.</param>
-    /// <param name="Definition">The declared name of the definition of the element, or <c>null</c> when it is not typed.</param>
-    /// <param name="Attributes">The attributes of the element, followed by those of its definition.</param>
-    public sealed record AttributeValues(Guid Id, string Name, string Definition, IReadOnlyList<AttributeValue> Attributes);
+    /// <param name="Types">The declared names of the types of the element, empty when it is not typed.</param>
+    /// <param name="Attributes">The attributes of the element, including those inherited from its types.</param>
+    public sealed record AttributeValues(Guid Id, string Name, IReadOnlyList<string> Types, IReadOnlyList<AttributeValue> Attributes);
 }

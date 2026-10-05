@@ -49,6 +49,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void SetUp()
         {
             this.modelProvider = new Mock<IModelProvider>();
+            this.modelProvider.Setup(provider => provider.GetRequiredElementById(It.IsAny<Guid>())).Throws(new McpException("No element has this identifier."));
         }
 
         [Test]
@@ -145,9 +146,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void VerifyGetElementDetails()
         {
             var tools = new NavigationTools(this.modelProvider.Object);
-            var unknownId = Guid.NewGuid();
 
-            Assert.That(() => tools.GetElementDetails(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
+            Assert.That(() => tools.GetElementDetails(Guid.NewGuid()), Throws.TypeOf<McpException>());
 
             tools = CreateSatelliteTools();
 
