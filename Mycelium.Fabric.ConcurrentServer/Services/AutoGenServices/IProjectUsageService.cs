@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// Defines the ProjectUsageService of the OMG Systems Modeling API and Services specification, §7.2.6.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public interface IProjectUsageService : IBaseService
+    public partial interface IProjectUsageService : IBaseService
     {
         /// <summary>
         /// Create a new project usage in the given project at the head commit of the given branch. This

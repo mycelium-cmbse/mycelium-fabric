@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// Defines the QueryService of the OMG Systems Modeling API and Services specification, §7.2.4.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public interface IQueryService : IBaseService
+    public partial interface IQueryService : IBaseService
     {
         /// <summary>
         /// Create a query in the given project with the given inputs.

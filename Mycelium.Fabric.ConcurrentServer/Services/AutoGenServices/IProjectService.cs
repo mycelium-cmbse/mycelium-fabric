@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// Defines the ProjectService of the OMG Systems Modeling API and Services specification, §7.2.1.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public interface IProjectService : IBaseService
+    public partial interface IProjectService : IBaseService
     {
         /// <summary>
         /// Create a new project with the given name and description (optional).
