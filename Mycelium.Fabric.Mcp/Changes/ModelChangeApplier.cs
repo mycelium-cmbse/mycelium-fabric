@@ -43,6 +43,21 @@ namespace Mycelium.Fabric.Mcp.Changes
     public class ModelChangeApplier
     {
         /// <summary>
+        /// The role, in the messages, of the element that owns a created element.
+        /// </summary>
+        private const string OwnerRole = "owner";
+
+        /// <summary>
+        /// The role, in the messages, of the element that a change modifies.
+        /// </summary>
+        private const string ElementRole = "element";
+
+        /// <summary>
+        /// The role, in the messages, of the part definition that types a part.
+        /// </summary>
+        private const string DefinitionRole = "definition";
+
+        /// <summary>
         /// The elements of the working copy, indexed by their <c>Id</c>.
         /// </summary>
         private readonly Dictionary<Guid, IElement> elementsById;
@@ -192,8 +207,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             this.CheckNewElement(change);
 
-            var owner = string.IsNullOrWhiteSpace(change.Owner) ? this.GetOrCreateRootNamespace() : this.Resolve(change.Owner, "owner");
-            CheckKind(owner, owner is IPackage or Namespace, "owner", "a package");
+            var owner = string.IsNullOrWhiteSpace(change.Owner) ? this.GetOrCreateRootNamespace() : this.Resolve(change.Owner, OwnerRole);
+            CheckKind(owner, owner is IPackage or Namespace, OwnerRole, "a package");
 
             this.AddOwnedMember(owner, new Package(), change);
         }
@@ -207,8 +222,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             this.CheckNewElement(change);
 
-            var owner = this.Resolve(change.Owner, "owner");
-            CheckKind(owner, owner is IPackage, "owner", "a package");
+            var owner = this.Resolve(change.Owner, OwnerRole);
+            CheckKind(owner, owner is IPackage, OwnerRole, "a package");
 
             this.AddOwnedMember(owner, new PartDefinition(), change);
         }
@@ -222,8 +237,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             this.CheckNewElement(change);
 
-            var owner = this.Resolve(change.Owner, "owner");
-            CheckKind(owner, owner is IPackage or IPartDefinition or IPartUsage, "owner", "a package, a part definition or a part");
+            var owner = this.Resolve(change.Owner, OwnerRole);
+            CheckKind(owner, owner is IPackage or IPartDefinition or IPartUsage, OwnerRole, "a package, a part definition or a part");
 
             var definition = string.IsNullOrWhiteSpace(change.Definition) ? null : this.ResolvePartDefinition(change.Definition);
             var part = this.AddOwnedMember(owner, new PartUsage { IsComposite = true }, change);
@@ -243,8 +258,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             this.CheckNewElement(change);
 
-            var owner = this.Resolve(change.Owner, "owner");
-            CheckKind(owner, owner is IPartDefinition or IPartUsage, "owner", "a part definition or a part");
+            var owner = this.Resolve(change.Owner, OwnerRole);
+            CheckKind(owner, owner is IPartDefinition or IPartUsage, OwnerRole, "a part definition or a part");
 
             var attribute = this.AddOwnedMember(owner, new AttributeUsage(), change);
 
@@ -268,8 +283,8 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("The text of the requirement is missing.");
             }
 
-            var owner = this.Resolve(change.Owner, "owner");
-            CheckKind(owner, owner is IPackage, "owner", "a package");
+            var owner = this.Resolve(change.Owner, OwnerRole);
+            CheckKind(owner, owner is IPackage, OwnerRole, "a package");
 
             this.AddOwnedMember(owner, new RequirementUsage(), change);
         }
@@ -281,8 +296,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
         private void Rename(ModelChange change)
         {
-            var element = this.Resolve(change.Element, "element");
-            CheckKind(element, element is not IRelationship, "element", "an element that is not a relationship");
+            var element = this.Resolve(change.Element, ElementRole);
+            CheckKind(element, element is not IRelationship, ElementRole, "an element that is not a relationship");
             CheckName(change.Name);
             this.CheckNameIsFree(this.GetOwner(element), change.Name, element);
 
@@ -296,8 +311,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
         private void SetValue(ModelChange change)
         {
-            var attribute = this.Resolve(change.Element, "element");
-            CheckKind(attribute, attribute is IAttributeUsage, "element", "an attribute");
+            var attribute = this.Resolve(change.Element, ElementRole);
+            CheckKind(attribute, attribute is IAttributeUsage, ElementRole, "an attribute");
 
             if (change.Value == null)
             {
@@ -315,8 +330,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
         private void SetDefinition(ModelChange change)
         {
-            var part = this.Resolve(change.Element, "element");
-            CheckKind(part, part is IPartUsage, "element", "a part");
+            var part = this.Resolve(change.Element, ElementRole);
+            CheckKind(part, part is IPartUsage, ElementRole, "a part");
 
             var definition = this.ResolvePartDefinition(change.Definition);
 
@@ -332,8 +347,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
         private void MarkForDeletion(ModelChange change, int changeNumber)
         {
-            var element = this.Resolve(change.Element, "element");
-            CheckKind(element, element is not IRelationship, "element", "an element that is not a relationship");
+            var element = this.Resolve(change.Element, ElementRole);
+            CheckKind(element, element is not IRelationship, ElementRole, "an element that is not a relationship");
 
             this.deletions.Add((changeNumber, element));
         }
@@ -507,8 +522,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </exception>
         private IElement ResolvePartDefinition(string reference)
         {
-            var definition = this.Resolve(reference, "definition");
-            CheckKind(definition, definition is IPartDefinition, "definition", "a part definition");
+            var definition = this.Resolve(reference, DefinitionRole);
+            CheckKind(definition, definition is IPartDefinition, DefinitionRole, "a part definition");
 
             return definition;
         }
@@ -517,7 +532,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Gets the root namespace of the model, that owns its top-level elements, and creates it when the model has none.
         /// </summary>
         /// <returns>The root namespace of the model.</returns>
-        private IElement GetOrCreateRootNamespace()
+        private Namespace GetOrCreateRootNamespace()
         {
             var rootNamespace = this.elementsById.Values
                 .OfType<Namespace>()
