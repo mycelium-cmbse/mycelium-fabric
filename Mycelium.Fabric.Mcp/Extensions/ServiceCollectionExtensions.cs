@@ -13,6 +13,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using Microsoft.Extensions.DependencyInjection;
 
+    using Mycelium.Fabric.Mcp.Prompts;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
@@ -25,7 +26,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the MCP server, its tools, and an <see cref="InMemoryModelProvider"/> that loads the model
+            /// Registers the MCP server, its tools and prompts, and an <see cref="InMemoryModelProvider"/> that loads the model
             /// from the given JSON file.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
@@ -52,7 +53,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
                     .WithTools<ConstructionTools>()
-                    .WithTools<RequirementTools>();
+                    .WithTools<RequirementTools>()
+                    // A static class cannot be a type argument: the prompts are registered by their type.
+                    .WithPrompts([typeof(GenerationPrompts)]);
             }
         }
     }

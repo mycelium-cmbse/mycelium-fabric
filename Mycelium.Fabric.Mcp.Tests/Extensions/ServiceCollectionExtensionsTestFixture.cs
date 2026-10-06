@@ -52,6 +52,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
+            var promptRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerPrompt)).ToList();
 
             using (Assert.EnterMultipleScope())
             {
@@ -59,6 +60,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(modelProviderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(modelProviderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(toolRegistrations, Has.Count.EqualTo(9));
+                Assert.That(promptRegistrations, Has.Count.EqualTo(1));
             }
 
             var serviceProvider = new Mock<IServiceProvider>();
