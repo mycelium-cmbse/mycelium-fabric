@@ -39,9 +39,20 @@ namespace Mycelium.Fabric.Mcp.Changes
         CreateAttribute,
 
         /// <summary>
-        /// Creates a requirement with its text in a package.
+        /// Creates a requirement with its text, and optionally its identifier (<c>ReqId</c>), in a package.
         /// </summary>
         CreateRequirement,
+
+        /// <summary>
+        /// Makes a requirement verifiable with a constraint on an attribute of its subject, for example
+        /// <c>require constraint { subj.mass * 1.2 &lt;= 150 }</c>, which replaces its previous required constraints.
+        /// </summary>
+        SetConstraint,
+
+        /// <summary>
+        /// States that a part satisfies a requirement, as <c>satisfy massBudget by eosat1;</c> does.
+        /// </summary>
+        Satisfy,
 
         /// <summary>
         /// Renames an element.

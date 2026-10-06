@@ -28,6 +28,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Dal;
 
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
+    using PocoSatisfyRequirementUsage = SysML2.NET.Core.POCO.Systems.Requirements.ISatisfyRequirementUsage;
 
     /// <summary>
     /// Applies a batch of <see cref="ModelChange"/>s, in order, to a working copy of a SysML v2 model made of DTOs. The
@@ -38,9 +39,9 @@ namespace Mycelium.Fabric.Mcp.Changes
     /// membership for each owned element, a <c>FeatureTyping</c> for <c>camera : Camera</c>, a <c>FeatureValue</c> that owns
     /// a <c>LiteralRational</c> for <c>mass = 38</c>, and an owned <c>Documentation</c> for a text. Deletions are checked and
     /// carried out at the end of the batch, once the references to the deleted elements are known. An applier is meant for
-    /// a single batch.
+    /// a single batch. The changes that make requirements verifiable are in <c>ModelChangeApplier.Requirements.cs</c>.
     /// </remarks>
-    public class ModelChangeApplier
+    public partial class ModelChangeApplier
     {
         /// <summary>
         /// The role, in the messages, of the element that owns a created element.
@@ -169,6 +170,12 @@ namespace Mycelium.Fabric.Mcp.Changes
                     case ChangeKind.CreateRequirement:
                         this.CreateRequirement(change);
                         break;
+                    case ChangeKind.SetConstraint:
+                        this.SetConstraint(change);
+                        break;
+                    case ChangeKind.Satisfy:
+                        this.Satisfy(change);
+                        break;
                     case ChangeKind.Rename:
                         this.Rename(change);
                         break;
@@ -270,7 +277,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Creates a requirement, whose text is its documentation, in a package.
+        /// Creates a requirement, whose text is its documentation, in a package. Its identifier in the specification, when
+        /// the change gives one, is its <c>ReqId</c>, which SysML v2 uses as its short name (<c>requirement &lt;'REQ-SYS-001'&gt;</c>).
         /// </summary>
         /// <param name="change">The <see cref="ChangeKind.CreateRequirement"/> change.</param>
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
@@ -286,7 +294,14 @@ namespace Mycelium.Fabric.Mcp.Changes
             var owner = this.Resolve(change.Owner, OwnerRole);
             CheckKind(owner, owner is IPackage, OwnerRole, "a package");
 
-            this.AddOwnedMember(owner, new RequirementUsage(), change);
+            var reqId = string.IsNullOrWhiteSpace(change.ReqId) ? null : change.ReqId;
+
+            if (reqId != null)
+            {
+                this.CheckReqIdIsFree(reqId);
+            }
+
+            this.AddOwnedMember(owner, new RequirementUsage { ReqId = reqId }, change);
         }
 
         /// <summary>
@@ -416,13 +431,36 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var referencingElements = remainingRelationships
                 .Where(relationship => relationship.relatedElement.Any(relatedElement => relatedElement != null && removedIds.Contains(relatedElement.Id)))
-                .Select(relationship => $"'{relationship.OwningRelatedElement?.qualifiedName ?? relationship.Id.ToString()}'")
+                .Select(DescribeReferencingElement)
                 .Distinct()
                 .ToList();
 
             return referencingElements.Count == 0
                 ? null
                 : $"Change {changeNumber} (Delete): the {Describe(deletedElement)} is still referenced by {string.Join(", ", referencingElements)}. Change or delete these elements first.";
+        }
+
+        /// <summary>
+        /// Describes, in a message, the element that holds a reference: the nearest owner of the referencing relationship
+        /// that has a qualified name (for example the part typed by a definition), or the satisfy link that contains it, which
+        /// has no name and is designated by its identifier so that it can be deleted.
+        /// </summary>
+        /// <param name="relationship">The referencing relationship.</param>
+        /// <returns>The description of the referencing element.</returns>
+        private static string DescribeReferencingElement(PocoRelationship relationship)
+        {
+            for (var element = relationship.OwningRelatedElement; element != null; element = element.owner)
+            {
+                switch (element)
+                {
+                    case PocoSatisfyRequirementUsage:
+                        return $"the SatisfyRequirementUsage {element.Id}";
+                    case { qualifiedName: { } qualifiedName }:
+                        return $"'{qualifiedName}'";
+                }
+            }
+
+            return $"'{relationship.Id}'";
         }
 
         /// <summary>
@@ -556,13 +594,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             member.DeclaredName = change.Name;
 
-            // A feature (part, attribute...) of a type (part definition, part) is owned through a FeatureMembership; any other
-            // member, for example an element of a package, through an OwningMembership.
-            IMembership membership = member is IFeature && owner is IType
-                ? new FeatureMembership { Visibility = VisibilityKind.Public }
-                : new OwningMembership { Visibility = VisibilityKind.Public };
-
-            this.AddOwnedRelationship(owner, membership, this.Add(member));
+            this.AddOwnedRelationship(owner, CreateMembership(owner, member), this.Add(member));
 
             if (!string.IsNullOrWhiteSpace(change.Text))
             {
@@ -577,6 +609,21 @@ namespace Mycelium.Fabric.Mcp.Changes
             this.createdElements.Add(new CreatedElement(change.TemporaryName, member.Id, member.DeclaredName, member.GetType().Name));
 
             return member;
+        }
+
+        /// <summary>
+        /// Creates the public membership through which an element owns a member: a <c>FeatureMembership</c> for a feature
+        /// (part, attribute...) of a type (part definition, part), and an <c>OwningMembership</c> for any other member, for
+        /// example an element of a package.
+        /// </summary>
+        /// <param name="owner">The element that owns the member.</param>
+        /// <param name="member">The owned member.</param>
+        /// <returns>The new membership, not added to the working copy yet.</returns>
+        private static IMembership CreateMembership(IElement owner, IElement member)
+        {
+            return member is IFeature && owner is IType
+                ? new FeatureMembership { Visibility = VisibilityKind.Public }
+                : new OwningMembership { Visibility = VisibilityKind.Public };
         }
 
         /// <summary>

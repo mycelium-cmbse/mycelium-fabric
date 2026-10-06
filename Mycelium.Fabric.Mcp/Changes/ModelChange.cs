@@ -16,8 +16,8 @@ namespace Mycelium.Fabric.Mcp.Changes
     /// <see cref="Kind"/>; the others are ignored.
     /// </summary>
     /// <remarks>
-    /// The properties that designate an element (<see cref="Owner"/>, <see cref="Element"/> and <see cref="Definition"/>)
-    /// hold either the <c>Id</c> of an element of the model, or the <see cref="TemporaryName"/> given to an element created
+    /// The properties that designate an element (<see cref="Owner"/>, <see cref="Element"/>, <see cref="Definition"/> and
+    /// <see cref="SatisfyingPart"/>) hold either the <c>Id</c> of an element of the model, or the <see cref="TemporaryName"/> given to an element created
     /// by a previous change of the same batch, whose <c>Id</c> is not known yet.
     /// </remarks>
     public sealed record ModelChange
@@ -38,7 +38,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the element that the change modifies.
         /// </summary>
-        [Description("Rename, SetValue, SetDefinition and Delete: the element to modify, as an identifier (Id) or a temporary name.")]
+        [Description("Rename, SetValue, SetDefinition and Delete: the element to modify; SetConstraint and Satisfy: the requirement. As an identifier (Id) or a temporary name.")]
         public string Element { get; init; }
 
         /// <summary>
@@ -70,5 +70,41 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         [Description("Create, optional: the documentation of the new element, for example the unit of an attribute ('Dry mass of the unit [kg].'). Required for CreateRequirement: the text of the requirement.")]
         public string Text { get; init; }
+
+        /// <summary>
+        /// Gets the identifier of the created requirement in its specification, which is its short name.
+        /// </summary>
+        [Description("CreateRequirement, optional: the identifier of the requirement in the specification, for example 'REQ-SYS-001'. It must differ from the identifiers of the other requirements.")]
+        public string ReqId { get; init; }
+
+        /// <summary>
+        /// Gets the name of the attribute of the subject that the constraint compares with the limit.
+        /// </summary>
+        [Description("SetConstraint: the name of the constrained attribute of the subject, for example 'mass' or 'power'. check_requirements computes its value on the satisfying part as sum_attribute does.")]
+        public string Attribute { get; init; }
+
+        /// <summary>
+        /// Gets the comparison operator of the constraint.
+        /// </summary>
+        [Description("SetConstraint: how the attribute compares with the limit: '<', '<=', '>', '>=' or '=='.")]
+        public string Operator { get; init; }
+
+        /// <summary>
+        /// Gets the limit of the constraint.
+        /// </summary>
+        [Description("SetConstraint: the limit, in the unit of the attribute, for example 150 for 150 kg.")]
+        public double? Limit { get; init; }
+
+        /// <summary>
+        /// Gets the margin of the constraint, in percent.
+        /// </summary>
+        [Description("SetConstraint, optional: a margin in percent, for example 20, that always makes the constraint harder to meet. With '<' or '<=', the value plus the margin must stay under the limit (subj.mass * 1.2 <= 150); with '>' or '>=', the value must reach the limit plus the margin (subj.capacity >= 300 * 1.2). Not allowed with '=='.")]
+        public double? Margin { get; init; }
+
+        /// <summary>
+        /// Gets the part that satisfies the requirement.
+        /// </summary>
+        [Description("Satisfy: the part that satisfies the requirement, for example the satellite or a subsystem, as an identifier (Id) or a temporary name.")]
+        public string SatisfyingPart { get; init; }
     }
 }

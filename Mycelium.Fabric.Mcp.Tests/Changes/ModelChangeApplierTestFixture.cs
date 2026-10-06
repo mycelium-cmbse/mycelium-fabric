@@ -22,11 +22,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Parts;
+    using SysML2.NET.Core.POCO.Systems.Requirements;
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Dal;
     using SysML2.NET.Serializer.Json;
 
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
+    using DtoFeatureTyping = SysML2.NET.Core.DTO.Core.Features.FeatureTyping;
 
     /// <summary>
     /// Suite of tests for the <see cref="ModelChangeApplier"/> class.
@@ -48,6 +50,21 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         /// The <c>Id</c> of the <c>camera</c> part in <c>Satellite.json</c>.
         /// </summary>
         private static readonly Guid CameraId = Guid.Parse("558a0ae4-8585-66a3-9bc6-52322650941c");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>Requirements</c> package in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid RequirementsPackageId = Guid.Parse("896440c0-d061-7856-fb8f-fe278e26de93");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>massBudget</c> requirement (REQ-SYS-001) in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid MassBudgetId = Guid.Parse("6b93c533-0395-7e18-1bf6-4475deb47ba5");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>eclipseEnergy</c> requirement (REQ-SYS-006) in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid EclipseEnergyId = Guid.Parse("4c3c1285-20ba-ed54-45b3-f54699899da3");
 
         [Test]
         public void VerifyConstructor()
@@ -245,6 +262,131 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(result.Problems[13], Is.EqualTo("Change 16 (SetDefinition): The definition must be a part definition, not the Package 'EOSat1'."));
                 Assert.That(result.Problems[14], Does.StartWith("Change 18 (Rename): The element").And.EndWith("is deleted by a previous change."));
                 Assert.That(result.Problems[15], Is.EqualTo("Change 19 (99): '99' is not a kind of change."));
+            }
+        }
+
+        [Test]
+        public void Apply_WithRequirementChanges_MakesTheRequirementsVerifiable()
+        {
+            var applier = new ModelChangeApplier(ReadSatelliteDtos());
+
+            var result = applier.Apply(
+            [
+                new ModelChange { Kind = ChangeKind.CreateRequirement, TemporaryName = "cameraMass", Owner = RequirementsPackageId.ToString(), Name = "cameraMass", ReqId = "REQ-PL-001", Text = "The camera shall weigh at most 40 kg." },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = "cameraMass", Attribute = "mass", Operator = "<", Limit = 10 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = "cameraMass", Attribute = "mass", Operator = "<=", Limit = 40, Margin = 10 },
+                new ModelChange { Kind = ChangeKind.Satisfy, Element = "cameraMass", SatisfyingPart = CameraId.ToString() },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = EclipseEnergyId.ToString(), Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = EclipseEnergyId.ToString(), Attribute = "mass", Operator = "==", Limit = 5.8, Margin = 0 }
+            ]);
+
+            var elements = Assemble(applier.Elements);
+            var cameraMass = (IRequirementUsage)elements[result.CreatedElements[0].Id];
+            var satisfy = (ISatisfyRequirementUsage)elements[result.CreatedElements[1].Id];
+            var eclipseEnergy = (IRequirementUsage)elements[EclipseEnergyId];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True);
+                Assert.That(result.CreatedElements.Select(created => created.Type), Is.EqualTo(["RequirementUsage", "SatisfyRequirementUsage"]));
+                Assert.That(result.CreatedElements[1].Name, Is.Null);
+                Assert.That(cameraMass.ReqId, Is.EqualTo("REQ-PL-001"));
+                Assert.That(cameraMass.shortName, Is.EqualTo("REQ-PL-001"));
+                Assert.That(cameraMass.subjectParameter.DeclaredName, Is.EqualTo("subj"));
+                Assert.That(cameraMass.subjectParameter.feature.Select(feature => feature.DeclaredName), Is.EqualTo(["mass"]));
+                Assert.That(cameraMass.requiredConstraint, Has.Count.EqualTo(1));
+                Assert.That(cameraMass.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.mass * 1.1 <= 40"));
+                Assert.That(satisfy.owner, Is.SameAs(cameraMass.owner));
+                Assert.That(satisfy.satisfiedRequirement, Is.SameAs(cameraMass));
+                Assert.That(satisfy.ResolveSatisfyingFeature(), Is.SameAs(elements[CameraId]));
+                Assert.That(eclipseEnergy.subjectParameter.feature.Select(feature => feature.DeclaredName), Is.EqualTo(["capacity", "mass"]));
+                Assert.That(eclipseEnergy.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.mass == 5.8"));
+            }
+
+            // The constraints are replaced, and the attributes are reused: the one of the subject, or the one of its definition
+            // when the subject of cameraMass is typed by OpticalCamera.
+            var dtos = applier.Elements.ToList();
+            var subjectTyping = new DtoFeatureTyping { Id = Guid.NewGuid(), TypedFeature = cameraMass.subjectParameter.Id, Type = dtos.Single(dto => dto.DeclaredName == "OpticalCamera").Id };
+            subjectTyping.OwningRelatedElement = subjectTyping.TypedFeature;
+            dtos.Single(dto => dto.Id == subjectTyping.TypedFeature).OwnedRelationship.Add(subjectTyping.Id);
+            dtos.Add(subjectTyping);
+
+            applier = new ModelChangeApplier(dtos);
+
+            var replacement = applier.Apply(
+            [
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = EclipseEnergyId.ToString(), Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = cameraMass.Id.ToString(), Attribute = "power", Operator = "<=", Limit = 60 }
+            ]);
+
+            elements = Assemble(applier.Elements);
+            eclipseEnergy = (IRequirementUsage)elements[EclipseEnergyId];
+            cameraMass = (IRequirementUsage)elements[cameraMass.Id];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(replacement.Applied, Is.True);
+                Assert.That(eclipseEnergy.subjectParameter.feature, Has.Count.EqualTo(2));
+                Assert.That(eclipseEnergy.requiredConstraint, Has.Count.EqualTo(1));
+                Assert.That(eclipseEnergy.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.capacity >= 300 * 1.2"));
+                Assert.That(cameraMass.subjectParameter.ownedFeature.Select(feature => feature.DeclaredName), Is.EqualTo(["mass"]));
+                Assert.That(cameraMass.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.power <= 60"));
+            }
+
+            // A part that satisfies a requirement can only be deleted with its satisfy link.
+            var refusal = new ModelChangeApplier(applier.Elements).Apply([new ModelChange { Kind = ChangeKind.Delete, Element = CameraId.ToString() }]);
+
+            applier = new ModelChangeApplier(applier.Elements);
+            var deletion = applier.Apply(
+            [
+                new ModelChange { Kind = ChangeKind.Delete, Element = satisfy.Id.ToString() },
+                new ModelChange { Kind = ChangeKind.Delete, Element = CameraId.ToString() }
+            ]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(refusal.Applied, Is.False);
+                Assert.That(refusal.Problems[0], Does.EndWith($"is still referenced by the SatisfyRequirementUsage {satisfy.Id}. Change or delete these elements first."));
+                Assert.That(deletion.Applied, Is.True);
+                Assert.That(Assemble(applier.Elements), Does.Not.ContainKey(satisfy.Id));
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidRequirementChanges_ReturnsEveryProblem()
+        {
+            var creation = new ModelChangeApplier(ReadSatelliteDtos());
+            var satisfyId = creation.Apply([new ModelChange { Kind = ChangeKind.Satisfy, Element = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString() }]).CreatedElements[0].Id;
+
+            var result = new ModelChangeApplier(creation.Elements).Apply(
+            [
+                new ModelChange { Kind = ChangeKind.CreateRequirement, Owner = RequirementsPackageId.ToString(), Name = "cameraMass", ReqId = "REQ-SYS-001", Text = "The camera shall weigh at most 40 kg." },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = CameraId.ToString(), Attribute = "mass", Operator = "<=", Limit = 150 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = satisfyId.ToString(), Attribute = "mass", Operator = "<=", Limit = 150 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = MassBudgetId.ToString(), Operator = "<=", Limit = 150 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = MassBudgetId.ToString(), Attribute = "mass", Operator = "=<", Limit = 150 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = MassBudgetId.ToString(), Attribute = "mass", Operator = "<=" },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = MassBudgetId.ToString(), Attribute = "mass", Operator = "<=", Limit = 150, Margin = -5 },
+                new ModelChange { Kind = ChangeKind.SetConstraint, Element = MassBudgetId.ToString(), Attribute = "mass", Operator = "==", Limit = 150, Margin = 20 },
+                new ModelChange { Kind = ChangeKind.Satisfy, Element = MassBudgetId.ToString(), SatisfyingPart = RequirementsPackageId.ToString() },
+                new ModelChange { Kind = ChangeKind.Satisfy, Element = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString() },
+                new ModelChange { Kind = ChangeKind.Satisfy, Element = MassBudgetId.ToString(), SatisfyingPart = PayloadSubsystemId.ToString() }
+            ]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.False);
+                Assert.That(result.Problems, Has.Count.EqualTo(10));
+                Assert.That(result.Problems[0], Is.EqualTo($"Change 1 (CreateRequirement): The ReqId 'REQ-SYS-001' is already used by the RequirementUsage 'massBudget', whose identifier is {MassBudgetId}."));
+                Assert.That(result.Problems[1], Is.EqualTo("Change 2 (SetConstraint): The element must be a requirement, not the PartUsage 'camera'."));
+                Assert.That(result.Problems[2], Is.EqualTo($"Change 3 (SetConstraint): The element must be a requirement, not the SatisfyRequirementUsage {satisfyId}."));
+                Assert.That(result.Problems[3], Is.EqualTo("Change 4 (SetConstraint): The attribute is missing."));
+                Assert.That(result.Problems[4], Is.EqualTo("Change 5 (SetConstraint): The operator '=<' is not supported. Use '<', '<=', '>', '>=', '=='."));
+                Assert.That(result.Problems[5], Is.EqualTo("Change 6 (SetConstraint): The limit is missing."));
+                Assert.That(result.Problems[6], Is.EqualTo("Change 7 (SetConstraint): The margin must be 0 or greater."));
+                Assert.That(result.Problems[7], Is.EqualTo("Change 8 (SetConstraint): A margin cannot be applied with '=='. Use '<=' or '>=' instead."));
+                Assert.That(result.Problems[8], Is.EqualTo("Change 9 (Satisfy): The satisfying part must be a part, not the Package 'Requirements'."));
+                Assert.That(result.Problems[9], Is.EqualTo("Change 10 (Satisfy): The RequirementUsage 'massBudget' is already satisfied by the PartUsage 'camera'."));
             }
         }
 
