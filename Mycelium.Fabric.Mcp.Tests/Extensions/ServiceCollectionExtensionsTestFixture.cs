@@ -51,6 +51,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var serverBuilder = services.AddFabricMcpServer(this.satelliteModelPath);
 
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
+            var exporterRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelExporter)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
 
             using (Assert.EnterMultipleScope())
@@ -58,17 +59,30 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(serverBuilder, Is.Not.Null);
                 Assert.That(modelProviderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(modelProviderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(7));
+                Assert.That(exporterRegistrations, Has.Count.EqualTo(1));
+                Assert.That(exporterRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(8));
             }
 
             var serviceProvider = new Mock<IServiceProvider>();
             var modelProvider = modelProviderRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var exporter = exporterRegistrations[0].ImplementationFactory(serviceProvider.Object);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(modelProvider, Is.InstanceOf<InMemoryModelProvider>());
                 Assert.That(((IModelProvider)modelProvider).Elements, Has.Count.EqualTo(548));
+                Assert.That(exporter, Is.InstanceOf<JsonModelExporter>());
+                Assert.That(((JsonModelExporter)exporter).ExportDirectory.LocalPath, Is.EqualTo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "exports") + Path.DirectorySeparatorChar));
             }
+
+            var exportDirectory = new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Exports"));
+            var otherServices = new ServiceCollection();
+            otherServices.AddFabricMcpServer(this.satelliteModelPath, exportDirectory);
+
+            var otherExporter = otherServices.Single(descriptor => descriptor.ServiceType == typeof(IModelExporter)).ImplementationFactory(serviceProvider.Object);
+
+            Assert.That(((JsonModelExporter)otherExporter).ExportDirectory, Is.EqualTo(exportDirectory));
         }
     }
 }

@@ -25,17 +25,21 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the MCP server, its tools, and an <see cref="InMemoryModelProvider"/> that loads the model
-            /// from the given JSON file.
+            /// Registers the MCP server, its tools, an <see cref="InMemoryModelProvider"/> that loads the model from the
+            /// given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the export folder.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
+            /// <param name="exportDirectory">
+            /// The <see cref="Uri"/> of the folder in which the model is exported, or <c>null</c> for the <c>exports</c>
+            /// folder next to the model file.
+            /// </param>
             /// <returns>
             /// The <see cref="IMcpServerBuilder"/> of the registered server, on which the host chooses the transport.
             /// </returns>
             /// <exception cref="ArgumentNullException">
             /// Thrown when <paramref name="services"/> or <paramref name="modelPath"/> is <c>null</c>.
             /// </exception>
-            public IMcpServerBuilder AddFabricMcpServer(Uri modelPath)
+            public IMcpServerBuilder AddFabricMcpServer(Uri modelPath, Uri exportDirectory = null)
             {
                 ArgumentNullException.ThrowIfNull(services);
                 ArgumentNullException.ThrowIfNull(modelPath);
@@ -47,10 +51,13 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return modelProvider;
                 });
 
+                services.AddSingleton<IModelExporter>(_ => new JsonModelExporter(exportDirectory ?? new Uri(modelPath, "exports/")));
+
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
-                    .WithTools<BudgetTools>();
+                    .WithTools<BudgetTools>()
+                    .WithTools<ExportTools>();
             }
         }
     }
