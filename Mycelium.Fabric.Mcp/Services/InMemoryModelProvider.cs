@@ -13,7 +13,6 @@ namespace Mycelium.Fabric.Mcp.Services
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    using System.Text.Json;
     using System.Threading;
 
     using ModelContextProtocol;
@@ -22,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Dal;
+    using SysML2.NET.PIM.DTO;
     using SysML2.NET.Serializer.Json;
 
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
@@ -31,14 +31,20 @@ namespace Mycelium.Fabric.Mcp.Services
     /// API and keeps it in memory. It holds no element until <see cref="LoadModel"/> is called.
     /// </summary>
     /// <remarks>
-    /// The model is kept twice: as DTOs, which hold identifiers and can be copied and modified, and as the POCOs that
-    /// SysML2.NET builds from them, which the tools navigate. A batch of changes is applied to a copy of the DTOs, from which
-    /// new POCOs replace the current ones only when the whole batch succeeds.
+    /// The model is kept twice: as DTOs, which hold identifiers and are the payloads of the <see cref="DataVersion"/>
+    /// records of a commit, and as the POCOs that SysML2.NET builds from them, which the tools navigate. A commit replaces
+    /// the DTOs it changes, then new POCOs replace the current ones. Only the identifier of the last commit is kept: the
+    /// history of the commits is left to the persistence of the Fabric server.
     /// </remarks>
     public class InMemoryModelProvider : IModelProvider
     {
         /// <summary>
-        /// The lock that prevents two batches of changes, or a batch and a load, from modifying the model at the same time.
+        /// The <see cref="IModelChangeApplier"/> that turns a batch of changes into the change of a commit.
+        /// </summary>
+        private readonly IModelChangeApplier changeApplier;
+
+        /// <summary>
+        /// The lock that prevents two commits, or a commit and a load, from modifying the model at the same time.
         /// </summary>
         private readonly Lock modelLock = new();
 
@@ -51,6 +57,26 @@ namespace Mycelium.Fabric.Mcp.Services
         /// The elements of the loaded model, indexed by their <c>Id</c>.
         /// </summary>
         private Dictionary<Guid, IElement> elementsById = [];
+
+        /// <summary>
+        /// The <c>Id</c> of the last commit, or <see cref="Guid.Empty"/> when no commit has been created since the model
+        /// was loaded.
+        /// </summary>
+        private Guid headCommitId = Guid.Empty;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="InMemoryModelProvider"/> class.
+        /// </summary>
+        /// <param name="changeApplier">The <see cref="IModelChangeApplier"/> that turns a batch of changes into a commit.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="changeApplier"/> is <c>null</c>.
+        /// </exception>
+        public InMemoryModelProvider(IModelChangeApplier changeApplier)
+        {
+            ArgumentNullException.ThrowIfNull(changeApplier);
+
+            this.changeApplier = changeApplier;
+        }
 
         /// <summary>
         /// Gets all the elements of the loaded model.
@@ -88,12 +114,14 @@ namespace Mycelium.Fabric.Mcp.Services
             lock (this.modelLock)
             {
                 this.SetModel(dtos);
+                this.headCommitId = Guid.Empty;
             }
         }
 
         /// <summary>
-        /// Applies a batch of changes to the loaded model, all or nothing: when one change is invalid, the model is left
-        /// unchanged and the problems are returned.
+        /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into the change of a commit by
+        /// the <see cref="IModelChangeApplier"/>, then committed. When one change is invalid, the model is left unchanged and
+        /// the problems are returned.
         /// </summary>
         /// <param name="changes">The changes to apply, in order.</param>
         /// <returns>The <see cref="ApplyChangesResult"/> that tells whether the batch has been applied.</returns>
@@ -106,15 +134,40 @@ namespace Mycelium.Fabric.Mcp.Services
 
             lock (this.modelLock)
             {
-                var applier = new ModelChangeApplier(this.CopyElementDtos());
-                var result = applier.Apply(changes);
+                var pendingCommit = this.changeApplier.Apply(this.elementDtos, changes);
 
-                if (result.Applied)
+                if (pendingCommit.Problems.Count > 0)
                 {
-                    this.SetModel([.. applier.Elements]);
+                    return new ApplyChangesResult(false, [], pendingCommit.Problems);
                 }
 
-                return result;
+                this.ApplyCommit(pendingCommit.Change);
+
+                return new ApplyChangesResult(true, pendingCommit.CreatedElements, []);
+            }
+        }
+
+        /// <summary>
+        /// Creates a commit with the given change: each <see cref="DataVersion"/> with a payload adds or replaces the element
+        /// that has its identity, and each <see cref="DataVersion"/> without payload removes it. The provider keeps the
+        /// payloads as the DTOs of the model, and gives each <see cref="DataVersion"/> its identifier and its commit.
+        /// </summary>
+        /// <param name="change">The <see cref="DataVersion"/> records of the commit.</param>
+        /// <returns>The created <see cref="Commit"/>, whose previous commit is the one created before it.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="change"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when a <see cref="DataVersion"/> has no identity, or a payload that is not the element of its identity. The
+        /// model is then left unchanged.
+        /// </exception>
+        public Commit CreateCommit(IReadOnlyList<DataVersion> change)
+        {
+            ArgumentNullException.ThrowIfNull(change);
+
+            lock (this.modelLock)
+            {
+                return this.ApplyCommit(change);
             }
         }
 
@@ -161,18 +214,58 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Copies the DTOs of the loaded model, by writing them to JSON and reading them back, so that a batch of changes can
-        /// modify the copy without touching the loaded model.
+        /// Tells whether a <see cref="DataVersion"/> can be committed: it has an identity, and either no payload or the
+        /// element that has this identity as payload.
         /// </summary>
-        /// <returns>The copied DTOs.</returns>
-        private List<DtoElement> CopyElementDtos()
+        /// <param name="dataVersion">The <see cref="DataVersion"/> to check.</param>
+        /// <returns><c>true</c> when the <see cref="DataVersion"/> can be committed.</returns>
+        private static bool IsValid(DataVersion dataVersion)
         {
-            using var stream = new MemoryStream();
+            return dataVersion?.Identity != null && dataVersion.Payload switch
+            {
+                null => true,
+                DtoElement element => element.Id == dataVersion.Identity.Id,
+                _ => false
+            };
+        }
 
-            new Serializer().Serialize(this.elementDtos, SerializationModeKind.JSON, false, stream, new JsonWriterOptions());
-            stream.Position = 0;
+        /// <summary>
+        /// Applies the change of a commit to the loaded model. The caller holds the lock.
+        /// </summary>
+        /// <param name="change">The <see cref="DataVersion"/> records of the commit.</param>
+        /// <returns>The created <see cref="Commit"/>.</returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when a <see cref="DataVersion"/> cannot be committed, before any modification.
+        /// </exception>
+        private Commit ApplyCommit(IReadOnlyList<DataVersion> change)
+        {
+            if (!change.All(IsValid))
+            {
+                throw new ArgumentException("Each data version must have an identity, and either no payload or the element that has this identity as payload.", nameof(change));
+            }
 
-            return ReadElementDtos(stream);
+            var commit = new Commit { Id = Guid.NewGuid(), Created = DateTime.UtcNow, PreviousCommit = this.headCommitId };
+            var dtosById = this.elementDtos.ToDictionary(dto => dto.Id);
+
+            foreach (var dataVersion in change)
+            {
+                dataVersion.Id = Guid.NewGuid();
+                dataVersion.Commit = commit.Id;
+
+                if (dataVersion.Payload is DtoElement element)
+                {
+                    dtosById[element.Id] = element;
+                }
+                else
+                {
+                    dtosById.Remove(dataVersion.Identity.Id);
+                }
+            }
+
+            this.SetModel([.. dtosById.Values]);
+            this.headCommitId = commit.Id;
+
+            return commit;
         }
 
         /// <summary>

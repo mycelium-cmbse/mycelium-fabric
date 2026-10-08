@@ -49,7 +49,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void VerifyApplyChanges()
         {
-            IReadOnlyList<ModelChange> changes = [new ModelChange { Kind = ChangeKind.CreatePackage, Name = "Spacecraft" }];
+            IReadOnlyList<ModelChange> changes = [new ModelChange { Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } }];
             var expectedResult = new ApplyChangesResult(true, [], []);
             this.modelProvider.Setup(provider => provider.ApplyChanges(changes)).Returns(expectedResult);
 
@@ -68,7 +68,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void ApplyChanges_OnEmptyModel_BuildsAModelReadByTheBudgetTools()
         {
-            var emptyModelProvider = new InMemoryModelProvider();
+            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
             emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
             var tools = new ConstructionTools(emptyModelProvider);
@@ -76,10 +76,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             var creation = tools.ApplyChanges(
             [
-                new ModelChange { Kind = ChangeKind.CreatePackage, TemporaryName = "spacecraft", Name = "Spacecraft" },
-                new ModelChange { Kind = ChangeKind.CreatePartDefinition, TemporaryName = "Camera", Owner = "spacecraft", Name = "Camera" },
-                new ModelChange { Kind = ChangeKind.CreateAttribute, TemporaryName = "cameraMass", Owner = "Camera", Name = "mass", Value = 38 },
-                new ModelChange { Kind = ChangeKind.CreatePart, TemporaryName = "camera", Owner = "spacecraft", Name = "camera", Definition = "Camera" }
+                new ModelChange { Identity = "spacecraft", Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } },
+                new ModelChange { Identity = "Camera", Payload = new ElementPayload { Type = "PartDefinition", Owner = "spacecraft", Name = "Camera" } },
+                new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Type = "AttributeUsage", Owner = "Camera", Name = "mass", Value = 38 } },
+                new ModelChange { Identity = "camera", Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "camera", Definition = "Camera" } }
             ]);
 
             var createdIds = creation.CreatedElements.ToDictionary(created => created.TemporaryName, created => created.Id);
@@ -88,13 +88,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             var refusal = tools.ApplyChanges(
             [
-                new ModelChange { Kind = ChangeKind.SetValue, Element = createdIds["cameraMass"].ToString(), Value = 35 },
-                new ModelChange { Kind = ChangeKind.CreatePart, Owner = "unknownOwner", Name = "lens" }
+                new ModelChange { Identity = createdIds["cameraMass"].ToString(), Payload = new ElementPayload { Value = 35 } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "unknownOwner", Name = "lens" } }
             ]);
 
             var totalAfterRefusal = budgetTools.SumAttribute(packageId, "mass").Total;
 
-            var modification = tools.ApplyChanges([new ModelChange { Kind = ChangeKind.SetValue, Element = createdIds["cameraMass"].ToString(), Value = 35 }]);
+            var modification = tools.ApplyChanges([new ModelChange { Identity = createdIds["cameraMass"].ToString(), Payload = new ElementPayload { Value = 35 } }]);
 
             using (Assert.EnterMultipleScope())
             {
@@ -102,7 +102,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(createdIds.Keys, Is.EqualTo(["spacecraft", "Camera", "cameraMass", "camera"]));
                 Assert.That(refusal.Applied, Is.False);
                 Assert.That(refusal.Problems, Has.Count.EqualTo(1));
-                Assert.That(refusal.Problems[0], Does.StartWith("Change 2 (CreatePart)"));
+                Assert.That(refusal.Problems[0], Does.StartWith("Change 2 (create)"));
                 Assert.That(emptyModelProvider.Elements, Has.Count.EqualTo(elementCount));
                 Assert.That(totalAfterRefusal, Is.EqualTo(38));
                 Assert.That(modification.Applied, Is.True);

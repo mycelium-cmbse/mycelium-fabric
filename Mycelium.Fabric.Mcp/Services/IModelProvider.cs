@@ -17,6 +17,7 @@ namespace Mycelium.Fabric.Mcp.Services
     using Mycelium.Fabric.Mcp.Changes;
 
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.PIM.DTO;
 
     /// <summary>
     /// Provides access to the SysML v2 model that the MCP tools work on.
@@ -26,8 +27,9 @@ namespace Mycelium.Fabric.Mcp.Services
     /// (§7.2.2): <see cref="Elements"/> for <c>getElements</c>, <see cref="RootElements"/> for
     /// <c>getRootElements</c> and <see cref="GetElementById"/> for <c>getElementById</c>. The project and commit
     /// scoping of the specification is left out for now, since a provider serves a single model at a time.
-    /// <see cref="ApplyChanges"/> plays the part of <c>createCommit</c> of the <c>ProjectDataVersioningService</c> (§7.2.3):
-    /// a batch of changes is applied as a whole, or not at all.
+    /// <see cref="CreateCommit"/> plays the part of <c>createCommit</c> of the <c>ProjectDataVersioningService</c> (§7.2.3):
+    /// the <c>DataVersion</c> records of a commit are applied as a whole, or not at all. <see cref="ApplyChanges"/> turns a
+    /// batch of changes into such a commit.
     /// </remarks>
     public interface IModelProvider
     {
@@ -76,8 +78,9 @@ namespace Mycelium.Fabric.Mcp.Services
         IElement GetRequiredElementById(Guid elementId);
 
         /// <summary>
-        /// Applies a batch of changes to the loaded model, all or nothing: when one change is invalid, the model is left
-        /// unchanged and the problems are returned.
+        /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into the change of a commit by
+        /// an <see cref="IModelChangeApplier"/>, then committed with <see cref="CreateCommit"/>. When one change is invalid,
+        /// the model is left unchanged and the problems are returned.
         /// </summary>
         /// <param name="changes">The changes to apply, in order.</param>
         /// <returns>The <see cref="ApplyChangesResult"/> that tells whether the batch has been applied.</returns>
@@ -85,5 +88,20 @@ namespace Mycelium.Fabric.Mcp.Services
         /// Thrown when <paramref name="changes"/> is <c>null</c>.
         /// </exception>
         ApplyChangesResult ApplyChanges(IReadOnlyList<ModelChange> changes);
+
+        /// <summary>
+        /// Creates a commit with the given change: each <see cref="DataVersion"/> with a payload adds or replaces the element
+        /// that has its identity, and each <see cref="DataVersion"/> without payload removes it.
+        /// </summary>
+        /// <param name="change">The <see cref="DataVersion"/> records of the commit.</param>
+        /// <returns>The created <see cref="Commit"/>, whose previous commit is the one created before it.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="change"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when a <see cref="DataVersion"/> has no identity, or a payload that is not the element of its identity. The
+        /// model is then left unchanged.
+        /// </exception>
+        Commit CreateCommit(IReadOnlyList<DataVersion> change);
     }
 }
