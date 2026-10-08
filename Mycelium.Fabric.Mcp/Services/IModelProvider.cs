@@ -17,7 +17,7 @@ namespace Mycelium.Fabric.Mcp.Services
     using Mycelium.Fabric.Mcp.Changes;
 
     using SysML2.NET.Core.POCO.Root.Elements;
-    using SysML2.NET.PIM.DTO;
+    using SysML2.NET.PSM.DTO;
 
     /// <summary>
     /// Provides access to the SysML v2 model that the MCP tools work on.
@@ -27,9 +27,10 @@ namespace Mycelium.Fabric.Mcp.Services
     /// (§7.2.2): <see cref="Elements"/> for <c>getElements</c>, <see cref="RootElements"/> for
     /// <c>getRootElements</c> and <see cref="GetElementById"/> for <c>getElementById</c>. The project and commit
     /// scoping of the specification is left out for now, since a provider serves a single model at a time.
-    /// <see cref="CreateCommit"/> plays the part of <c>createCommit</c> of the <c>ProjectDataVersioningService</c> (§7.2.3):
-    /// the <c>DataVersion</c> records of a commit are applied as a whole, or not at all. <see cref="ApplyChanges"/> turns a
-    /// batch of changes into such a commit.
+    /// <see cref="CreateCommit"/> plays the part of <c>POST /projects/{projectId}/commits</c>, the REST binding of
+    /// <c>createCommit</c> of the <c>ProjectDataVersioningService</c> (§7.2.3, §8.1.3): it takes a <c>CommitRequest</c>,
+    /// applies it as a whole or not at all, and returns the created <c>Commit</c>. <see cref="ApplyChanges"/> turns a batch
+    /// of changes into such a request.
     /// </remarks>
     public interface IModelProvider
     {
@@ -78,7 +79,7 @@ namespace Mycelium.Fabric.Mcp.Services
         IElement GetRequiredElementById(Guid elementId);
 
         /// <summary>
-        /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into the change of a commit by
+        /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into a <c>CommitRequest</c> by
         /// an <see cref="IModelChangeApplier"/>, then committed with <see cref="CreateCommit"/>. When one change is invalid,
         /// the model is left unchanged and the problems are returned.
         /// </summary>
@@ -90,18 +91,18 @@ namespace Mycelium.Fabric.Mcp.Services
         ApplyChangesResult ApplyChanges(IReadOnlyList<ModelChange> changes);
 
         /// <summary>
-        /// Creates a commit with the given change: each <see cref="DataVersion"/> with a payload adds or replaces the element
-        /// that has its identity, and each <see cref="DataVersion"/> without payload removes it.
+        /// Creates a commit from the given request: each <see cref="DataVersionRequest"/> of its change with a payload adds or
+        /// replaces the element that has its identity, and each one without payload removes it.
         /// </summary>
-        /// <param name="change">The <see cref="DataVersion"/> records of the commit.</param>
+        /// <param name="commitRequest">The <see cref="CommitRequest"/> that describes the commit.</param>
         /// <returns>The created <see cref="Commit"/>, whose previous commit is the one created before it.</returns>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="change"/> is <c>null</c>.
+        /// Thrown when <paramref name="commitRequest"/> is <c>null</c>.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// Thrown when a <see cref="DataVersion"/> has no identity, or a payload that is not the element of its identity. The
-        /// model is then left unchanged.
+        /// Thrown when a <see cref="DataVersionRequest"/> has no identity, or a payload that is not the element of its
+        /// identity. The model is then left unchanged.
         /// </exception>
-        Commit CreateCommit(IReadOnlyList<DataVersion> change);
+        Commit CreateCommit(CommitRequest commitRequest);
     }
 }

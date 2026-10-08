@@ -29,7 +29,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Dal;
     using SysML2.NET.PIM;
-    using SysML2.NET.PIM.DTO;
+    using SysML2.NET.PSM.DTO;
 
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
 
@@ -155,26 +155,29 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Describes the result of the batch as the change of a commit, following <c>createCommit</c> (Systems Modeling API
-        /// and Services 1.0 §7.2.3): a <see cref="DataVersion"/> with a payload for each created or updated element, and one
-        /// without payload for each deleted element. An element created and deleted by the same batch does not appear.
+        /// Describes the result of the batch as a <see cref="CommitRequest"/>, the body of <c>POST /projects/{projectId}/commits</c>
+        /// (Systems Modeling API and Services 1.0 §7.2.3 and §8.1.3): a <see cref="DataVersionRequest"/> with a payload for
+        /// each created or updated element, and one without payload for each deleted element. An element created and deleted
+        /// by the same batch does not appear.
         /// </summary>
-        /// <returns>The <see cref="DataVersion"/> records of the creations, then of the updates, then of the deletions.</returns>
-        public IReadOnlyList<DataVersion> CreateChange()
+        /// <returns>
+        /// The <see cref="CommitRequest"/>, whose change holds the creations, then the updates, then the deletions.
+        /// </returns>
+        public CommitRequest CreateCommitRequest()
         {
             var creations = this.addedIds
                 .Where(this.elementsById.ContainsKey)
-                .Select(elementId => CreateDataVersion(elementId, this.elementsById[elementId]));
+                .Select(elementId => CreateDataVersionRequest(elementId, this.elementsById[elementId]));
 
             var updates = this.originalIds
                 .Where(elementId => this.modifiedIds.Contains(elementId) && this.elementsById.ContainsKey(elementId))
-                .Select(elementId => CreateDataVersion(elementId, this.elementsById[elementId]));
+                .Select(elementId => CreateDataVersionRequest(elementId, this.elementsById[elementId]));
 
             var removals = this.originalIds
                 .Where(elementId => !this.elementsById.ContainsKey(elementId))
-                .Select(elementId => CreateDataVersion(elementId, null));
+                .Select(elementId => CreateDataVersionRequest(elementId, null));
 
-            return [.. creations, .. updates, .. removals];
+            return new CommitRequest { Change = [.. creations, .. updates, .. removals] };
         }
 
         /// <summary>
@@ -221,14 +224,14 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Creates a <see cref="DataVersion"/> of an element.
+        /// Creates a <see cref="DataVersionRequest"/> of an element.
         /// </summary>
-        /// <param name="elementId">The <c>Id</c> of the element, which is the <c>Id</c> of its <see cref="DataIdentity"/>.</param>
+        /// <param name="elementId">The <c>Id</c> of the element, which is the <c>Id</c> of its <see cref="DataIdentityRequest"/>.</param>
         /// <param name="payload">The DTO of the element, or <c>null</c> when the element is deleted.</param>
-        /// <returns>The <see cref="DataVersion"/>.</returns>
-        private static DataVersion CreateDataVersion(Guid elementId, IElement payload)
+        /// <returns>The <see cref="DataVersionRequest"/>.</returns>
+        private static DataVersionRequest CreateDataVersionRequest(Guid elementId, IElement payload)
         {
-            return new DataVersion { Identity = new DataIdentity { Id = elementId }, Payload = payload };
+            return new DataVersionRequest { Identity = new DataIdentityRequest { Id = elementId }, Payload = payload };
         }
 
         /// <summary>

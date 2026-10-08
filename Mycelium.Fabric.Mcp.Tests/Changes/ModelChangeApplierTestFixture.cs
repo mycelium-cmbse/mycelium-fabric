@@ -83,13 +83,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 new ModelChange { Identity = RootNamespaceId.ToString(), Payload = new ElementPayload { Name = "Root" } }
             ]);
 
-            var cameraVersion = pendingCommit.Change.Single(dataVersion => dataVersion.Identity.Id == CameraId);
-            var creations = pendingCommit.Change.Where(dataVersion => dtos.TrueForAll(dto => dto.Id != dataVersion.Identity.Id)).ToList();
+            var cameraVersion = pendingCommit.CommitRequest.Change.Single(dataVersion => dataVersion.Identity.Id == CameraId);
+            var creations = pendingCommit.CommitRequest.Change.Where(dataVersion => dtos.TrueForAll(dto => dto.Id != dataVersion.Identity.Id)).ToList();
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(pendingCommit.Problems, Has.Count.EqualTo(0));
-                Assert.That(pendingCommit.Change, Has.Count.EqualTo(4));
+                Assert.That(pendingCommit.CommitRequest.Change, Has.Count.EqualTo(4));
                 Assert.That(((DtoElement)cameraVersion.Payload).DeclaredName, Is.EqualTo("mainCamera"));
                 Assert.That(cameraVersion.Payload, Is.Not.SameAs(camera));
                 Assert.That(camera.DeclaredName, Is.EqualTo("camera"));
@@ -126,8 +126,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(pendingCommit.Problems, Has.Count.EqualTo(0));
-                Assert.That(pendingCommit.Change, Has.Count.EqualTo(elements.Count));
-                Assert.That(pendingCommit.Change.Select(dataVersion => ((DtoElement)dataVersion.Payload).Id), Is.EqualTo(pendingCommit.Change.Select(dataVersion => dataVersion.Identity.Id)));
+                Assert.That(pendingCommit.CommitRequest.Change, Has.Count.EqualTo(elements.Count));
+                Assert.That(pendingCommit.CommitRequest.Change.Select(dataVersion => ((DtoElement)dataVersion.Payload).Id), Is.EqualTo(pendingCommit.CommitRequest.Change.Select(dataVersion => dataVersion.Identity.Id)));
                 Assert.That(pendingCommit.CreatedElements.Select(created => created.Type),
                     Is.EqualTo(["Package", "Package", "PartDefinition", "AttributeUsage", "PartUsage", "PartUsage", "RequirementUsage"]));
                 Assert.That(pendingCommit.CreatedElements[0].TemporaryName, Is.EqualTo("spacecraft"));
@@ -175,8 +175,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             ]);
 
             var originalIds = model.Select(dto => dto.Id).ToHashSet();
-            var updatedIds = pendingCommit.Change.Where(dataVersion => dataVersion.Payload != null && originalIds.Contains(dataVersion.Identity.Id)).Select(dataVersion => dataVersion.Identity.Id.ToString());
-            var deletions = pendingCommit.Change.Where(dataVersion => dataVersion.Payload == null).ToList();
+            var updatedIds = pendingCommit.CommitRequest.Change.Where(dataVersion => dataVersion.Payload != null && originalIds.Contains(dataVersion.Identity.Id)).Select(dataVersion => dataVersion.Identity.Id.ToString());
+            var deletions = pendingCommit.CommitRequest.Change.Where(dataVersion => dataVersion.Payload == null).ToList();
 
             var elements = Assemble(ApplyChange(model, pendingCommit));
             var camera = elements[Guid.Parse(createdIds["camera"])];
@@ -207,7 +207,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(refusal.Change, Has.Count.EqualTo(0));
+                Assert.That(refusal.CommitRequest, Is.Null);
                 Assert.That(refusal.CreatedElements, Has.Count.EqualTo(0));
                 Assert.That(refusal.Problems, Has.Count.EqualTo(1));
                 Assert.That(refusal.Problems[0], Does.StartWith("Change 1 (delete): the PartDefinition 'OpticalCamera' is still referenced by"));
@@ -225,7 +225,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             var elements = Assemble(ApplyChange(dtos, pendingCommit));
             var payloadParts = elements[PayloadSubsystemId].ownedElement.OfType<IPartUsage>().Select(part => part.DeclaredName);
-            var deletedIds = pendingCommit.Change.Where(dataVersion => dataVersion.Payload == null).Select(dataVersion => dataVersion.Identity.Id).ToList();
+            var deletedIds = pendingCommit.CommitRequest.Change.Where(dataVersion => dataVersion.Payload == null).Select(dataVersion => dataVersion.Identity.Id).ToList();
 
             using (Assert.EnterMultipleScope())
             {
@@ -279,7 +279,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(result.Change, Has.Count.EqualTo(0));
+                Assert.That(result.CommitRequest, Is.Null);
                 Assert.That(result.CreatedElements, Has.Count.EqualTo(0));
                 Assert.That(result.Problems, Has.Count.EqualTo(22));
                 Assert.That(result.Problems[0], Is.EqualTo("Change 1: the change is empty."));
@@ -332,7 +332,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         {
             var dtosById = model.ToDictionary(dto => dto.Id);
 
-            foreach (var dataVersion in pendingCommit.Change)
+            foreach (var dataVersion in pendingCommit.CommitRequest.Change)
             {
                 if (dataVersion.Payload is DtoElement element)
                 {

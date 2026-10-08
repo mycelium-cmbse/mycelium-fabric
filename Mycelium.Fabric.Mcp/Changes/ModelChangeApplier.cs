@@ -20,8 +20,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
     /// <summary>
     /// The <see cref="IModelChangeApplier"/> that applies a batch of <see cref="ModelChange"/>s to a copy of a SysML v2 model
-    /// made of DTOs, and describes the result as the change of a commit: the <c>DataVersion</c> records of the elements that
-    /// the batch creates, updates and deletes.
+    /// made of DTOs, and describes the result as a <c>CommitRequest</c>: the <c>DataVersionRequest</c> records of the
+    /// elements that the batch creates, updates and deletes.
     /// </summary>
     /// <remarks>
     /// The applier holds no state: each call works on its own copy of the model, through a <see cref="ModelChangeBatch"/>.
@@ -30,13 +30,13 @@ namespace Mycelium.Fabric.Mcp.Changes
     public class ModelChangeApplier : IModelChangeApplier
     {
         /// <summary>
-        /// Applies a batch of changes, in order, to a copy of the given model, and returns the change of the commit that
+        /// Applies a batch of changes, in order, to a copy of the given model, and returns the <c>CommitRequest</c> that
         /// makes the same modifications. Every change is checked, so that all the problems of the batch are reported at once.
         /// </summary>
         /// <param name="model">The DTOs of the model to modify, which are left unchanged.</param>
         /// <param name="changes">The changes to apply.</param>
         /// <returns>
-        /// The <see cref="PendingCommit"/>: the <c>DataVersion</c> records and the created elements, or the problems.
+        /// The <see cref="PendingCommit"/>: the <c>CommitRequest</c> and the created elements, or the problems.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="model"/> or <paramref name="changes"/> is <c>null</c>.
@@ -50,8 +50,8 @@ namespace Mycelium.Fabric.Mcp.Changes
             var problems = batch.Apply(changes);
 
             return problems.Count == 0
-                ? new PendingCommit(batch.CreateChange(), batch.CreatedElements, [])
-                : new PendingCommit([], [], problems);
+                ? new PendingCommit(batch.CreateCommitRequest(), batch.CreatedElements, [])
+                : new PendingCommit(null, [], problems);
         }
 
         /// <summary>

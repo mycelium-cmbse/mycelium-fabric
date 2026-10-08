@@ -22,7 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using Mycelium.Fabric.Mcp.Services;
 
     using SysML2.NET.Core.POCO.Root.Namespaces;
-    using SysML2.NET.PIM.DTO;
+    using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
 
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
@@ -169,7 +169,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             this.changeApplier
                 .Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes))
-                .Returns(new PendingCommit([], [], ["Change 1 (update): a problem."]));
+                .Returns(new PendingCommit(null, [], ["Change 1 (update): a problem."]));
 
             var refusal = this.modelProvider.ApplyChanges(changes);
 
@@ -184,7 +184,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             this.changeApplier
                 .Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes))
-                .Returns(new PendingCommit([CreateDataVersion(CameraId, ReadRenamedCamera())], [createdElement], []));
+                .Returns(new PendingCommit(CreateCommitRequest(CreateDataVersion(CameraId, ReadRenamedCamera())), [createdElement], []));
 
             var result = this.modelProvider.ApplyChanges(changes);
             var renamedCamera = this.modelProvider.GetElementById(CameraId);
@@ -214,59 +214,74 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => this.modelProvider.CreateCommit([null]), Throws.TypeOf<ArgumentException>());
-                Assert.That(() => this.modelProvider.CreateCommit([new DataVersion { Payload = renamedCamera }]), Throws.TypeOf<ArgumentException>());
-                Assert.That(() => this.modelProvider.CreateCommit([CreateDataVersion(Guid.NewGuid(), renamedCamera)]), Throws.TypeOf<ArgumentException>());
-                Assert.That(() => this.modelProvider.CreateCommit([CreateDataVersion(CameraId, renamedCamera), new DataVersion { Identity = new DataIdentity(), Payload = new Commit() }]), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => this.modelProvider.CreateCommit(new CommitRequest { Change = null }), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => this.modelProvider.CreateCommit(CreateCommitRequest((DataVersionRequest)null)), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => this.modelProvider.CreateCommit(CreateCommitRequest(new DataVersionRequest { Payload = renamedCamera })), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => this.modelProvider.CreateCommit(CreateCommitRequest(CreateDataVersion(Guid.NewGuid(), renamedCamera))), Throws.TypeOf<ArgumentException>());
+
+                Assert.That(() => this.modelProvider.CreateCommit(CreateCommitRequest(CreateDataVersion(CameraId, renamedCamera), new DataVersionRequest { Identity = new DataIdentityRequest(), Payload = new ExternalDataRequest() })),
+                    Throws.TypeOf<ArgumentException>());
+
                 Assert.That(this.modelProvider.GetElementById(CameraId).DeclaredName, Is.EqualTo("camera"));
             }
 
-            var cameraVersion = CreateDataVersion(CameraId, renamedCamera);
-            var firstCommit = this.modelProvider.CreateCommit([cameraVersion]);
+            var firstRequest = CreateCommitRequest(CreateDataVersion(CameraId, renamedCamera));
+            firstRequest.Name = "Rename the camera";
+
+            var firstCommit = this.modelProvider.CreateCommit(firstRequest);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(firstCommit.Id, Is.Not.EqualTo(Guid.Empty));
-                Assert.That(firstCommit.PreviousCommit, Is.EqualTo(Guid.Empty));
-                Assert.That(cameraVersion.Id, Is.Not.EqualTo(Guid.Empty));
-                Assert.That(cameraVersion.Commit, Is.EqualTo(firstCommit.Id));
+                Assert.That(firstCommit.Name, Is.EqualTo("Rename the camera"));
+                Assert.That(firstCommit.PreviousCommit, Has.Count.EqualTo(0));
                 Assert.That(this.modelProvider.GetElementById(CameraId).DeclaredName, Is.EqualTo("mainCamera"));
                 Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(548));
             }
 
             var newNamespace = new DtoNamespace { Id = Guid.NewGuid() };
-            var secondCommit = this.modelProvider.CreateCommit([CreateDataVersion(newNamespace.Id, newNamespace)]);
+            var secondCommit = this.modelProvider.CreateCommit(CreateCommitRequest(CreateDataVersion(newNamespace.Id, newNamespace)));
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(secondCommit.PreviousCommit, Is.EqualTo(firstCommit.Id));
+                Assert.That(secondCommit.PreviousCommit, Is.EqualTo([firstCommit.Id]));
                 Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(549));
                 Assert.That(this.modelProvider.RootElements, Has.Count.EqualTo(2));
             }
 
-            var thirdCommit = this.modelProvider.CreateCommit([CreateDataVersion(newNamespace.Id, null)]);
+            var thirdCommit = this.modelProvider.CreateCommit(CreateCommitRequest(CreateDataVersion(newNamespace.Id, null)));
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(thirdCommit.PreviousCommit, Is.EqualTo(secondCommit.Id));
+                Assert.That(thirdCommit.PreviousCommit, Is.EqualTo([secondCommit.Id]));
                 Assert.That(this.modelProvider.GetElementById(newNamespace.Id), Is.Null);
                 Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(548));
             }
 
             this.modelProvider.LoadModel(this.emptyModelPath);
 
-            Assert.That(this.modelProvider.CreateCommit([]).PreviousCommit, Is.EqualTo(Guid.Empty));
+            Assert.That(this.modelProvider.CreateCommit(new CommitRequest()).PreviousCommit, Has.Count.EqualTo(0));
         }
 
         /// <summary>
-        /// Creates a <see cref="DataVersion"/> of an element.
+        /// Creates a <see cref="CommitRequest"/> with the given change.
+        /// </summary>
+        /// <param name="change">The <see cref="DataVersionRequest"/> records of the commit.</param>
+        /// <returns>The <see cref="CommitRequest"/>.</returns>
+        private static CommitRequest CreateCommitRequest(params DataVersionRequest[] change)
+        {
+            return new CommitRequest { Change = [.. change] };
+        }
+
+        /// <summary>
+        /// Creates a <see cref="DataVersionRequest"/> of an element.
         /// </summary>
         /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <param name="payload">The DTO of the element, or <c>null</c> to delete it.</param>
-        /// <returns>The <see cref="DataVersion"/>.</returns>
-        private static DataVersion CreateDataVersion(Guid elementId, DtoElement payload)
+        /// <returns>The <see cref="DataVersionRequest"/>.</returns>
+        private static DataVersionRequest CreateDataVersion(Guid elementId, DtoElement payload)
         {
-            return new DataVersion { Identity = new DataIdentity { Id = elementId }, Payload = payload };
+            return new DataVersionRequest { Identity = new DataIdentityRequest { Id = elementId }, Payload = payload };
         }
 
         /// <summary>
