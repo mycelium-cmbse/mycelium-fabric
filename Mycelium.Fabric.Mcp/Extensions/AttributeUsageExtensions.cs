@@ -12,7 +12,6 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using System;
     using System.Linq;
 
-    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.FeatureValues;
     using SysML2.NET.Core.POCO.Systems.Attributes;
 
@@ -40,12 +39,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 return (attribute.OwnedRelationship ?? [])
                     .OfType<IFeatureValue>()
                     .SelectMany(featureValue => featureValue.OwnedRelatedElement ?? [])
-                    .Select(valueElement => valueElement switch
-                    {
-                        ILiteralRational literalRational => literalRational.Value,
-                        ILiteralInteger literalInteger => literalInteger.Value,
-                        _ => (double?)null
-                    })
+                    .Select(valueElement => valueElement.GetLiteralValue())
                     .FirstOrDefault(value => value != null);
             }
         }

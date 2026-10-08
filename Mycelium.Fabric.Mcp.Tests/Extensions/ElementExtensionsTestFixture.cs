@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 {
     using System;
     using System.IO;
+    using System.Linq;
 
     using Moq;
 
@@ -18,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
+    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Parts;
@@ -83,6 +85,46 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(() => ((IElement)null).GetDocumentationBodies(), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(this.camera.GetDocumentationBodies(), Is.Null);
                 Assert.That(this.payloadSubsystem.GetDocumentationBodies(), Is.EqualTo("Payload: the imaging instrument and its data storage."));
+            }
+        }
+
+        [Test]
+        public void VerifyGetLiteralValue()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IElement)null).GetLiteralValue(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(new Package().GetLiteralValue(), Is.Null);
+                Assert.That(new LiteralInteger { Value = 55 }.GetLiteralValue(), Is.EqualTo(55));
+                Assert.That(new LiteralRational { Value = 1.5 }.GetLiteralValue(), Is.EqualTo(1.5));
+            }
+        }
+
+        [Test]
+        public void VerifyGetAttributeUsages()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IElement)null).GetAttributeUsages(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(new Package().GetAttributeUsages(), Is.Empty);
+                Assert.That(this.payloadSubsystem.GetAttributeUsages(), Is.Empty);
+                Assert.That(this.camera.GetAttributeUsages().Select(attribute => attribute.DeclaredName), Is.EqualTo(["mass", "power"]));
+            }
+        }
+
+        [Test]
+        public void VerifyCollectContributions()
+        {
+            var payloadMass = this.payloadSubsystem.CollectContributions("mass");
+            var cameraMass = this.camera.CollectContributions("mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IElement)null).CollectContributions("mass"), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(this.payloadSubsystem.CollectContributions("temperature"), Has.Count.EqualTo(0));
+                Assert.That(payloadMass.Select(contribution => contribution.Value), Is.EquivalentTo([38, 1.5]));
+                Assert.That(cameraMass, Has.Count.EqualTo(1));
+                Assert.That(cameraMass[0].Id, Is.EqualTo(CameraId));
             }
         }
     }

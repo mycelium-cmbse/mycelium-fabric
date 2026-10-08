@@ -54,6 +54,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// </summary>
         private const string CameraQualifiedName = "EOSat1::Architecture::eosat1::payloadSubsystem::camera";
 
+        /// <summary>
+        /// The <c>Id</c> of the <c>massBudget</c> requirement (REQ-SYS-001) in <c>Satellite.json</c>.
+        /// </summary>
+        private const string MassBudgetId = "6b93c533-0395-7e18-1bf6-4475deb47ba5";
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>eosat1</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private const string Eosat1Id = "5d06ef4d-4489-500c-e94f-a8cf563d3fc1";
+
         private Mock<IModelProvider> modelProvider;
 
         [SetUp]
@@ -158,6 +168,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(whatIf.CurrentTotal, Is.EqualTo(39.5));
                 Assert.That(whatIf.NewTotal, Is.EqualTo(36.5));
                 Assert.That(whatIf.Difference, Is.EqualTo(-3));
+                Assert.That(whatIf.RequirementImpacts, Has.Count.EqualTo(0));
+            }
+
+            // Once REQ-SYS-001 is verifiable for the whole satellite, a what-if on the payload checks it again.
+            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+
+            satelliteModelProvider.ApplyChanges(
+            [
+                new ModelChange { Identity = MassBudgetId, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId, SatisfyingPart = Eosat1Id } }
+            ]);
+
+            var impacts = new BudgetTools(satelliteModelProvider).EvaluateWhatIf(PayloadSubsystemId, "mass", CameraId, 45).RequirementImpacts;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(impacts, Has.Count.EqualTo(1));
+                Assert.That(impacts[0].Current.ReqId, Is.EqualTo("REQ-SYS-001"));
+                Assert.That(impacts[0].Current.Explanation, Is.EqualTo("150.96 > 150"));
+                Assert.That(impacts[0].New.Explanation, Is.EqualTo("159.36 > 150"));
             }
         }
 

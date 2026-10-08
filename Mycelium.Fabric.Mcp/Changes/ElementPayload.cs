@@ -58,5 +58,29 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         [Description("Create or update: the documentation of the element, for example the unit of an attribute ('Dry mass of the unit [kg].'). Required for a RequirementUsage: the text of the requirement. An update replaces the current documentation.")]
         public string Text { get; init; }
+
+        /// <summary>
+        /// Gets the identifier of the requirement in its specification, which is its short name.
+        /// </summary>
+        [Description("Create or update, for a RequirementUsage: its identifier in the specification, for example 'REQ-SYS-001'. It must differ from the identifiers of the other requirements.")]
+        public string ReqId { get; init; }
+
+        /// <summary>
+        /// Gets the constraint that makes the requirement verifiable.
+        /// </summary>
+        [Description("Create or update, for a RequirementUsage: the constraint that makes it verifiable, on an attribute of its subject. It replaces the current required constraint.")]
+        public ConstraintPayload Constraint { get; init; }
+
+        /// <summary>
+        /// Gets the requirement that the created <c>SatisfyRequirementUsage</c> satisfies.
+        /// </summary>
+        [Description("Create, for a SatisfyRequirementUsage: the satisfied requirement, as an identifier (Id) or a temporary name. Without owner, the satisfy link is created next to the requirement.")]
+        public string SatisfiedRequirement { get; init; }
+
+        /// <summary>
+        /// Gets the part that satisfies the requirement of the created <c>SatisfyRequirementUsage</c>.
+        /// </summary>
+        [Description("Create, for a SatisfyRequirementUsage: the part that satisfies the requirement, for example the satellite or a subsystem, as an identifier (Id) or a temporary name.")]
+        public string SatisfyingPart { get; init; }
     }
 }

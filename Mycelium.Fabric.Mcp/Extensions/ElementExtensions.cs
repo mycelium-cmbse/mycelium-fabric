@@ -13,8 +13,14 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using System.Collections.Generic;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Tools;
+
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Core.POCO.Core.Types;
+    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Systems.Attributes;
+    using SysML2.NET.Core.POCO.Systems.Parts;
 
     /// <summary>
     /// Extension methods that read, from the <see cref="IElement"/>s of a SysML v2 model, the information returned by the MCP
@@ -72,6 +78,71 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .ToList();
 
                 return bodies.Count == 0 ? null : string.Join("\n", bodies);
+            }
+
+            /// <summary>
+            /// Gets the number that the element stands for when it is a literal number: an <see cref="ILiteralRational"/>
+            /// or an <see cref="ILiteralInteger"/> (for example <c>38</c> in <c>attribute mass = 38;</c>).
+            /// </summary>
+            /// <returns>The number, or <c>null</c> when the element is not a literal number.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="element"/> is <c>null</c>.
+            /// </exception>
+            public double? GetLiteralValue()
+            {
+                ArgumentNullException.ThrowIfNull(element);
+
+                return element switch
+                {
+                    ILiteralRational literalRational => literalRational.Value,
+                    ILiteralInteger literalInteger => literalInteger.Value,
+                    _ => null
+                };
+            }
+
+            /// <summary>
+            /// Gets the attributes of the element: the <see cref="IAttributeUsage"/>s among the features of its
+            /// <see cref="IType"/>, owned or inherited (for example the attributes of <c>OpticalCamera</c> for
+            /// <c>camera : OpticalCamera</c>).
+            /// </summary>
+            /// <returns>The attributes of the element, empty when it is not an <see cref="IType"/>.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="element"/> is <c>null</c>.
+            /// </exception>
+            public IEnumerable<IAttributeUsage> GetAttributeUsages()
+            {
+                ArgumentNullException.ThrowIfNull(element);
+
+                return element is IType type ? (type.feature ?? []).OfType<IAttributeUsage>() : [];
+            }
+
+            /// <summary>
+            /// Collects the contributions of the element and its sub-parts to the sum of an attribute. An element that has a
+            /// numeric value for the attribute, owned or inherited from its types, contributes this value and its own
+            /// sub-parts are not visited, so that no value is counted twice.
+            /// </summary>
+            /// <param name="attributeName">The declared name of the attribute.</param>
+            /// <returns>The <see cref="Contribution"/> of each contributing part, empty when no part has a value.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="element"/> is <c>null</c>.
+            /// </exception>
+            public IReadOnlyList<Contribution> CollectContributions(string attributeName)
+            {
+                ArgumentNullException.ThrowIfNull(element);
+
+                var value = element.GetAttributeUsages()
+                    .FirstOrDefault(attribute => attribute.DeclaredName == attributeName)?
+                    .GetNumericValue();
+
+                if (value != null)
+                {
+                    return [new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Value)];
+                }
+
+                return (element.ownedElement ?? [])
+                    .OfType<IPartUsage>()
+                    .SelectMany(part => part.CollectContributions(attributeName))
+                    .ToList();
             }
         }
     }

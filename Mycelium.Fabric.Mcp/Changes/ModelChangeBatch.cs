@@ -32,6 +32,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.PSM.DTO;
 
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
+    using PocoSatisfyRequirementUsage = SysML2.NET.Core.POCO.Systems.Requirements.ISatisfyRequirementUsage;
 
     /// <summary>
     /// A batch of <see cref="ModelChange"/>s applied, in order, to a working copy of a SysML v2 model made of DTOs. The batch
@@ -42,8 +43,9 @@ namespace Mycelium.Fabric.Mcp.Changes
     /// membership for each owned element, a <c>FeatureTyping</c> for <c>camera : Camera</c>, a <c>FeatureValue</c> that owns
     /// a <c>LiteralRational</c> for <c>mass = 38</c>, and an owned <c>Documentation</c> for a text. Deletions are checked and
     /// carried out at the end of the batch, once the references to the deleted elements are known. A batch is applied once.
+    /// The properties that make requirements verifiable are in <c>ModelChangeBatch.Requirements.cs</c>.
     /// </remarks>
-    internal sealed class ModelChangeBatch
+    internal sealed partial class ModelChangeBatch
     {
         /// <summary>
         /// The role, in the messages, of the element that owns a created element.
@@ -278,9 +280,16 @@ namespace Mycelium.Fabric.Mcp.Changes
             var payload = change.Payload;
 
             this.CheckTemporaryName(change.Identity);
-            CheckName(payload.Name);
 
             var member = CreateElement(payload.Type);
+
+            if (member is ISatisfyRequirementUsage)
+            {
+                this.CreateSatisfy(member, change);
+                return;
+            }
+
+            CheckName(payload.Name);
             member.DeclaredName = payload.Name;
 
             var owner = string.IsNullOrWhiteSpace(payload.Owner) ? this.GetOrCreateRootNamespace() : this.Resolve(payload.Owner, OwnerRole);
@@ -299,6 +308,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 CheckCanHaveValue(member);
             }
 
+            this.CheckRequirementProperties(member, payload);
             this.AddOwnedMember(owner, member, change.Identity);
 
             if (!string.IsNullOrWhiteSpace(payload.Text))
@@ -315,11 +325,14 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 this.AddValue(member, payload.Value.Value);
             }
+
+            this.SetRequirementProperties(member, payload);
         }
 
         /// <summary>
-        /// Updates the properties of an element given by the payload: its name, its definition, its value or its
-        /// documentation. A new definition, value or documentation replaces the current one.
+        /// Updates the properties of an element given by the payload: its name, its definition, its value, its documentation
+        /// and, for a requirement, its <c>ReqId</c> and its constraint. A new definition, value, documentation or constraint
+        /// replaces the current one.
         /// </summary>
         /// <param name="change">The change that updates the element designated by its identity.</param>
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
@@ -354,6 +367,8 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.RemoveDocumentation(element);
                 this.AddDocumentation(element, payload.Text);
             }
+
+            this.SetRequirementProperties(element, payload);
         }
 
         /// <summary>
@@ -370,9 +385,9 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("An update cannot change the owner of an element: delete the element and create it again in its new owner.");
             }
 
-            if (payload is { Name: null, Definition: null, Value: null, Text: null })
+            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null } && string.IsNullOrWhiteSpace(payload.ReqId))
             {
-                throw new InvalidChangeException("The payload changes nothing: give the name, definition, value or text to change, or no payload to delete the element.");
+                throw new InvalidChangeException("The payload changes nothing: give the name, definition, value, text, reqId or constraint to change, or no payload to delete the element.");
             }
 
             if (payload.Name != null)
@@ -390,6 +405,8 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 throw new InvalidChangeException("The text is empty.");
             }
+
+            this.CheckRequirementProperties(element, payload);
 
             return payload.Definition == null ? null : this.ResolveDefinition(element, payload.Definition);
         }
@@ -471,13 +488,36 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var referencingElements = remainingRelationships
                 .Where(relationship => relationship.relatedElement.Any(relatedElement => relatedElement != null && removedIds.Contains(relatedElement.Id)))
-                .Select(relationship => $"'{relationship.OwningRelatedElement?.qualifiedName ?? relationship.Id.ToString()}'")
+                .Select(DescribeReferencingElement)
                 .Distinct()
                 .ToList();
 
             return referencingElements.Count == 0
                 ? null
                 : $"Change {changeNumber} (delete): the {Describe(deletedElement)} is still referenced by {string.Join(", ", referencingElements)}. Change or delete these elements first.";
+        }
+
+        /// <summary>
+        /// Describes, in a message, the element that holds a reference: the nearest owner of the referencing relationship
+        /// that has a qualified name (for example the part typed by a definition), or the satisfy link that contains it, which
+        /// has no name and is designated by its identifier so that it can be deleted.
+        /// </summary>
+        /// <param name="relationship">The referencing relationship.</param>
+        /// <returns>The description of the referencing element.</returns>
+        private static string DescribeReferencingElement(PocoRelationship relationship)
+        {
+            for (var element = relationship.OwningRelatedElement; element != null; element = element.owner)
+            {
+                switch (element)
+                {
+                    case PocoSatisfyRequirementUsage:
+                        return $"the SatisfyRequirementUsage {element.Id}";
+                    case { qualifiedName: { } qualifiedName }:
+                        return $"'{qualifiedName}'";
+                }
+            }
+
+            return $"'{relationship.Id}'";
         }
 
         /// <summary>
@@ -608,18 +648,27 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="temporaryName">The temporary name of the new element, or <c>null</c> when it has none.</param>
         private void AddOwnedMember(IElement owner, IElement member, string temporaryName)
         {
-            // A feature (part, attribute...) of a type (part definition, part) is owned through a FeatureMembership; any other
-            // member, for example an element of a package, through an OwningMembership.
-            IMembership membership = member is IFeature && owner is IType
-                ? new FeatureMembership { Visibility = VisibilityKind.Public }
-                : new OwningMembership { Visibility = VisibilityKind.Public };
-
-            this.AddOwnedRelationship(owner, membership, this.Add(member));
+            this.AddOwnedRelationship(owner, CreateMembership(owner, member), this.Add(member));
 
             if (!string.IsNullOrWhiteSpace(temporaryName))
             {
                 this.temporaryNames.Add(temporaryName, member.Id);
             }
+        }
+
+        /// <summary>
+        /// Creates the public membership through which an element owns a member: a <c>FeatureMembership</c> for a feature
+        /// (part, attribute...) of a type (part definition, part), and an <c>OwningMembership</c> for any other member, for
+        /// example an element of a package.
+        /// </summary>
+        /// <param name="owner">The element that owns the member.</param>
+        /// <param name="member">The owned member.</param>
+        /// <returns>The new membership, not added to the working copy yet.</returns>
+        private static IMembership CreateMembership(IElement owner, IElement member)
+        {
+            return member is IFeature && owner is IType
+                ? new FeatureMembership { Visibility = VisibilityKind.Public }
+                : new OwningMembership { Visibility = VisibilityKind.Public };
         }
 
         /// <summary>

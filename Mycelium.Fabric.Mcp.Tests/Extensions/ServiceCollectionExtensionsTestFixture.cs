@@ -63,7 +63,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(changeApplierRegistrations[0].ImplementationType, Is.EqualTo(typeof(ModelChangeApplier)));
                 Assert.That(modelProviderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(modelProviderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(8));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(9));
             }
 
             var changeApplier = new Mock<IModelChangeApplier>();
