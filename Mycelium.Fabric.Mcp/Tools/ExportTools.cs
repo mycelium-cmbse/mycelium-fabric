@@ -74,7 +74,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         [return: Description("The full path of the written file, its format and the number of exported elements.")]
         public async Task<ExportResult> ExportModelAsync(
             [Description("Optional: a simple file name without folder (letters, digits, '-', '_' and '.'), to which '.json' is added. By default: model-<UTC date and time>.json.")] string fileName = null,
-            CancellationToken cancellationToken = default)
+            [Description("Bound by the SDK to the cancellation of the request, not part of the tool schema.")] CancellationToken cancellationToken = default)
         {
             var elements = this.modelProvider.ElementDtos;
             var path = await this.modelExporter.ExportAsync(elements, fileName, cancellationToken);
