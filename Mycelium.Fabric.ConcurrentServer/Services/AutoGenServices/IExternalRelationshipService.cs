@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// Defines the ExternalRelationshipService of the OMG Systems Modeling API and Services specification, §7.2.5.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public interface IExternalRelationshipService : IBaseService
+    public partial interface IExternalRelationshipService : IBaseService
     {
         /// <summary>
         /// Create an external relationship in a given project on a given branch.

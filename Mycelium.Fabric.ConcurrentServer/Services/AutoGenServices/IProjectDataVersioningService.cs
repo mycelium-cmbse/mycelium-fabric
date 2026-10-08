@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// Defines the ProjectDataVersioningService of the OMG Systems Modeling API and Services specification, §7.2.3.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public interface IProjectDataVersioningService : IBaseService
+    public partial interface IProjectDataVersioningService : IBaseService
     {
         /// <summary>
         /// Create a new branch with the given name (branchName) in the given project, and set the head of the

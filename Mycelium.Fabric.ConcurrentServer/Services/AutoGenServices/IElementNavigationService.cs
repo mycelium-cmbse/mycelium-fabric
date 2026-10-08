@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// Defines the ElementNavigationService of the OMG Systems Modeling API and Services specification, §7.2.2.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public interface IElementNavigationService : IBaseService
+    public partial interface IElementNavigationService : IBaseService
     {
         /// <summary>
         /// Get element with the given id (elementId) in the given project at the given commit.
