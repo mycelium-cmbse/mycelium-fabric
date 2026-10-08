@@ -18,6 +18,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
     using Moq;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
@@ -197,7 +198,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="NavigationTools"/> on the loaded model.</returns>
         private static NavigationTools CreateSatelliteTools()
         {
-            var satelliteModelProvider = new InMemoryModelProvider();
+            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return new NavigationTools(satelliteModelProvider);

@@ -13,6 +13,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using Microsoft.Extensions.DependencyInjection;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
@@ -25,8 +26,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the MCP server, its tools, and an <see cref="InMemoryModelProvider"/> that loads the model
-            /// from the given JSON file.
+            /// Registers the MCP server, its tools, the <see cref="ModelChangeApplier"/>, and an
+            /// <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -40,9 +41,11 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 ArgumentNullException.ThrowIfNull(services);
                 ArgumentNullException.ThrowIfNull(modelPath);
 
-                services.AddSingleton<IModelProvider>(_ =>
+                services.AddSingleton<IModelChangeApplier, ModelChangeApplier>();
+
+                services.AddSingleton<IModelProvider>(serviceProvider =>
                 {
-                    var modelProvider = new InMemoryModelProvider();
+                    var modelProvider = new InMemoryModelProvider(serviceProvider.GetRequiredService<IModelChangeApplier>());
                     modelProvider.LoadModel(modelPath);
                     return modelProvider;
                 });
@@ -50,7 +53,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
-                    .WithTools<BudgetTools>();
+                    .WithTools<BudgetTools>()
+                    .WithTools<ConstructionTools>();
             }
         }
     }

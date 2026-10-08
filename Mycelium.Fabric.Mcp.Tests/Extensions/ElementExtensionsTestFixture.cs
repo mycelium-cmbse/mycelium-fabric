@@ -12,6 +12,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using System;
     using System.IO;
 
+    using Moq;
+
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
@@ -42,7 +45,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [SetUp]
         public void SetUp()
         {
-            var modelProvider = new InMemoryModelProvider();
+            var modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             this.payloadSubsystem = modelProvider.GetElementById(PayloadSubsystemId);
