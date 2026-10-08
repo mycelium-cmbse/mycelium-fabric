@@ -9,10 +9,13 @@
 
 namespace Mycelium.Fabric.Mcp.Tools
 {
+    using Mycelium.Fabric.Mcp.Services;
+
     /// <summary>
     /// The result of the <c>export_model</c> tool: the file in which the model has been written.
     /// </summary>
-    /// <param name="Path">The full path of the written JSON file.</param>
+    /// <param name="Path">The full path of the written file.</param>
+    /// <param name="Format">The <see cref="ModelExportFormat"/> of the written file.</param>
     /// <param name="ElementCount">The number of exported elements.</param>
-    public sealed record ExportResult(string Path, int ElementCount);
+    public sealed record ExportResult(string Path, ModelExportFormat Format, int ElementCount);
 }

@@ -15,6 +15,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using System.Linq;
     using System.Text;
     using System.Text.Json;
+    using System.Threading;
+    using System.Threading.Tasks;
 
     using ModelContextProtocol;
 
@@ -47,10 +49,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.satelliteModelPath = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json");
             this.exportDirectory = Path.Combine(Path.GetTempPath(), $"mycelium-export-{Guid.NewGuid()}");
 
-            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
+            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
             this.modelProvider.LoadModel(new Uri(this.satelliteModelPath));
 
-            this.exporter = new JsonModelExporter(new Uri(this.exportDirectory));
+            this.exporter = new JsonModelExporter(new Serializer(), new Uri(this.exportDirectory));
         }
 
         [TearDown]
@@ -65,33 +67,43 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         [Test]
         public void VerifyConstructor()
         {
+            var serializer = new Serializer();
+
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new JsonModelExporter(null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new JsonModelExporter(new Uri("exports", UriKind.Relative)), Throws.TypeOf<ArgumentException>());
-                Assert.That(() => new JsonModelExporter(new Uri("https://example.com/exports")), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => new JsonModelExporter(null, new Uri(this.exportDirectory)), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new JsonModelExporter(serializer, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new JsonModelExporter(serializer, new Uri("exports", UriKind.Relative)), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => new JsonModelExporter(serializer, new Uri("https://example.com/exports")), Throws.TypeOf<ArgumentException>());
                 Assert.That(this.exporter.ExportDirectory, Is.EqualTo(new Uri(this.exportDirectory)));
             }
         }
 
         [Test]
-        public void VerifyExport()
+        public void VerifyFormat()
         {
-            var elements = this.modelProvider.Elements;
+            Assert.That(this.exporter.Format, Is.EqualTo(ModelExportFormat.Json));
+        }
+
+        [Test]
+        public async Task VerifyExportAsync()
+        {
+            var elements = this.modelProvider.ElementDtos;
+            var none = CancellationToken.None;
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => this.exporter.Export(null, "EOSat1"), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => this.exporter.Export(elements, "../EOSat1"), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
-                Assert.That(() => this.exporter.Export(elements, "exports/EOSat1"), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
-                Assert.That(() => this.exporter.Export(elements, @"exports\EOSat1"), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
-                Assert.That(() => this.exporter.Export(elements, ".EOSat1"), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
-                Assert.That(() => this.exporter.Export(elements, new string('a', 101)), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
+                Assert.That(() => this.exporter.ExportAsync(null, "EOSat1", none), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.exporter.ExportAsync(elements, "../EOSat1", none), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
+                Assert.That(() => this.exporter.ExportAsync(elements, "exports/EOSat1", none), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
+                Assert.That(() => this.exporter.ExportAsync(elements, @"exports\EOSat1", none), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
+                Assert.That(() => this.exporter.ExportAsync(elements, ".EOSat1", none), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
+                Assert.That(() => this.exporter.ExportAsync(elements, new string('a', 101), none), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
                 Assert.That(Directory.Exists(this.exportDirectory), Is.False);
             }
 
-            var path = this.exporter.Export(elements, "EOSat1");
-            var defaultPath = this.exporter.Export([], " ");
+            var path = await this.exporter.ExportAsync(elements, "EOSat1", none);
+            var defaultPath = await this.exporter.ExportAsync([], " ", none);
 
             using (Assert.EnterMultipleScope())
             {
@@ -99,7 +111,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(Serialize(ReadDtos(path)), Is.EqualTo(Serialize(ReadDtos(this.satelliteModelPath))));
                 Assert.That(Path.GetFileName(defaultPath), Does.Match(@"^model-\d{8}-\d{6}\.json$"));
                 Assert.That(ReadDtos(defaultPath), Has.Count.EqualTo(0));
-                Assert.That(() => this.exporter.Export(elements, "EOSat1.json"), Throws.TypeOf<McpException>().With.Message.Contains("already has a file named 'EOSat1.json'"));
+                Assert.That(() => this.exporter.ExportAsync(elements, "EOSat1.json", none),
+                    Throws.TypeOf<McpException>().With.Message.Contains("already has a file named 'EOSat1.json'"));
+            }
+
+            using var cancellation = new CancellationTokenSource();
+            await cancellation.CancelAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.exporter.ExportAsync(elements, "Canceled", cancellation.Token), Throws.InstanceOf<OperationCanceledException>());
+                Assert.That(File.Exists(Path.Combine(this.exportDirectory, "Canceled.json")), Is.False);
             }
         }
 

@@ -73,7 +73,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.emptyModelPath = new Uri(Path.Combine(this.dataDirectory, "Empty.json"));
 
             this.changeApplier = new Mock<IModelChangeApplier>();
-            this.modelProvider = new InMemoryModelProvider(this.changeApplier.Object);
+            this.modelProvider = new InMemoryModelProvider(this.changeApplier.Object, new DeSerializer());
         }
 
         [Test]
@@ -81,9 +81,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new InMemoryModelProvider(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new InMemoryModelProvider(null, new DeSerializer()), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new InMemoryModelProvider(this.changeApplier.Object, null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
                 Assert.That(this.modelProvider.RootElements, Has.Count.EqualTo(0));
+                Assert.That(this.modelProvider.ElementDtos, Has.Count.EqualTo(0));
                 Assert.That(this.modelProvider.GetElementById(PayloadSubsystemId), Is.Null);
             }
         }
@@ -113,6 +115,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.LoadModel(this.emptyModelPath);
 
             Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
+        }
+
+        [Test]
+        public void VerifyElementDtos()
+        {
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+
+            var loadedDtos = this.modelProvider.ElementDtos;
+            this.modelProvider.CreateCommit(CreateCommitRequest(CreateDataVersion(CameraId, ReadRenamedCamera())));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(loadedDtos, Has.Count.EqualTo(548));
+                Assert.That(loadedDtos.Single(dto => dto.Id == CameraId).DeclaredName, Is.EqualTo("camera"));
+                Assert.That(this.modelProvider.ElementDtos, Has.Count.EqualTo(548));
+                Assert.That(this.modelProvider.ElementDtos.Single(dto => dto.Id == CameraId).DeclaredName, Is.EqualTo("mainCamera"));
+            }
+
+            this.modelProvider.LoadModel(this.emptyModelPath);
+
+            Assert.That(this.modelProvider.ElementDtos, Has.Count.EqualTo(0));
         }
 
         [Test]

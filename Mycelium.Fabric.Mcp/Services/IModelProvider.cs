@@ -19,6 +19,8 @@ namespace Mycelium.Fabric.Mcp.Services
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.PSM.DTO;
 
+    using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
+
     /// <summary>
     /// Provides access to the SysML v2 model that the MCP tools work on.
     /// </summary>
@@ -43,6 +45,12 @@ namespace Mycelium.Fabric.Mcp.Services
         /// Gets the root elements of the loaded model, that is the elements that have no owner.
         /// </summary>
         IReadOnlyList<IElement> RootElements { get; }
+
+        /// <summary>
+        /// Gets the DTOs of all the elements of the loaded model, as a JSON file of the Systems Modeling API stores them and as
+        /// the payloads of a <see cref="CommitRequest"/> carry them.
+        /// </summary>
+        IReadOnlyList<DtoElement> ElementDtos { get; }
 
         /// <summary>
         /// Loads the model stored at the given location, replacing the model loaded before.

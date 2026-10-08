@@ -13,12 +13,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
 
     using ErrorOr;
+
+    using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
 
+    using SysML2.NET.Common;
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
@@ -63,7 +67,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         [SetUp]
         public void SetUp()
         {
-            this.applier = new ModelChangeApplier();
+            this.applier = new ModelChangeApplier(new Serializer(), new DeSerializer());
+        }
+
+        [Test]
+        public void VerifyConstructor()
+        {
+            var serializer = new Mock<ISerializer>();
+            var deSerializer = new Mock<IDeSerializer>();
+            deSerializer.Setup(mock => mock.DeSerialize(It.IsAny<Stream>(), SerializationModeKind.JSON, SerializationTargetKind.PSM, false)).Returns([]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => new ModelChangeApplier(null, deSerializer.Object), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ModelChangeApplier(serializer.Object, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object).Apply([], []), Throws.Nothing);
+            }
+
+            serializer.Verify(mock => mock.Serialize(It.IsAny<IEnumerable<IIdentified>>(), SerializationModeKind.JSON, false, It.IsAny<Stream>(), It.IsAny<JsonWriterOptions>()),
+                Times.Once);
+            deSerializer.Verify(mock => mock.DeSerialize(It.IsAny<Stream>(), SerializationModeKind.JSON, SerializationTargetKind.PSM, false), Times.Once);
         }
 
         [Test]

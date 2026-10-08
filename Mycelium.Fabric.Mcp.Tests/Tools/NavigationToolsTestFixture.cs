@@ -27,6 +27,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Extensions;
+    using SysML2.NET.Serializer.Json;
 
     /// <summary>
     /// Suite of tests for the <see cref="NavigationTools"/> class.
@@ -198,7 +199,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="NavigationTools"/> on the loaded model.</returns>
         private static NavigationTools CreateSatelliteTools()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
+            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return new NavigationTools(satelliteModelProvider);
