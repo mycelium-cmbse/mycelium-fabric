@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
     using Moq;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
@@ -50,6 +51,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
             var serverBuilder = services.AddFabricMcpServer(this.satelliteModelPath);
 
+            var changeApplierRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelChangeApplier)).ToList();
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
             var exporterRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelExporter)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
@@ -57,14 +59,20 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(serverBuilder, Is.Not.Null);
+                Assert.That(changeApplierRegistrations, Has.Count.EqualTo(1));
+                Assert.That(changeApplierRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(changeApplierRegistrations[0].ImplementationType, Is.EqualTo(typeof(ModelChangeApplier)));
                 Assert.That(modelProviderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(modelProviderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(exporterRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(8));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(9));
             }
 
+            var changeApplier = new Mock<IModelChangeApplier>();
             var serviceProvider = new Mock<IServiceProvider>();
+            serviceProvider.Setup(provider => provider.GetService(typeof(IModelChangeApplier))).Returns(changeApplier.Object);
+
             var modelProvider = modelProviderRegistrations[0].ImplementationFactory(serviceProvider.Object);
             var exporter = exporterRegistrations[0].ImplementationFactory(serviceProvider.Object);
 
@@ -75,6 +83,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(exporter, Is.InstanceOf<JsonModelExporter>());
                 Assert.That(((JsonModelExporter)exporter).ExportDirectory.LocalPath, Is.EqualTo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "exports") + Path.DirectorySeparatorChar));
             }
+
+            serviceProvider.Verify(provider => provider.GetService(typeof(IModelChangeApplier)), Times.Once);
 
             var exportDirectory = new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Exports"));
             var otherServices = new ServiceCollection();

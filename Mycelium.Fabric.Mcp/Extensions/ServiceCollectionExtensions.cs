@@ -13,6 +13,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using Microsoft.Extensions.DependencyInjection;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
@@ -25,8 +26,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the MCP server, its tools, an <see cref="InMemoryModelProvider"/> that loads the model from the
-            /// given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the export folder.
+            /// Registers the MCP server, its tools, the <see cref="ModelChangeApplier"/>, an <see cref="InMemoryModelProvider"/>
+            /// that loads the model from the given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the
+            /// export folder.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <param name="exportDirectory">
@@ -44,9 +46,11 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 ArgumentNullException.ThrowIfNull(services);
                 ArgumentNullException.ThrowIfNull(modelPath);
 
-                services.AddSingleton<IModelProvider>(_ =>
+                services.AddSingleton<IModelChangeApplier, ModelChangeApplier>();
+
+                services.AddSingleton<IModelProvider>(serviceProvider =>
                 {
-                    var modelProvider = new InMemoryModelProvider();
+                    var modelProvider = new InMemoryModelProvider(serviceProvider.GetRequiredService<IModelChangeApplier>());
                     modelProvider.LoadModel(modelPath);
                     return modelProvider;
                 });
@@ -57,6 +61,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
+                    .WithTools<ConstructionTools>()
                     .WithTools<ExportTools>();
             }
         }

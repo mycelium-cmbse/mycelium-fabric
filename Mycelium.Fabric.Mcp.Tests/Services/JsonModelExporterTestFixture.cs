@@ -18,6 +18,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
     using ModelContextProtocol;
 
+    using Moq;
+
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
 
     using SysML2.NET.Serializer.Json;
@@ -44,7 +47,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.satelliteModelPath = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json");
             this.exportDirectory = Path.Combine(Path.GetTempPath(), $"mycelium-export-{Guid.NewGuid()}");
 
-            this.modelProvider = new InMemoryModelProvider();
+            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
             this.modelProvider.LoadModel(new Uri(this.satelliteModelPath));
 
             this.exporter = new JsonModelExporter(new Uri(this.exportDirectory));
