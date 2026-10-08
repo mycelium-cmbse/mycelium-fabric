@@ -68,8 +68,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         /// Creates a constraint whose expression is the given one.
         /// </summary>
         /// <param name="expression">The expression of the constraint.</param>
-        /// <returns>The new <see cref="IConstraintUsage"/>.</returns>
-        private static IConstraintUsage CreateConstraint(IElement expression)
+        /// <returns>The new <see cref="ConstraintUsage"/>.</returns>
+        private static ConstraintUsage CreateConstraint(IElement expression)
         {
             var constraint = new ConstraintUsage();
             constraint.AssignOwnership(new ResultExpressionMembership(), expression);
