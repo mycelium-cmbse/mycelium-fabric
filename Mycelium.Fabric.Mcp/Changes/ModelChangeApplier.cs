@@ -15,12 +15,17 @@ namespace Mycelium.Fabric.Mcp.Changes
     using System.Linq;
     using System.Text.Json;
 
+    using ErrorOr;
+
     using SysML2.NET.Core.DTO.Root.Elements;
+    using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
+
+    using Error = ErrorOr.Error;
 
     /// <summary>
     /// The <see cref="IModelChangeApplier"/> that applies a batch of <see cref="ModelChange"/>s to a copy of a SysML v2 model
-    /// made of DTOs, and describes the result as a <c>CommitRequest</c>: the <c>DataVersionRequest</c> records of the
+    /// made of DTOs, and describes the result as a <see cref="CommitRequest"/>: the <c>DataVersionRequest</c> records of the
     /// elements that the batch creates, updates and deletes.
     /// </summary>
     /// <remarks>
@@ -30,18 +35,19 @@ namespace Mycelium.Fabric.Mcp.Changes
     public class ModelChangeApplier : IModelChangeApplier
     {
         /// <summary>
-        /// Applies a batch of changes, in order, to a copy of the given model, and returns the <c>CommitRequest</c> that
-        /// makes the same modifications. Every change is checked, so that all the problems of the batch are reported at once.
+        /// Applies a batch of changes, in order, to a copy of the given model, and returns the <see cref="CommitRequest"/>
+        /// that makes the same modifications. Every change is checked, so that all the problems of the batch are reported at
+        /// once.
         /// </summary>
         /// <param name="model">The DTOs of the model to modify, which are left unchanged.</param>
         /// <param name="changes">The changes to apply.</param>
         /// <returns>
-        /// The <see cref="PendingCommit"/>: the <c>CommitRequest</c> and the created elements, or the problems.
+        /// The <see cref="CommitRequest"/>, or a validation <see cref="Error"/> for each problem of the batch.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="model"/> or <paramref name="changes"/> is <c>null</c>.
         /// </exception>
-        public PendingCommit Apply(IReadOnlyCollection<IElement> model, IReadOnlyList<ModelChange> changes)
+        public ErrorOr<CommitRequest> Apply(IReadOnlyCollection<IElement> model, IReadOnlyList<ModelChange> changes)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(changes);
@@ -49,9 +55,12 @@ namespace Mycelium.Fabric.Mcp.Changes
             var batch = new ModelChangeBatch(CopyElements(model));
             var problems = batch.Apply(changes);
 
-            return problems.Count == 0
-                ? new PendingCommit(batch.CreateCommitRequest(), batch.CreatedElements, [])
-                : new PendingCommit(null, [], problems);
+            if (problems.Count > 0)
+            {
+                return problems.Select(problem => Error.Validation(description: problem)).ToList();
+            }
+
+            return batch.CreateCommitRequest();
         }
 
         /// <summary>

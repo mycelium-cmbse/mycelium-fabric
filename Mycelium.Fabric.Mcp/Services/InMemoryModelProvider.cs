@@ -19,7 +19,11 @@ namespace Mycelium.Fabric.Mcp.Services
 
     using Mycelium.Fabric.Mcp.Changes;
 
+    using SysML2.NET.Core.POCO.Core.Types;
+    using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Root.Namespaces;
+    using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Dal;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -38,6 +42,13 @@ namespace Mycelium.Fabric.Mcp.Services
     /// </remarks>
     public class InMemoryModelProvider : IModelProvider
     {
+        /// <summary>
+        /// The kinds of membership through which a change owns the element it creates: an <c>OwningMembership</c>, or a
+        /// <c>FeatureMembership</c> for a feature of a type. The server owns the elements it builds around them, such as the
+        /// subject of a requirement, through other kinds of membership.
+        /// </summary>
+        private static readonly System.Type[] MemberMembershipTypes = [typeof(OwningMembership), typeof(FeatureMembership)];
+
         /// <summary>
         /// The <see cref="IModelChangeApplier"/> that turns a batch of changes into the change of a commit.
         /// </summary>
@@ -119,9 +130,10 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into the change of a commit by
-        /// the <see cref="IModelChangeApplier"/>, then committed. When one change is invalid, the model is left unchanged and
-        /// the problems are returned.
+        /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into a
+        /// <see cref="CommitRequest"/> by the <see cref="IModelChangeApplier"/>, then committed, and the created elements
+        /// are read from the committed request. When one change is invalid, the model is left unchanged and the problems are
+        /// returned.
         /// </summary>
         /// <param name="changes">The changes to apply, in order.</param>
         /// <returns>The <see cref="ApplyChangesResult"/> that tells whether the batch has been applied.</returns>
@@ -134,16 +146,17 @@ namespace Mycelium.Fabric.Mcp.Services
 
             lock (this.modelLock)
             {
-                var pendingCommit = this.changeApplier.Apply(this.elementDtos, changes);
+                var commitRequest = this.changeApplier.Apply(this.elementDtos, changes);
 
-                if (pendingCommit.Problems.Count > 0)
+                if (commitRequest.IsError)
                 {
-                    return new ApplyChangesResult(false, [], pendingCommit.Problems);
+                    return new ApplyChangesResult([], [.. commitRequest.Errors.Select(error => error.Description)]);
                 }
 
-                this.ApplyCommit(pendingCommit.CommitRequest);
+                var previousElementIds = this.elementsById.Keys.ToHashSet();
+                this.ApplyCommit(commitRequest.Value);
 
-                return new ApplyChangesResult(true, pendingCommit.CreatedElements, []);
+                return new ApplyChangesResult(this.GetCreatedElements(commitRequest.Value, previousElementIds), []);
             }
         }
 
@@ -227,6 +240,49 @@ namespace Mycelium.Fabric.Mcp.Services
                 DtoElement element => element.Id == dataVersion.Identity.Id,
                 _ => false
             };
+        }
+
+        /// <summary>
+        /// Tells whether a new element is owned the way a change creates it: through one of the
+        /// <see cref="MemberMembershipTypes"/>, and so is each of its owners that is new too.
+        /// </summary>
+        /// <param name="element">The new element.</param>
+        /// <param name="newElementIds">The <c>Id</c> of the elements created by the commit.</param>
+        /// <returns><c>true</c> when the element is owned as a member, up to an element that existed before the commit.</returns>
+        private static bool IsOwnedAsMember(IElement element, HashSet<Guid> newElementIds)
+        {
+            for (var current = element; current != null && newElementIds.Contains(current.Id); current = current.OwningRelationship?.OwningRelatedElement)
+            {
+                if (current.OwningRelationship != null && !MemberMembershipTypes.Contains(current.OwningRelationship.GetType()))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Gets the elements that a commit has created as a change creates them: the new packages, definitions and usages
+        /// owned as members, without the elements that the server builds around them, such as memberships, values,
+        /// documentation or the subject of a requirement. The caller holds the lock and has applied the commit.
+        /// </summary>
+        /// <param name="commitRequest">The applied <see cref="CommitRequest"/>.</param>
+        /// <param name="previousElementIds">The <c>Id</c> of the elements of the model before the commit.</param>
+        /// <returns>The created elements, in the order of the change of the commit.</returns>
+        private List<CreatedElement> GetCreatedElements(CommitRequest commitRequest, HashSet<Guid> previousElementIds)
+        {
+            var newElementIds = commitRequest.Change
+                .Where(dataVersion => dataVersion.Payload != null && !previousElementIds.Contains(dataVersion.Identity.Id))
+                .Select(dataVersion => dataVersion.Identity.Id)
+                .ToHashSet();
+
+            return commitRequest.Change
+                .Where(dataVersion => newElementIds.Contains(dataVersion.Identity.Id))
+                .Select(dataVersion => this.elementsById[dataVersion.Identity.Id])
+                .Where(element => element is (IPackage or IDefinition or IUsage) and not IRelationship && IsOwnedAsMember(element, newElementIds))
+                .Select(element => new CreatedElement(element.Id, element.qualifiedName, element.GetType().Name))
+                .ToList();
         }
 
         /// <summary>

@@ -60,7 +60,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "and, if needed, a definition (for a part), a value (for an attribute) and a text (required for a requirement); the identity is then an optional temporary name, that later changes of the same batch use instead of an identifier. "
             + "Update: the identity of the element and a payload with only the properties to change (name, definition, value or text). "
             + "Delete: the identity of the element and no payload; refused while another element references it. Existing elements are designated by their identifier (Id).")]
-        [return: Description("Whether the batch has been applied; if so, the identifier, name and type of each created element with its temporary name; if not, the problems, each with the number of its change.")]
+        [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage; if not, the problems, each with the number of its change.")]
         public ApplyChangesResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes)
         {
             if (changes == null || changes.Count == 0)

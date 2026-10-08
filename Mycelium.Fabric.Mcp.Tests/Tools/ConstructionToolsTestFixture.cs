@@ -50,7 +50,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void VerifyApplyChanges()
         {
             IReadOnlyList<ModelChange> changes = [new ModelChange { Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } }];
-            var expectedResult = new ApplyChangesResult(true, [], []);
+            var expectedResult = new ApplyChangesResult([], []);
             this.modelProvider.Setup(provider => provider.ApplyChanges(changes)).Returns(expectedResult);
 
             var tools = new ConstructionTools(this.modelProvider.Object);
@@ -82,24 +82,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 new ModelChange { Identity = "camera", Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "camera", Definition = "Camera" } }
             ]);
 
-            var createdIds = creation.CreatedElements.ToDictionary(created => created.TemporaryName, created => created.Id);
-            var packageId = createdIds["spacecraft"];
+            var createdIds = creation.CreatedElements.ToDictionary(created => created.QualifiedName, created => created.Id);
+            var packageId = createdIds["Spacecraft"];
+            var cameraMassId = createdIds["Spacecraft::Camera::mass"].ToString();
             var elementCount = emptyModelProvider.Elements.Count;
 
             var refusal = tools.ApplyChanges(
             [
-                new ModelChange { Identity = createdIds["cameraMass"].ToString(), Payload = new ElementPayload { Value = 35 } },
+                new ModelChange { Identity = cameraMassId, Payload = new ElementPayload { Value = 35 } },
                 new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "unknownOwner", Name = "lens" } }
             ]);
 
             var totalAfterRefusal = budgetTools.SumAttribute(packageId, "mass").Total;
 
-            var modification = tools.ApplyChanges([new ModelChange { Identity = createdIds["cameraMass"].ToString(), Payload = new ElementPayload { Value = 35 } }]);
+            var modification = tools.ApplyChanges([new ModelChange { Identity = cameraMassId, Payload = new ElementPayload { Value = 35 } }]);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(creation.Applied, Is.True);
-                Assert.That(createdIds.Keys, Is.EqualTo(["spacecraft", "Camera", "cameraMass", "camera"]));
+                Assert.That(createdIds.Keys, Is.EqualTo(["Spacecraft", "Spacecraft::Camera", "Spacecraft::Camera::mass", "Spacecraft::camera"]));
+                Assert.That(creation.CreatedElements.Select(created => created.Type), Is.EqualTo(["Package", "PartDefinition", "AttributeUsage", "PartUsage"]));
                 Assert.That(refusal.Applied, Is.False);
                 Assert.That(refusal.Problems, Has.Count.EqualTo(1));
                 Assert.That(refusal.Problems[0], Does.StartWith("Change 2 (create)"));

@@ -14,6 +14,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using System.IO;
     using System.Linq;
 
+    using ErrorOr;
+
     using ModelContextProtocol;
 
     using Moq;
@@ -25,8 +27,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
 
+    using DtoAttributeUsage = SysML2.NET.Core.DTO.Systems.Attributes.AttributeUsage;
+    using DtoDocumentation = SysML2.NET.Core.DTO.Root.Annotations.Documentation;
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
+    using DtoFeatureMembership = SysML2.NET.Core.DTO.Core.Types.FeatureMembership;
     using DtoNamespace = SysML2.NET.Core.DTO.Root.Namespaces.Namespace;
+    using DtoOwningMembership = SysML2.NET.Core.DTO.Root.Namespaces.OwningMembership;
+    using DtoPartUsage = SysML2.NET.Core.DTO.Systems.Parts.PartUsage;
+    using DtoReferenceUsage = SysML2.NET.Core.DTO.Systems.DefinitionAndUsage.ReferenceUsage;
+    using DtoRelationship = SysML2.NET.Core.DTO.Root.Elements.IRelationship;
+    using DtoSubjectMembership = SysML2.NET.Core.DTO.Systems.Requirements.SubjectMembership;
+    using Error = ErrorOr.Error;
 
     /// <summary>
     /// Suite of tests for the <see cref="InMemoryModelProvider"/> class.
@@ -167,24 +178,30 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             var camera = this.modelProvider.GetElementById(CameraId);
             IReadOnlyList<ModelChange> changes = [new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "mainCamera" } }];
 
-            this.changeApplier
-                .Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes))
-                .Returns(new PendingCommit(null, [], ["Change 1 (update): a problem."]));
+            ErrorOr<CommitRequest> problem = Error.Validation(description: "Change 1 (update): a problem.");
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes)).Returns(problem);
 
             var refusal = this.modelProvider.ApplyChanges(changes);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(refusal.Applied, Is.False);
+                Assert.That(refusal.CreatedElements, Has.Count.EqualTo(0));
                 Assert.That(refusal.Problems, Is.EqualTo(["Change 1 (update): a problem."]));
                 Assert.That(this.modelProvider.Elements, Is.SameAs(elements));
             }
 
-            var createdElement = new CreatedElement("lens", Guid.NewGuid(), "lens", "PartUsage");
+            // The commit renames the camera and gives it a lens, with what the server builds around: memberships, a
+            // documentation, and a subject that is not created by a change.
+            var renamedCameraDto = ReadRenamedCamera();
+            var commitRequest = CreateCommitRequest(CreateDataVersion(CameraId, renamedCameraDto));
+            var lens = AddOwnedElement(commitRequest, renamedCameraDto, new DtoFeatureMembership(), new DtoPartUsage { DeclaredName = "lens" });
+            var lensMass = AddOwnedElement(commitRequest, lens, new DtoFeatureMembership(), new DtoAttributeUsage { DeclaredName = "mass" });
+            AddOwnedElement(commitRequest, lens, new DtoOwningMembership(), new DtoDocumentation { Body = "Main lens." });
+            var subject = AddOwnedElement(commitRequest, lens, new DtoSubjectMembership(), new DtoReferenceUsage { DeclaredName = "subj" });
+            AddOwnedElement(commitRequest, subject, new DtoFeatureMembership(), new DtoAttributeUsage { DeclaredName = "mass" });
 
-            this.changeApplier
-                .Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes))
-                .Returns(new PendingCommit(CreateCommitRequest(CreateDataVersion(CameraId, ReadRenamedCamera())), [createdElement], []));
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes)).Returns(commitRequest);
 
             var result = this.modelProvider.ApplyChanges(changes);
             var renamedCamera = this.modelProvider.GetElementById(CameraId);
@@ -192,9 +209,15 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(result.Applied, Is.True);
-                Assert.That(result.CreatedElements, Is.EqualTo([createdElement]));
                 Assert.That(result.Problems, Has.Count.EqualTo(0));
-                Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(548));
+
+                Assert.That(result.CreatedElements, Is.EqualTo(
+                [
+                    new CreatedElement(lens.Id, "EOSat1::Architecture::eosat1::payloadSubsystem::mainCamera::lens", "PartUsage"),
+                    new CreatedElement(lensMass.Id, "EOSat1::Architecture::eosat1::payloadSubsystem::mainCamera::lens::mass", "AttributeUsage")
+                ]));
+
+                Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(558));
                 Assert.That(renamedCamera.qualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::mainCamera"));
                 Assert.That(renamedCamera, Is.Not.SameAs(camera));
                 Assert.That(camera.DeclaredName, Is.EqualTo("camera"));
@@ -271,6 +294,32 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         private static CommitRequest CreateCommitRequest(params DataVersionRequest[] change)
         {
             return new CommitRequest { Change = [.. change] };
+        }
+
+        /// <summary>
+        /// Adds to a <see cref="CommitRequest"/> a new element owned by another element of the commit through a new
+        /// membership, with both sides of each link set.
+        /// </summary>
+        /// <typeparam name="T">The type of the new element.</typeparam>
+        /// <param name="commitRequest">The <see cref="CommitRequest"/> to complete.</param>
+        /// <param name="owner">The DTO of the owner, which is a payload of the commit.</param>
+        /// <param name="membership">The new membership, which owns the element.</param>
+        /// <param name="element">The new element.</param>
+        /// <returns>The new element, with its <c>Id</c>.</returns>
+        private static T AddOwnedElement<T>(CommitRequest commitRequest, DtoElement owner, DtoRelationship membership, T element) where T : DtoElement
+        {
+            membership.Id = Guid.NewGuid();
+            element.Id = Guid.NewGuid();
+
+            owner.OwnedRelationship.Add(membership.Id);
+            membership.OwningRelatedElement = owner.Id;
+            membership.OwnedRelatedElement.Add(element.Id);
+            element.OwningRelationship = membership.Id;
+
+            commitRequest.Change.Add(CreateDataVersion(membership.Id, membership));
+            commitRequest.Change.Add(CreateDataVersion(element.Id, element));
+
+            return element;
         }
 
         /// <summary>

@@ -104,11 +104,6 @@ namespace Mycelium.Fabric.Mcp.Changes
         private readonly List<(int ChangeNumber, IElement Element)> deletions = [];
 
         /// <summary>
-        /// The elements created by the batch.
-        /// </summary>
-        private readonly List<CreatedElement> createdElements = [];
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="ModelChangeBatch"/> class.
         /// </summary>
         /// <param name="workingCopy">The DTOs of the model to modify, which must not be shared with the current model.</param>
@@ -117,11 +112,6 @@ namespace Mycelium.Fabric.Mcp.Changes
             this.elementsById = workingCopy.ToDictionary(element => element.Id);
             this.originalIds = [.. this.elementsById.Keys];
         }
-
-        /// <summary>
-        /// Gets the elements created by the batch that are still in the working copy.
-        /// </summary>
-        public IReadOnlyList<CreatedElement> CreatedElements => [.. this.createdElements.Where(created => this.elementsById.ContainsKey(created.Id))];
 
         /// <summary>
         /// Applies the given changes, in order, to the working copy. Every change is checked, so that all the problems of the
@@ -611,7 +601,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Adds a new element to the working copy as a member of its owner, and records it as created.
+        /// Adds a new element to the working copy as a member of its owner, and records its temporary name.
         /// </summary>
         /// <param name="owner">The owner of the new element.</param>
         /// <param name="member">The new element, whose name is set.</param>
@@ -630,8 +620,6 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 this.temporaryNames.Add(temporaryName, member.Id);
             }
-
-            this.createdElements.Add(new CreatedElement(temporaryName, member.Id, member.DeclaredName, member.GetType().Name));
         }
 
         /// <summary>
