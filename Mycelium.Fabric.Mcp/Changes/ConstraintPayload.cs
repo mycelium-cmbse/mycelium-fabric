@@ -63,7 +63,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the margin of the constraint, in percent.
         /// </summary>
-        [Description("Optional: a margin in percent, for example 20, that always makes the constraint harder to meet. With '<' or '<=', the value plus the margin must stay under the limit (subj.mass * 1.2 <= 150); with '>' or '>=', the value must reach the limit plus the margin (subj.capacity >= 300 * 1.2). Not allowed with '==' or '!='.")]
+        [Description("Optional: a margin in percent, for example 20, that always makes the constraint harder to meet. With '<' or '<=', the value plus the margin must stay under the limit (subj.mass * 1.2 <= 150); with '>' or '>=', the value must reach the limit plus the margin (subj.capacity >= 300 * 1.2). Not allowed with '==' or '!=', with a limit of 0 or less, or with a unit that has an offset such as °C: write the margin into the limit instead.")]
         public double? Margin { get; init; }
     }
 }
