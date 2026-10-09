@@ -22,6 +22,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
+    using SysML2.NET.Serializer.Json;
+
     /// <summary>
     /// Suite of tests for the <see cref="ConstructionTools"/> class.
     /// </summary>
@@ -68,7 +70,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void ApplyChanges_OnEmptyModel_BuildsAModelReadByTheBudgetTools()
         {
-            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
             var tools = new ConstructionTools(emptyModelProvider);

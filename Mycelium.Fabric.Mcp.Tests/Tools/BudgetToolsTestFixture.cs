@@ -27,6 +27,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Extensions;
+    using SysML2.NET.Serializer.Json;
 
     /// <summary>
     /// Suite of tests for the <see cref="BudgetTools"/> class.
@@ -167,7 +168,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="BudgetTools"/> on the loaded model.</returns>
         private static BudgetTools CreateSatelliteTools()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
+            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return new BudgetTools(satelliteModelProvider);

@@ -10,12 +10,17 @@
 namespace Mycelium.Fabric.Mcp.Extensions
 {
     using System;
+    using System.IO;
 
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.DependencyInjection.Extensions;
+    using Microsoft.Extensions.Options;
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
+
+    using SysML2.NET.Serializer.Json;
 
     /// <summary>
     /// Extension methods that register the Mycelium Fabric MCP server in an <see cref="IServiceCollection"/>.
@@ -26,8 +31,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the MCP server, its tools, the <see cref="ModelChangeApplier"/>, and an
-            /// <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file.
+            /// Registers the MCP server, its tools, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/> unless the
+            /// host has registered its own, the <see cref="ModelChangeApplier"/>, an <see cref="InMemoryModelProvider"/> that
+            /// loads the model from the given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the
+            /// export folder of the <see cref="ModelExportOptions"/>, read from the configuration of the host.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -41,20 +48,33 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 ArgumentNullException.ThrowIfNull(services);
                 ArgumentNullException.ThrowIfNull(modelPath);
 
+                services.TryAddSingleton<ISerializer, Serializer>();
+                services.TryAddSingleton<IDeSerializer, DeSerializer>();
                 services.AddSingleton<IModelChangeApplier, ModelChangeApplier>();
 
                 services.AddSingleton<IModelProvider>(serviceProvider =>
                 {
-                    var modelProvider = new InMemoryModelProvider(serviceProvider.GetRequiredService<IModelChangeApplier>());
+                    var modelProvider = new InMemoryModelProvider(serviceProvider.GetRequiredService<IModelChangeApplier>(), serviceProvider.GetRequiredService<IDeSerializer>());
                     modelProvider.LoadModel(modelPath);
                     return modelProvider;
+                });
+
+                services.AddOptions<ModelExportOptions>().BindConfiguration(ModelExportOptions.SectionName);
+
+                services.AddSingleton<IModelExporter>(serviceProvider =>
+                {
+                    var exportOptions = serviceProvider.GetRequiredService<IOptions<ModelExportOptions>>().Value;
+                    var exportDirectory = Path.GetFullPath(exportOptions.ExportDirectory ?? "exports", Path.GetDirectoryName(modelPath.LocalPath));
+
+                    return new JsonModelExporter(serviceProvider.GetRequiredService<ISerializer>(), new Uri(exportDirectory));
                 });
 
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
-                    .WithTools<ConstructionTools>();
+                    .WithTools<ConstructionTools>()
+                    .WithTools<ExportTools>();
             }
         }
     }
