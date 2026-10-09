@@ -57,8 +57,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         [Description("Applies a batch of changes to the model, in order and all or nothing: if one change is invalid, nothing is applied and every problem is returned, so that the whole batch can be corrected and sent again. "
             + "Each change is shaped like a data version of a commit: an identity and a payload. "
             + "Create: a payload with a type (the SysML v2 metaclass: Package, PartDefinition, PartUsage, AttributeUsage, RequirementUsage...), a name, an owner (none for the top level) "
-            + "and, if needed, a definition (for a part), a value (for an attribute) and a text (required for a requirement); the identity is then an optional temporary name, that later changes of the same batch use instead of an identifier. "
-            + "Update: the identity of the element and a payload with only the properties to change (name, definition, value or text). "
+            + "and, if needed, a definition (for a part), a value and a unit (for an attribute: 38 with kg, true, 'S-band'), a text (required for a requirement), a reqId and a constraint (for a requirement: "
+            + "an attribute or path of the subject, an operator, a limit with an optional unit or a limitAttribute, a margin, and kind Assumption for an assumption); "
+            + "the identity is then an optional temporary name, that later changes of the same batch use instead of an identifier. "
+            + "A SatisfyRequirementUsage (satisfy link) takes a satisfiedRequirement and a satisfyingPart instead of a name; one per part that satisfies the requirement. "
+            + "Update: the identity of the element and a payload with only the properties to change (name, definition, value, text, reqId or constraint). "
             + "Delete: the identity of the element and no payload; refused while another element references it. Existing elements are designated by their identifier (Id).")]
         [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage; if not, the problems, each with the number of its change.")]
         public ApplyChangesResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes)
