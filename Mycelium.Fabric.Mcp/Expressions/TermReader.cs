@@ -131,14 +131,9 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 return Error.Validation(description: "The feature chain has no source.");
             }
 
-            var target = chain.targetFeature;
+            var names = GetTargetNames(chain);
 
-            // A target such as camera.mass is itself a chain of features.
-            List<string> names = target == null
-                ? [GetMemberName(chain)]
-                : [.. (target.chainingFeature is { Count: > 0 } chainingFeatures ? chainingFeatures : [target]).Select(feature => feature.DeclaredName ?? feature.DeclaredShortName)];
-
-            if (names.Any(name => name == null))
+            if (names.Contains(null))
             {
                 return Error.Validation(description: "The target of the feature chain has no name.");
             }
@@ -227,6 +222,26 @@ namespace Mycelium.Fabric.Mcp.Expressions
         private static List<IElement> GetArguments(IExpression expression)
         {
             return (expression.input ?? []).Select(GetValueExpression).ToList();
+        }
+
+        /// <summary>
+        /// Gets the names of the features that a feature chain navigates from its source.
+        /// </summary>
+        /// <param name="chain">The feature chain expression, for example <c>subj.camera.mass</c>.</param>
+        /// <returns>The names, for example <c>camera</c> and <c>mass</c>, with <c>null</c> for a feature that has no name.</returns>
+        private static List<string> GetTargetNames(IFeatureChainExpression chain)
+        {
+            var target = chain.targetFeature;
+
+            if (target == null)
+            {
+                return [GetMemberName(chain)];
+            }
+
+            // A target such as camera.mass is itself a chain of features.
+            var features = target.chainingFeature is { Count: > 0 } chainingFeatures ? chainingFeatures : [target];
+
+            return [.. features.Select(feature => feature.DeclaredName ?? feature.DeclaredShortName)];
         }
 
         /// <summary>

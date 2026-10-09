@@ -34,7 +34,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
             return this.Source.Evaluate(context).Then(source => source is PartValue part
                 ? context.Navigate(part, this.FeatureName)
-                : Error.Validation(description: $"'{this.Source}' gives {source.KindName} ({source}), which has no feature '{this.FeatureName}'."));
+                : Error.Validation(description: $"'{this.Source}' gives {source.Describe()}, which has no feature '{this.FeatureName}'."));
         }
 
         /// <summary>

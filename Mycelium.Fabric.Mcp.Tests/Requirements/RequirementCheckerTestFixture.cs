@@ -167,8 +167,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 new ModelChange { Identity = RequirementIds[1], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "power", Operator = "<", Limit = 70 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[1], SatisfyingPart = PayloadSubsystemId } },
                 new ModelChange { Identity = RequirementIds[3], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 100 } } },
-                .. new[] { 0, 2, 3, 4, 5 }.Select(index =>
-                    new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[index], SatisfyingPart = Eosat1Id } })
+                .. RequirementIds.Where(id => id != RequirementIds[1]).Select(id =>
+                    new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = id, SatisfyingPart = Eosat1Id } })
             ]);
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);

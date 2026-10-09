@@ -121,7 +121,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
         {
             return operand.Evaluate(context).Then(value => value is BooleanValue boolean
                 ? ErrorOrFactory.From(boolean)
-                : Error.Validation(description: $"'{operand}' gives {value.KindName} ({value}), not a Boolean."));
+                : Error.Validation(description: $"'{operand}' gives {value.Describe()}, not a Boolean."));
         }
 
         /// <summary>
@@ -256,7 +256,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 ("#", [var sequence, NumberValue index]) => Index(sequence, index),
                 (_, [NumberValue left, NumberValue right]) when ArithmeticOperators.Contains(this.Operator) => this.Calculate(left, right),
                 (_, [var left, var right]) when ComparisonOperators.TryGetValue(this.Operator, out var comparison) => Compare(left, right, comparison),
-                _ => Error.Validation(description: $"The operator '{this.Operator}' does not apply to {string.Join(" and ", values.Select(value => $"{value.KindName} ({value})"))}.")
+                _ => Error.Validation(description: $"The operator '{this.Operator}' does not apply to {string.Join(" and ", values.Select(value => value.Describe()))}.")
             };
         }
 
@@ -314,14 +314,14 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
             if (comparisonOperator is not ("==" or "!="))
             {
-                return Error.Validation(description: $"{left.KindName} ({left}) and {right.KindName} ({right}) cannot be ordered: only numbers can.");
+                return Error.Validation(description: $"{left.Describe()} and {right.Describe()} cannot be ordered: only numbers can.");
             }
 
             var areEqual = AreEqual(left, right);
 
             if (areEqual == null)
             {
-                return Error.Validation(description: $"{left.KindName} ({left}) cannot be compared with {right.KindName} ({right}).");
+                return Error.Validation(description: $"{left.Describe()} cannot be compared with {right.Describe()}.");
             }
 
             var holds = areEqual.Value == (comparisonOperator == "==");

@@ -55,6 +55,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
         }
 
         [Test]
+        public void VerifyDescribe()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(new NumberValue(38).Describe(), Is.EqualTo("a number (38)"));
+                Assert.That(new TextValue("S-band").Describe(), Is.EqualTo("a text (\"S-band\")"));
+                Assert.That(SequenceValue.Empty.Describe(), Is.EqualTo("a sequence (null)"));
+            }
+        }
+
+        [Test]
         public void VerifyDimension()
         {
             var speed = new Dimension { Length = 1, Time = -1 };
@@ -72,7 +83,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
         [Test]
         public void VerifyUnitJsonConverter()
         {
-            UnitCatalog.TryParse("km/h", out var speed);
+            Assert.That(UnitCatalog.TryParse("km/h", out var speed), Is.True);
 
             using (Assert.EnterMultipleScope())
             {

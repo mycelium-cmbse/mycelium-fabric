@@ -178,7 +178,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// <returns>The new <see cref="LiteralTerm"/>.</returns>
         private static LiteralTerm Number(double number, string unit = null)
         {
-            UnitCatalog.TryParse(unit, out var parsedUnit);
+            if (unit == null)
+            {
+                return new LiteralTerm(new NumberValue(number));
+            }
+
+            Assert.That(UnitCatalog.TryParse(unit, out var parsedUnit), Is.True, unit);
 
             return new LiteralTerm(new NumberValue(number, parsedUnit));
         }
@@ -261,7 +266,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// </summary>
         /// <param name="term">The term.</param>
         /// <returns>The description of the error.</returns>
-        private string ErrorOf(Term term)
+        private string ErrorOf(OperationTerm term)
         {
             var value = term.Evaluate(this.context.Object);
 

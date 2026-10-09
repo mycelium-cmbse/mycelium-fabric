@@ -33,7 +33,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
             return this.Value.Evaluate(context).Then(value => value is NumberValue number
                 ? number.ConvertTo(this.Unit).Then(ModelValue (converted) => converted)
-                : Error.Validation(description: $"'{this.Value}' gives {value.KindName} ({value}), which cannot have the unit {this.Unit}."));
+                : Error.Validation(description: $"'{this.Value}' gives {value.Describe()}, which cannot have the unit {this.Unit}."));
         }
 
         /// <summary>

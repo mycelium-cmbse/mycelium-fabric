@@ -280,7 +280,7 @@ namespace Mycelium.Fabric.Mcp.Requirements
 
             return value.Value is BooleanValue boolean
                 ? new ConstraintOutcome(term.Value, boolean.Value, boolean.Gap, boolean.Explanation ?? $"{term.Value} is {boolean}")
-                : new ConstraintOutcome(term.Value, null, null, $"The constraint gives {value.Value.KindName} ({value.Value}), not a Boolean.");
+                : new ConstraintOutcome(term.Value, null, null, $"The constraint gives {value.Value.Describe()}, not a Boolean.");
         }
 
         /// <summary>

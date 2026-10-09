@@ -99,7 +99,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
         /// <returns>The unit.</returns>
         private static Unit Parse(string text)
         {
-            UnitCatalog.TryParse(text, out var unit);
+            Assert.That(UnitCatalog.TryParse(text, out var unit), Is.True, text);
 
             return unit;
         }

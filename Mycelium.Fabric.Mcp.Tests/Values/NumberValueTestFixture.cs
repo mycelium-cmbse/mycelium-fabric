@@ -200,7 +200,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
         /// <returns>The unit.</returns>
         private static Unit Unit(string symbol)
         {
-            UnitCatalog.TryParse(symbol, out var unit);
+            Assert.That(UnitCatalog.TryParse(symbol, out var unit), Is.True, symbol);
 
             return unit;
         }

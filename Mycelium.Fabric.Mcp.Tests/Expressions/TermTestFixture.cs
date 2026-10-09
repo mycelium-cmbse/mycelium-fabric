@@ -156,7 +156,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// <returns>The unit.</returns>
         private static Unit Unit(string symbol)
         {
-            UnitCatalog.TryParse(symbol, out var unit);
+            Assert.That(UnitCatalog.TryParse(symbol, out var unit), Is.True, symbol);
 
             return unit;
         }
@@ -187,7 +187,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// </summary>
         /// <param name="term">The term.</param>
         /// <returns>The value as text.</returns>
-        private string Value(Term term)
+        private string Value(InvocationTerm term)
         {
             var value = term.Evaluate(this.context.Object);
 
@@ -199,7 +199,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// </summary>
         /// <param name="term">The term.</param>
         /// <returns>The description of the error.</returns>
-        private string ErrorOf(Term term)
+        private string ErrorOf(InvocationTerm term)
         {
             var value = term.Evaluate(this.context.Object);
 

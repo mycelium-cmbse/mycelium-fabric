@@ -625,28 +625,30 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             var problems = result.Errors.Select(error => error.Description).ToList();
 
+            string[] expectedProblems =
+            [
+                "Change 1 (create): The unit 'kg' only applies to a numeric value.",
+                "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, or a name such as kilogram.",
+                "Change 3 (create): The value is empty: give a number, a Boolean or a text.",
+                "Change 4 (create): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
+                "Change 5 (update): The unit 'kg' only applies to a numeric value.",
+                "Change 6 (update): Give either a limit or a limitAttribute, not both.",
+                "Change 7 (update): The path 'mass..limit' has an empty name: write it as 'mass' or 'camera.mass'.",
+                "Change 8 (update): The path '.mass' has an empty name: write it as 'mass' or 'camera.mass'.",
+                "Change 9 (update): A Boolean or text limit can only be compared with '==' or '!=', not with '<'.",
+                "Change 10 (update): A margin cannot be applied with '!='. Use '<=' or '>=' instead.",
+                "Change 11 (update): The unit 'kg' only applies to a numeric value.",
+                "Change 12 (update): The kind of the constraint must be Requirement or Assumption.",
+                "Change 13 (update): A margin in percent only applies to a positive limit: include the margin in the limit instead.",
+                "Change 14 (update): A margin in percent does not apply to a unit with an offset, such as °C: include the margin in the limit instead.",
+                "Change 15 (update): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
+                "Change 16 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text."
+            ];
+
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(result.IsError, Is.True);
-                Assert.That(problems, Is.EqualTo(new[]
-                {
-                    "Change 1 (create): The unit 'kg' only applies to a numeric value.",
-                    "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, or a name such as kilogram.",
-                    "Change 3 (create): The value is empty: give a number, a Boolean or a text.",
-                    "Change 4 (create): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
-                    "Change 5 (update): The unit 'kg' only applies to a numeric value.",
-                    "Change 6 (update): Give either a limit or a limitAttribute, not both.",
-                    "Change 7 (update): The path 'mass..limit' has an empty name: write it as 'mass' or 'camera.mass'.",
-                    "Change 8 (update): The path '.mass' has an empty name: write it as 'mass' or 'camera.mass'.",
-                    "Change 9 (update): A Boolean or text limit can only be compared with '==' or '!=', not with '<'.",
-                    "Change 10 (update): A margin cannot be applied with '!='. Use '<=' or '>=' instead.",
-                    "Change 11 (update): The unit 'kg' only applies to a numeric value.",
-                    "Change 12 (update): The kind of the constraint must be Requirement or Assumption.",
-                    "Change 13 (update): A margin in percent only applies to a positive limit: include the margin in the limit instead.",
-                    "Change 14 (update): A margin in percent does not apply to a unit with an offset, such as °C: include the margin in the limit instead.",
-                    "Change 15 (update): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
-                    "Change 16 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text."
-                }));
+                Assert.That(problems, Is.EqualTo(expectedProblems));
             }
         }
 
