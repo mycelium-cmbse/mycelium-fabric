@@ -35,6 +35,11 @@ namespace Mycelium.Fabric.Mcp.Changes
     public class ModelChangeApplier : IModelChangeApplier
     {
         /// <summary>
+        /// The options of the JSON writer, shared by every copy: the default ones, since the copy is read back at once.
+        /// </summary>
+        private static readonly JsonWriterOptions WriterOptions = new();
+
+        /// <summary>
         /// The <see cref="ISerializer"/> that writes the DTOs to copy.
         /// </summary>
         private readonly ISerializer serializer;
@@ -100,7 +105,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             using var stream = new MemoryStream();
 
-            this.serializer.Serialize(elements, SerializationModeKind.JSON, false, stream, new JsonWriterOptions());
+            this.serializer.Serialize(elements, SerializationModeKind.JSON, false, stream, WriterOptions);
             stream.Position = 0;
 
             return this.deSerializer

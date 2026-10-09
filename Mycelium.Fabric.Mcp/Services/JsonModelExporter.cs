@@ -44,6 +44,11 @@ namespace Mycelium.Fabric.Mcp.Services
         private const int BufferSize = 4096;
 
         /// <summary>
+        /// The options of the JSON writer, shared by every export: indented, so that the written files can be read.
+        /// </summary>
+        private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
+
+        /// <summary>
         /// The <see cref="ISerializer"/> that writes the DTOs to JSON.
         /// </summary>
         private readonly ISerializer serializer;
@@ -120,7 +125,7 @@ namespace Mycelium.Fabric.Mcp.Services
             try
             {
                 await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous);
-                await this.serializer.SerializeAsync(elements, SerializationModeKind.JSON, false, stream, new JsonWriterOptions { Indented = true }, cancellationToken);
+                await this.serializer.SerializeAsync(elements, SerializationModeKind.JSON, false, stream, WriterOptions, cancellationToken);
             }
             catch (OperationCanceledException)
             {

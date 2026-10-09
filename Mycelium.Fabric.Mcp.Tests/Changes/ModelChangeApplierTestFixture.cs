@@ -82,11 +82,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(() => new ModelChangeApplier(null, deSerializer.Object), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => new ModelChangeApplier(serializer.Object, null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object).Apply([], []), Throws.Nothing);
-            }
 
-            serializer.Verify(mock => mock.Serialize(It.IsAny<IEnumerable<IIdentified>>(), SerializationModeKind.JSON, false, It.IsAny<Stream>(), It.IsAny<JsonWriterOptions>()),
-                Times.Once);
-            deSerializer.Verify(mock => mock.DeSerialize(It.IsAny<Stream>(), SerializationModeKind.JSON, SerializationTargetKind.PSM, false), Times.Once);
+                serializer.Verify(mock => mock.Serialize(It.IsAny<IEnumerable<IIdentified>>(), SerializationModeKind.JSON, false, It.IsAny<Stream>(), It.IsAny<JsonWriterOptions>()),
+                    Times.Once);
+                deSerializer.Verify(mock => mock.DeSerialize(It.IsAny<Stream>(), SerializationModeKind.JSON, SerializationTargetKind.PSM, false), Times.Once);
+            }
         }
 
         [Test]
