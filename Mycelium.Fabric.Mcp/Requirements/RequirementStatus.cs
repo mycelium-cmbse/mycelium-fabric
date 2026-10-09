@@ -18,23 +18,25 @@ namespace Mycelium.Fabric.Mcp.Requirements
     public enum RequirementStatus
     {
         /// <summary>
-        /// The constraint of the requirement holds for the part that satisfies it.
+        /// The requirement holds for the part that satisfies it: its required constraints hold, or one of its assumptions
+        /// does not, as in the <c>RequirementCheck</c> of the SysML v2 library.
         /// </summary>
         Satisfied,
 
         /// <summary>
-        /// The constraint of the requirement does not hold for the part that satisfies it.
+        /// The requirement does not hold for the part that satisfies it: its assumptions hold, and one of its required
+        /// constraints does not.
         /// </summary>
         NotSatisfied,
 
         /// <summary>
-        /// The requirement cannot be checked: it has no constraint, or no part satisfies it.
+        /// The requirement cannot be checked: it has no required constraint, or no part satisfies it.
         /// </summary>
         NotVerifiable,
 
         /// <summary>
-        /// The requirement has a constraint and a satisfying part, but the server cannot evaluate it: the constraint has
-        /// another form than <c>attribute operator limit</c>, or the part has no value for the attribute.
+        /// The requirement has a required constraint and a satisfying part, but the server cannot tell whether it holds: a
+        /// constraint is not a comparison that it can evaluate, or the part has no value for an attribute.
         /// </summary>
         NotEvaluated
     }

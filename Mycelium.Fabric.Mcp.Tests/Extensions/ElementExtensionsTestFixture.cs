@@ -19,7 +19,6 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
-    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Parts;
@@ -85,18 +84,6 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(() => ((IElement)null).GetDocumentationBodies(), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(this.camera.GetDocumentationBodies(), Is.Null);
                 Assert.That(this.payloadSubsystem.GetDocumentationBodies(), Is.EqualTo("Payload: the imaging instrument and its data storage."));
-            }
-        }
-
-        [Test]
-        public void VerifyGetLiteralValue()
-        {
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(() => ((IElement)null).GetLiteralValue(), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(new Package().GetLiteralValue(), Is.Null);
-                Assert.That(new LiteralInteger { Value = 55 }.GetLiteralValue(), Is.EqualTo(55));
-                Assert.That(new LiteralRational { Value = 1.5 }.GetLiteralValue(), Is.EqualTo(1.5));
             }
         }
 

@@ -10,7 +10,9 @@
 namespace Mycelium.Fabric.Mcp.Extensions
 {
     using System;
-    using System.Linq;
+
+    using Mycelium.Fabric.Mcp.Expressions;
+    using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.POCO.Kernel.FeatureValues;
     using SysML2.NET.Core.POCO.Systems.Attributes;
@@ -25,22 +27,41 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IAttributeUsage attribute)
         {
             /// <summary>
-            /// Gets the numeric value of the attribute: the literal number bound to it by its <see cref="IFeatureValue"/>
-            /// (for example <c>38</c> for <c>attribute mass = 38;</c>).
+            /// Gets the value bound to the attribute by its <see cref="IFeatureValue"/> when it is written without reading
+            /// other values: a number with or without unit (<c>38</c>, <c>38 [kg]</c>, <c>-20</c>), a Boolean, a text or an
+            /// enumeration value.
             /// </summary>
-            /// <returns>The value of the attribute, or <c>null</c> when it is not bound to a literal number.</returns>
+            /// <returns>The value of the attribute, or <c>null</c> when it has none or when its value reads other values.</returns>
             /// <exception cref="ArgumentNullException">
             /// Thrown when <paramref name="attribute"/> is <c>null</c>.
             /// </exception>
-            public double? GetNumericValue()
+            public ModelValue GetConstantValue()
             {
                 ArgumentNullException.ThrowIfNull(attribute);
 
-                return (attribute.OwnedRelationship ?? [])
-                    .OfType<IFeatureValue>()
-                    .SelectMany(featureValue => featureValue.OwnedRelatedElement ?? [])
-                    .Select(valueElement => valueElement.GetLiteralValue())
-                    .FirstOrDefault(value => value != null);
+                var valueExpression = TermReader.GetValueExpression(attribute);
+
+                if (valueExpression == null)
+                {
+                    return null;
+                }
+
+                var value = TermReader.Read(valueExpression).Then(term => term.Evaluate(ConstantEvaluationContext.Instance));
+
+                return value.IsError ? null : value.Value;
+            }
+
+            /// <summary>
+            /// Gets the numeric value of the attribute, with its unit if it has one (for example <c>38 [kg]</c> for
+            /// <c>attribute mass = 38 [kg];</c>).
+            /// </summary>
+            /// <returns>The value of the attribute, or <c>null</c> when it is not bound to a finite number.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="attribute"/> is <c>null</c>.
+            /// </exception>
+            public NumberValue GetNumericValue()
+            {
+                return attribute.GetConstantValue() is NumberValue { Number: var number } numericValue && double.IsFinite(number) ? numericValue : null;
             }
         }
     }

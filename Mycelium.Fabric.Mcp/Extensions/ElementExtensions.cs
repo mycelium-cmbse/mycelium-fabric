@@ -17,7 +17,6 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
-    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Parts;
@@ -81,26 +80,6 @@ namespace Mycelium.Fabric.Mcp.Extensions
             }
 
             /// <summary>
-            /// Gets the number that the element stands for when it is a literal number: an <see cref="ILiteralRational"/>
-            /// or an <see cref="ILiteralInteger"/> (for example <c>38</c> in <c>attribute mass = 38;</c>).
-            /// </summary>
-            /// <returns>The number, or <c>null</c> when the element is not a literal number.</returns>
-            /// <exception cref="ArgumentNullException">
-            /// Thrown when <paramref name="element"/> is <c>null</c>.
-            /// </exception>
-            public double? GetLiteralValue()
-            {
-                ArgumentNullException.ThrowIfNull(element);
-
-                return element switch
-                {
-                    ILiteralRational literalRational => literalRational.Value,
-                    ILiteralInteger literalInteger => literalInteger.Value,
-                    _ => null
-                };
-            }
-
-            /// <summary>
             /// Gets the attributes of the element: the <see cref="IAttributeUsage"/>s among the features of its
             /// <see cref="IType"/>, owned or inherited (for example the attributes of <c>OpticalCamera</c> for
             /// <c>camera : OpticalCamera</c>).
@@ -118,8 +97,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
             /// <summary>
             /// Collects the contributions of the element and its sub-parts to the sum of an attribute. An element that has a
-            /// numeric value for the attribute, owned or inherited from its types, contributes this value and its own
-            /// sub-parts are not visited, so that no value is counted twice.
+            /// numeric value for the attribute (with or without unit), owned or inherited from its types, contributes this
+            /// value and its own sub-parts are not visited, so that no value is counted twice.
             /// </summary>
             /// <param name="attributeName">The declared name of the attribute.</param>
             /// <returns>The <see cref="Contribution"/> of each contributing part, empty when no part has a value.</returns>
@@ -136,7 +115,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
                 if (value != null)
                 {
-                    return [new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Value)];
+                    return [new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit)];
                 }
 
                 return (element.ownedElement ?? [])

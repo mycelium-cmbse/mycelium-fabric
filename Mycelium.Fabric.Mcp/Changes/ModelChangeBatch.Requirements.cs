@@ -9,6 +9,7 @@
 
 namespace Mycelium.Fabric.Mcp.Changes
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
 
@@ -65,6 +66,22 @@ namespace Mycelium.Fabric.Mcp.Changes
         private const string FeatureChainOperator = ".";
 
         /// <summary>
+        /// The number of decimals of a factor computed from a margin, so that it is written as <c>1.15</c> rather than with
+        /// the rounding noise of a binary floating-point number.
+        /// </summary>
+        private const int MarginFactorDecimalCount = 6;
+
+        /// <summary>
+        /// The separator of the names of a path to an attribute of the subject, such as <c>camera.mass</c>.
+        /// </summary>
+        private const char PathSeparator = '.';
+
+        /// <summary>
+        /// The comparison operators that a constraint can use.
+        /// </summary>
+        private static readonly string[] ComparisonOperators = ["<", "<=", ">", ">=", "==", "!="];
+
+        /// <summary>
         /// Tells whether an element is a requirement, a satisfy link being no requirement of its own.
         /// </summary>
         /// <param name="element">The element to check.</param>
@@ -81,21 +98,40 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the constraint is incomplete or invalid.</exception>
         private static void CheckConstraint(ConstraintPayload constraint)
         {
-            if (string.IsNullOrWhiteSpace(constraint.Attribute))
-            {
-                throw new InvalidChangeException("The attribute of the constraint is missing.");
-            }
+            CheckPath(constraint.Attribute, "The attribute of the constraint is missing.");
 
-            if (!AttributeConstraint.Operators.Contains(constraint.Operator))
+            if (!ComparisonOperators.Contains(constraint.Operator))
             {
-                var supportedOperators = string.Join(", ", AttributeConstraint.Operators.Select(supportedOperator => $"'{supportedOperator}'"));
+                var supportedOperators = string.Join(", ", ComparisonOperators.Select(supportedOperator => $"'{supportedOperator}'"));
 
                 throw new InvalidChangeException($"The operator '{constraint.Operator}' is not supported. Use {supportedOperators}.");
             }
 
-            if (constraint.Limit == null)
+            if (constraint.Kind is { } kind && !Enum.IsDefined(kind))
             {
-                throw new InvalidChangeException("The limit of the constraint is missing.");
+                throw new InvalidChangeException("The kind of the constraint must be Requirement or Assumption.");
+            }
+
+            if (constraint.Limit == null && constraint.LimitAttribute == null)
+            {
+                throw new InvalidChangeException("The limit of the constraint is missing: give a limit or a limitAttribute.");
+            }
+
+            if (constraint.Limit != null && constraint.LimitAttribute != null)
+            {
+                throw new InvalidChangeException("Give either a limit or a limitAttribute, not both.");
+            }
+
+            if (constraint.LimitAttribute != null)
+            {
+                CheckPath(constraint.LimitAttribute, "The limit attribute of the constraint is empty.");
+            }
+
+            CheckValue(constraint.Limit, constraint.Unit);
+
+            if (constraint.Limit is { Number: null } && constraint.Operator is not ("==" or "!="))
+            {
+                throw new InvalidChangeException($"A Boolean or text limit can only be compared with '==' or '!=', not with '{constraint.Operator}'.");
             }
 
             var margin = constraint.Margin ?? 0;
@@ -105,9 +141,40 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("The margin must be 0 or greater.");
             }
 
-            if (margin > 0 && constraint.Operator == "==")
+            if (margin > 0 && constraint.Operator is "==" or "!=")
             {
-                throw new InvalidChangeException("A margin cannot be applied with '=='. Use '<=' or '>=' instead.");
+                throw new InvalidChangeException($"A margin cannot be applied with '{constraint.Operator}'. Use '<=' or '>=' instead.");
+            }
+
+            // A margin multiplies a value or a limit, which makes the constraint harder to meet only for a positive quantity
+            // measured from a true zero.
+            if (margin > 0 && constraint.Limit?.Number <= 0)
+            {
+                throw new InvalidChangeException("A margin in percent only applies to a positive limit: include the margin in the limit instead.");
+            }
+
+            if (margin > 0 && constraint.Unit != null && ParseUnit(constraint.Unit).Offset != 0)
+            {
+                throw new InvalidChangeException($"A margin in percent does not apply to a unit with an offset, such as {constraint.Unit}: include the margin in the limit instead.");
+            }
+        }
+
+        /// <summary>
+        /// Checks a path to an attribute of the subject, such as <c>mass</c> or <c>camera.mass</c>.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <param name="missingMessage">The message when the path is missing.</param>
+        /// <exception cref="InvalidChangeException">Thrown when the path is missing or has an empty name.</exception>
+        private static void CheckPath(string path, string missingMessage)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new InvalidChangeException(missingMessage);
+            }
+
+            if (path.Split(PathSeparator).Any(string.IsNullOrWhiteSpace))
+            {
+                throw new InvalidChangeException($"The path '{path}' has an empty name: write it as 'mass' or 'camera.mass'.");
             }
         }
 
@@ -181,7 +248,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Definition: null, Value: null, Constraint: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.");
             }
@@ -219,29 +286,65 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Gives a requirement a constraint on an attribute of its subject, which replaces its previous required constraints.
-        /// The subject (<c>subj</c>) and its attribute are created when the requirement does not have them yet.
+        /// Gives a requirement a constraint on an attribute of its subject: a required constraint, or an assumption, which
+        /// replaces its previous constraints of the same kind. The subject (<c>subj</c>) and the attributes of the paths are
+        /// created when the requirement does not have them yet.
         /// </summary>
         /// <param name="requirement">The requirement.</param>
         /// <param name="constraint">The constraint, already checked by <see cref="CheckConstraint"/>.</param>
-        /// <exception cref="InvalidChangeException">Thrown when the subject or its attribute must be created but a member already has its name.</exception>
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when the subject or an attribute must be created but a member already has its name, or when a text limit
+        /// names several enumeration values.
+        /// </exception>
         private void SetConstraint(IElement requirement, ConstraintPayload constraint)
         {
+            var kind = constraint.Kind ?? RequirementConstraintKind.Requirement;
             var subject = this.GetOrCreateSubject(requirement);
-            var attribute = this.GetOrCreateSubjectAttribute(subject, constraint.Attribute);
-            var attributeConstraint = AttributeConstraint.WithMargin(subject.DeclaredName, constraint.Attribute, constraint.Operator, constraint.Limit.Value, constraint.Margin ?? 0);
+            var valueOperand = this.CreateSubjectPath(subject, constraint.Attribute);
 
-            this.RemoveRequiredConstraints(requirement);
+            var limitOperand = constraint.LimitAttribute == null
+                ? this.CreateValueExpression(constraint.Limit.Value, constraint.Unit)
+                : this.CreateSubjectPath(subject, constraint.LimitAttribute);
+
+            this.RemoveConstraints(requirement, kind);
 
             var constraintUsage = this.Add(new ConstraintUsage { IsComposite = true });
-            var constraintMembership = new RequirementConstraintMembership { Kind = RequirementConstraintKind.Requirement, Visibility = VisibilityKind.Public };
+            var constraintMembership = new RequirementConstraintMembership { Kind = kind, Visibility = VisibilityKind.Public };
             this.AddOwnedRelationship(requirement, constraintMembership, constraintUsage);
 
-            var valueOperand = this.MultiplyBy(this.CreateFeatureChain(subject, attribute), attributeConstraint.ValueFactor);
-            var limitOperand = this.MultiplyBy(this.Add(new LiteralRational { Value = attributeConstraint.Limit }), attributeConstraint.LimitFactor);
-            var comparison = this.CreateOperation(attributeConstraint.Operator, valueOperand, limitOperand);
+            // The margin always makes the constraint harder to meet: it multiplies the value for an upper limit
+            // (subj.mass * 1.2 <= 150) and the limit for a lower limit (subj.capacity >= 300 * 1.2).
+            double? marginFactor = constraint.Margin > 0 ? Math.Round(1 + constraint.Margin.Value / 100, MarginFactorDecimalCount) : null;
+            var isUpperLimit = constraint.Operator is "<" or "<=";
+
+            var comparison = this.CreateOperation(constraint.Operator, this.MultiplyBy(valueOperand, isUpperLimit ? marginFactor : null),
+                this.MultiplyBy(limitOperand, isUpperLimit ? null : marginFactor));
 
             this.AddOwnedRelationship(constraintUsage, new ResultExpressionMembership { Visibility = VisibilityKind.Public }, comparison);
+        }
+
+        /// <summary>
+        /// Creates the expression of a path to an attribute of the subject, for example <c>subj.camera.mass</c> for
+        /// <c>camera.mass</c>. The features of the path are created in the subject when it does not have them yet.
+        /// </summary>
+        /// <param name="subject">The subject of the requirement.</param>
+        /// <param name="path">The path, already checked by <see cref="CheckPath"/>.</param>
+        /// <returns>The feature chain expression.</returns>
+        /// <exception cref="InvalidChangeException">Thrown when a feature must be created but a member already has its name.</exception>
+        private IElement CreateSubjectPath(IElement subject, string path)
+        {
+            var names = path.Split(PathSeparator).Select(name => name.Trim()).ToList();
+            var owner = subject;
+            IElement expression = this.CreateReferenceOperand(subject);
+
+            for (var index = 0; index < names.Count; index++)
+            {
+                var feature = this.GetOrCreateSubjectMember(owner, names[index], index == names.Count - 1);
+                expression = this.CreateFeatureChain(expression, feature);
+                owner = feature;
+            }
+
+            return expression;
         }
 
         /// <summary>
@@ -306,52 +409,56 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Gets the attribute of the subject of a requirement that has the given name, owned by the subject or by one of
-        /// its definitions, and creates it in the subject when there is none: the requirement then states that its subject
-        /// has this attribute.
+        /// Gets the feature of the subject of a requirement (or of a feature of the subject) that has the given name, owned
+        /// by it or by one of its definitions, and creates it when there is none: the requirement then states that its
+        /// subject has this feature. The last name of a path is an attribute (<c>attribute mass;</c>), the others are
+        /// references to sub-parts (<c>ref camera;</c>).
         /// </summary>
-        /// <param name="subject">The subject of the requirement.</param>
-        /// <param name="attributeName">The name of the attribute.</param>
-        /// <returns>The attribute of the subject.</returns>
-        /// <exception cref="InvalidChangeException">Thrown when the attribute must be created but a member already has its name.</exception>
-        private IElement GetOrCreateSubjectAttribute(IElement subject, string attributeName)
+        /// <param name="owner">The subject, or a feature of the subject.</param>
+        /// <param name="name">The name of the feature.</param>
+        /// <param name="isAttribute">Whether the feature is an attribute, at the end of the path.</param>
+        /// <returns>The feature.</returns>
+        /// <exception cref="InvalidChangeException">Thrown when the feature must be created but a member already has its name.</exception>
+        private IElement GetOrCreateSubjectMember(IElement owner, string name, bool isAttribute)
         {
-            var definitions = this.GetElements(subject.OwnedRelationship)
+            var definitions = this.GetElements(owner.OwnedRelationship)
                 .OfType<IFeatureTyping>()
                 .Select(typing => this.elementsById.GetValueOrDefault(typing.Type))
                 .Where(definition => definition != null);
 
-            var attribute = definitions
-                .Prepend(subject)
+            var member = definitions
+                .Prepend(owner)
                 .SelectMany(this.GetOwnedMembers)
-                .OfType<IAttributeUsage>()
-                .FirstOrDefault(candidate => candidate.DeclaredName == attributeName);
+                .OfType<IFeature>()
+                .FirstOrDefault(candidate => candidate.DeclaredName == name && (!isAttribute || candidate is IAttributeUsage));
 
-            if (attribute != null)
+            if (member != null)
             {
-                return attribute;
+                return member;
             }
 
-            this.CheckNameIsFree(subject, attributeName);
+            this.CheckNameIsFree(owner, name);
 
-            var newAttribute = this.Add(new AttributeUsage { DeclaredName = attributeName });
-            this.AddOwnedRelationship(subject, new FeatureMembership { Visibility = VisibilityKind.Public }, newAttribute);
+            IElement newMember = isAttribute ? new AttributeUsage { DeclaredName = name } : new ReferenceUsage { DeclaredName = name };
+            this.AddOwnedRelationship(owner, new FeatureMembership { Visibility = VisibilityKind.Public }, this.Add(newMember));
 
-            return newAttribute;
+            return newMember;
         }
 
         /// <summary>
-        /// Removes the required constraints of a requirement, with everything they own. Its assumed constraints are kept.
+        /// Removes the constraints of a requirement of one kind (required constraints or assumptions), with everything they
+        /// own. Its constraints of the other kind are kept.
         /// </summary>
         /// <param name="requirement">The requirement.</param>
-        private void RemoveRequiredConstraints(IElement requirement)
+        /// <param name="kind">The kind of the constraints to remove.</param>
+        private void RemoveConstraints(IElement requirement, RequirementConstraintKind kind)
         {
-            var requiredConstraintMemberships = this.GetElements(requirement.OwnedRelationship)
+            var constraintMemberships = this.GetElements(requirement.OwnedRelationship)
                 .OfType<IRequirementConstraintMembership>()
-                .Where(membership => membership.Kind == RequirementConstraintKind.Requirement)
+                .Where(membership => membership.Kind == kind)
                 .ToList();
 
-            foreach (var membership in requiredConstraintMemberships)
+            foreach (var membership in constraintMemberships)
             {
                 this.RemoveTree(membership);
             }
@@ -377,21 +484,32 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates the expression <c>source.target</c>, for example <c>subj.mass</c>: a <c>FeatureChainExpression</c> whose
-        /// argument references the source and whose target feature is the target.
+        /// argument is the source expression and whose target feature is the target.
         /// </summary>
-        /// <param name="source">The feature at the start of the chain.</param>
-        /// <param name="target">The feature of the source at the end of the chain.</param>
+        /// <param name="source">The expression at the start of the chain, for example a reference to the subject.</param>
+        /// <param name="target">The feature at the end of the chain.</param>
         /// <returns>The new expression.</returns>
         private FeatureChainExpression CreateFeatureChain(IElement source, IElement target)
         {
-            var sourceReference = this.CreateFeatureReference(source);
-            this.AddEmptyResult(sourceReference);
-
             var chain = this.Add(new FeatureChainExpression { Operator = FeatureChainOperator });
-            this.AddArgument(chain, sourceReference);
+            this.AddArgument(chain, source);
             this.AddOwnedRelationship(chain, new Membership { MemberElement = target.Id, Visibility = VisibilityKind.Public });
 
             return chain;
+        }
+
+        /// <summary>
+        /// Creates an expression that references a feature as an operand, for example <c>subj</c> in <c>subj.mass</c>: a
+        /// <c>FeatureReferenceExpression</c> with the empty result parameter that the textual notation gives it.
+        /// </summary>
+        /// <param name="feature">The referenced feature.</param>
+        /// <returns>The new expression.</returns>
+        private FeatureReferenceExpression CreateReferenceOperand(IElement feature)
+        {
+            var reference = this.CreateFeatureReference(feature);
+            this.AddEmptyResult(reference);
+
+            return reference;
         }
 
         /// <summary>

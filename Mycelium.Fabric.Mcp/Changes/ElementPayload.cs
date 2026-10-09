@@ -48,10 +48,16 @@ namespace Mycelium.Fabric.Mcp.Changes
         public string Definition { get; init; }
 
         /// <summary>
-        /// Gets the numeric value of the element, which must be an attribute.
+        /// Gets the value of the element, which must be an attribute.
         /// </summary>
-        [Description("Create or update, for an attribute: its numeric value, for example 38 or 1.5. An update replaces the current value.")]
-        public double? Value { get; init; }
+        [Description("Create or update, for an attribute: its value, a number (38 or 1.5), a Boolean (true) or a text ('S-band'); a text that names an enumeration value of the model ('sunSynchronous' or 'OrbitKind::sunSynchronous') references it. An update replaces the current value.")]
+        public PayloadValue? Value { get; init; }
+
+        /// <summary>
+        /// Gets the unit of the numeric value of the element.
+        /// </summary>
+        [Description("Optional, with a numeric value: its unit, as a symbol (kg, W, km/h, m/s^2, arcsec, kWh, Mbit/s) or a name (kilogram). The value is then 38 [kg], and the budgets and checks convert the units.")]
+        public string Unit { get; init; }
 
         /// <summary>
         /// Gets the documentation of the element, which is the text of a requirement.
@@ -68,7 +74,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the constraint that makes the requirement verifiable.
         /// </summary>
-        [Description("Create or update, for a RequirementUsage: the constraint that makes it verifiable, on an attribute of its subject. It replaces the current required constraint.")]
+        [Description("Create or update, for a RequirementUsage: a constraint that makes it verifiable (a required constraint, or an assumption with kind Assumption), on an attribute of its subject. It replaces the current constraints of the same kind.")]
         public ConstraintPayload Constraint { get; init; }
 
         /// <summary>

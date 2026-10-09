@@ -10,24 +10,19 @@
 namespace Mycelium.Fabric.Mcp.Tests.Extensions
 {
     using System;
-    using System.IO;
     using System.Linq;
 
-    using Mycelium.Fabric.Mcp.Changes;
-    using Mycelium.Fabric.Mcp.Extensions;
-    using Mycelium.Fabric.Mcp.Requirements;
-    using Mycelium.Fabric.Mcp.Services;
+    using ErrorOr;
 
-    using SysML2.NET.Core.Core.Types;
-    using SysML2.NET.Core.POCO.Core.Features;
-    using SysML2.NET.Core.POCO.Kernel.Behaviors;
-    using SysML2.NET.Core.POCO.Kernel.Expressions;
-    using SysML2.NET.Core.POCO.Kernel.FeatureValues;
-    using SysML2.NET.Core.POCO.Kernel.Functions;
-    using SysML2.NET.Core.POCO.Root.Elements;
+    using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Expressions;
+    using Mycelium.Fabric.Mcp.Extensions;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
+
     using SysML2.NET.Core.POCO.Systems.Constraints;
-    using SysML2.NET.Core.POCO.Systems.Requirements;
-    using SysML2.NET.Extensions;
+    using SysML2.NET.Core.Systems.Requirements;
+
+    using ConstraintUsageDto = SysML2.NET.Core.DTO.Systems.Constraints.ConstraintUsage;
 
     /// <summary>
     /// Suite of tests for the <see cref="ConstraintUsageExtensions"/> class.
@@ -40,71 +35,51 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         /// </summary>
         private static readonly Guid MassBudgetId = Guid.Parse("6b93c533-0395-7e18-1bf6-4475deb47ba5");
 
-        [Test]
-        public void VerifyGetAttributeConstraint()
-        {
-            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier());
-            modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
-            modelProvider.ApplyChanges([new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } }]);
+        /// <summary>
+        /// The <c>Id</c> of the <c>eclipseEnergy</c> requirement (REQ-SYS-006) in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid EclipseEnergyId = Guid.Parse("4c3c1285-20ba-ed54-45b3-f54699899da3");
 
-            var builtConstraint = ((IRequirementUsage)modelProvider.GetElementById(MassBudgetId)).requiredConstraint.Single();
+        [Test]
+        public void VerifyGetTerm()
+        {
+            var model = ModelDtoHelper.ReadSatelliteDtos();
+
+            var result = new ModelChangeApplier().Apply(model,
+            [
+                new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
+                new ModelChange { Identity = EclipseEnergyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 } } }
+            ]);
+
+            var dtos = CommitRequestHelper.Apply(model, result.Value);
+            var builtConstraints = result.Value.Change.Select(dataVersion => dataVersion.Payload).OfType<ConstraintUsageDto>().ToList();
+
+            var builder = new ConstraintDtoBuilder(dtos);
+            var subject = builder.GetSubject(MassBudgetId);
+            var parser = new ConstraintTextParser(builder, name => name == "subj" ? subject.Id : null);
+
+            const string text = "if subj.isRedundant ? subj.fuelLevel >= subj.fuelTankCapacity * 0.9 else max(subj.mass, 100 [kg]) < 150 [kg] and not (subj.band == \"S-band\")";
+            var textConstraint = builder.Constraint(MassBudgetId, RequirementConstraintKind.Assumption, parser.Parse(text));
+            var emptyConstraint = builder.Constraint(MassBudgetId, RequirementConstraintKind.Requirement, null);
+            var unresolvedConstraint = builder.Constraint(MassBudgetId, RequirementConstraintKind.Requirement, parser.Parse("vehicle.mass <= 150"));
+
+            var elements = ModelDtoHelper.Assemble(dtos).ToDictionary(element => element.Id);
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => ((IConstraintUsage)null).GetAttributeConstraint(), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(new ConstraintUsage().GetAttributeConstraint(), Is.Null);
-                Assert.That(builtConstraint.GetAttributeConstraint(), Is.EqualTo(new AttributeConstraint("subj", "mass", 1.2, "<=", 150, null)));
-
-                // Expressions of other forms.
-                Assert.That(CreateConstraint(CreateOperation("+", Literal(1), Literal(2))).GetAttributeConstraint(), Is.Null);
-                Assert.That(CreateConstraint(CreateOperation("<=", Literal(1))).GetAttributeConstraint(), Is.Null);
-                Assert.That(CreateConstraint(CreateOperation("<=", Literal(1), Literal(2))).GetAttributeConstraint(), Is.Null);
-                Assert.That(CreateConstraint(CreateOperation("<=", CreateOperation("*", Literal(1), new FeatureReferenceExpression()), Literal(2))).GetAttributeConstraint(), Is.Null);
-                Assert.That(CreateConstraint(CreateOperation("<=", CreateOperation("*", Literal(1)), Literal(2))).GetAttributeConstraint(), Is.Null);
+                Assert.That(() => ((IConstraintUsage)null).GetTerm(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(Read(builtConstraints[0]).Value.ToString(), Is.EqualTo("subj.mass * 1.2 <= 150"));
+                Assert.That(Read(builtConstraints[1]).Value.ToString(), Is.EqualTo("subj.capacity >= 300 * 1.2"));
+                Assert.That(Read(textConstraint).Value.ToString(), Is.EqualTo(text));
+                Assert.That(Read(emptyConstraint).FirstError.Description, Is.EqualTo("The constraint has no expression."));
+                Assert.That(Read(unresolvedConstraint).FirstError.Description, Is.EqualTo("The reference to 'vehicle' does not resolve to an element of the model."));
             }
-        }
 
-        /// <summary>
-        /// Creates a constraint whose expression is the given one.
-        /// </summary>
-        /// <param name="expression">The expression of the constraint.</param>
-        /// <returns>The new <see cref="ConstraintUsage"/>.</returns>
-        private static ConstraintUsage CreateConstraint(IElement expression)
-        {
-            var constraint = new ConstraintUsage();
-            constraint.AssignOwnership(new ResultExpressionMembership(), expression);
-
-            return constraint;
-        }
-
-        /// <summary>
-        /// Creates an operation whose arguments are the values of its input parameters.
-        /// </summary>
-        /// <param name="operatorSymbol">The operator.</param>
-        /// <param name="arguments">The arguments.</param>
-        /// <returns>The new <see cref="OperatorExpression"/>.</returns>
-        private static OperatorExpression CreateOperation(string operatorSymbol, params IElement[] arguments)
-        {
-            var operation = new OperatorExpression { Operator = operatorSymbol };
-
-            foreach (var argument in arguments)
+            // Reads a constraint of the model as a term.
+            ErrorOr<Term> Read(ConstraintUsageDto constraint)
             {
-                var parameter = new Feature { Direction = FeatureDirectionKind.In };
-                operation.AssignOwnership(new ParameterMembership(), parameter);
-                parameter.AssignOwnership(new FeatureValue(), argument);
+                return ((IConstraintUsage)elements[constraint.Id]).GetTerm();
             }
-
-            return operation;
-        }
-
-        /// <summary>
-        /// Creates a literal number.
-        /// </summary>
-        /// <param name="value">The value of the literal.</param>
-        /// <returns>The new <see cref="LiteralRational"/>.</returns>
-        private static LiteralRational Literal(double value)
-        {
-            return new LiteralRational { Value = value };
         }
     }
 }

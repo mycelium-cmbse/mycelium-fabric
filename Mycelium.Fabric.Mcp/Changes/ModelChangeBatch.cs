@@ -303,6 +303,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var definition = payload.Definition == null ? null : this.ResolveDefinition(member, payload.Definition);
 
+            CheckValue(payload.Value, payload.Unit);
+
             if (payload.Value != null)
             {
                 CheckCanHaveValue(member);
@@ -323,7 +325,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (payload.Value != null)
             {
-                this.AddValue(member, payload.Value.Value);
+                this.AddValue(member, payload.Value.Value, payload.Unit);
             }
 
             this.SetRequirementProperties(member, payload);
@@ -359,7 +361,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (payload.Value != null)
             {
                 this.RemoveOwnedRelationships<IFeatureValue>(element);
-                this.AddValue(element, payload.Value.Value);
+                this.AddValue(element, payload.Value.Value, payload.Unit);
             }
 
             if (payload.Text != null)
@@ -384,6 +386,8 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 throw new InvalidChangeException("An update cannot change the owner of an element: delete the element and create it again in its new owner.");
             }
+
+            CheckValue(payload.Value, payload.Unit);
 
             if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null } && string.IsNullOrWhiteSpace(payload.ReqId))
             {
@@ -679,17 +683,6 @@ namespace Mycelium.Fabric.Mcp.Changes
         private void AddDocumentation(IElement element, string text)
         {
             this.AddOwnedRelationship(element, new OwningMembership { Visibility = VisibilityKind.Public }, this.Add(new Documentation { Body = text }));
-        }
-
-        /// <summary>
-        /// Binds an attribute to a numeric value, as <c>mass = 38</c> does: a <c>FeatureValue</c> that owns a
-        /// <c>LiteralRational</c>.
-        /// </summary>
-        /// <param name="attribute">The attribute.</param>
-        /// <param name="value">The value of the attribute.</param>
-        private void AddValue(IElement attribute, double value)
-        {
-            this.AddOwnedRelationship(attribute, new FeatureValue { Visibility = VisibilityKind.Public }, this.Add(new LiteralRational { Value = value }));
         }
 
         /// <summary>

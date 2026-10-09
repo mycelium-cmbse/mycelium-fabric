@@ -12,6 +12,8 @@ namespace Mycelium.Fabric.Mcp.Tools
     using System;
     using System.Collections.Generic;
 
+    using Mycelium.Fabric.Mcp.Values;
+
     /// <summary>
     /// The value that one part adds to the total computed by the <c>sum_attribute</c> tool.
     /// </summary>
@@ -19,5 +21,6 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="QualifiedName">The qualified name of the part.</param>
     /// <param name="Types">The declared names of the types of the part, empty when it is not typed.</param>
     /// <param name="Value">The value of the attribute for the part.</param>
-    public sealed record Contribution(Guid Id, string QualifiedName, IReadOnlyList<string> Types, double Value);
+    /// <param name="Unit">The unit of the value, or <c>null</c> when it has none.</param>
+    public sealed record Contribution(Guid Id, string QualifiedName, IReadOnlyList<string> Types, double Value, Unit Unit = null);
 }

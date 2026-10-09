@@ -192,6 +192,53 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             }
         }
 
+        [Test]
+        public void Budgets_WithUnits_ConvertTheValues()
+        {
+            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+            var massMemoryId = satelliteModelProvider.Elements.Single(element => element.DeclaredName == "massMemory").Id;
+
+            var result = satelliteModelProvider.ApplyChanges(
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "dataVolume", Value = 2, Unit = "GB" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = massMemoryId.ToString(), Name = "dataVolume", Value = 512, Unit = "MB" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "heat", Value = 5, Unit = "W" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = massMemoryId.ToString(), Name = "heat", Value = 2, Unit = "kg" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "isRedundant", Value = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "band", Value = "S-band" } }
+            ]);
+
+            var tools = new BudgetTools(satelliteModelProvider);
+            var dataVolume = tools.SumAttribute(PayloadSubsystemId, "dataVolume");
+            var whatIf = tools.EvaluateWhatIf(PayloadSubsystemId, "dataVolume", massMemoryId, 1024);
+            var cameraAttributes = tools.GetAttributeValues(CameraId).Attributes.ToDictionary(attribute => attribute.Name);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True);
+                Assert.That(dataVolume.Total, Is.EqualTo(2.512));
+                Assert.That(dataVolume.Unit.Symbol, Is.EqualTo("GB"));
+                Assert.That(dataVolume.Contributions.Select(contribution => $"{contribution.Value} {contribution.Unit}"), Is.EquivalentTo(["2 GB", "512 MB"]));
+                Assert.That(() => tools.SumAttribute(PayloadSubsystemId, "heat"), Throws.TypeOf<McpException>().With.Message.EqualTo("Cannot add 5 [W] and 2 [kg]: their units have different dimensions."));
+                Assert.That(whatIf.OldValue, Is.EqualTo(512));
+                Assert.That(whatIf.NewValue, Is.EqualTo(1024));
+                Assert.That(whatIf.ValueUnit.Symbol, Is.EqualTo("MB"));
+                Assert.That(whatIf.CurrentTotal, Is.EqualTo(2.512));
+                Assert.That(whatIf.NewTotal, Is.EqualTo(3.024));
+                Assert.That(whatIf.Difference, Is.EqualTo(0.512));
+                Assert.That(whatIf.TotalUnit.Symbol, Is.EqualTo("GB"));
+                Assert.That(cameraAttributes["mass"].Value, Is.EqualTo(38));
+                Assert.That(cameraAttributes["mass"].Unit, Is.Null);
+                Assert.That(cameraAttributes["dataVolume"].Value, Is.EqualTo(2));
+                Assert.That(cameraAttributes["dataVolume"].Unit.Symbol, Is.EqualTo("GB"));
+                Assert.That(cameraAttributes["dataVolume"].ValueText, Is.Null);
+                Assert.That(cameraAttributes["isRedundant"].Value, Is.Null);
+                Assert.That(cameraAttributes["isRedundant"].ValueText, Is.EqualTo("true"));
+                Assert.That(cameraAttributes["band"].ValueText, Is.EqualTo("\"S-band\""));
+            }
+        }
+
         /// <summary>
         /// Creates <see cref="BudgetTools"/> that work on the <c>Satellite.json</c> test model.
         /// </summary>

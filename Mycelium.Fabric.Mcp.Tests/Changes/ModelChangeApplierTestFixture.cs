@@ -18,7 +18,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
+    using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
+    using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
@@ -27,6 +29,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Core.POCO.Systems.Requirements;
     using SysML2.NET.Core.Root.Namespaces;
+    using SysML2.NET.Core.Systems.Requirements;
     using SysML2.NET.Dal;
     using SysML2.NET.Serializer.Json;
 
@@ -80,6 +83,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         /// The <c>Id</c> of the <c>eclipseEnergy</c> requirement (REQ-SYS-006) in <c>Satellite.json</c>.
         /// </summary>
         private static readonly Guid EclipseEnergyId = Guid.Parse("4c3c1285-20ba-ed54-45b3-f54699899da3");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>eosat1</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid Eosat1Id = Guid.Parse("5d06ef4d-4489-500c-e94f-a8cf563d3fc1");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>payloadPower</c> requirement (REQ-SYS-002) in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid PayloadPowerId = Guid.Parse("d17c3498-3404-4a62-9728-c58e59a4954f");
+
+        /// <summary>
+        /// The <c>Id</c> of the requirement REQ-SYS-003 in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid PointingAccuracyId = Guid.Parse("24253a34-a8ba-fc0a-0dba-e5e83d42bd5f");
+
+        /// <summary>
+        /// The <c>Id</c> of the requirement REQ-SYS-004 in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid ReactionWheelsId = Guid.Parse("a2c360e5-0019-9ec5-031e-14eadfab77b8");
 
         private ModelChangeApplier applier;
 
@@ -159,7 +182,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(package.qualifiedName, Is.EqualTo("Spacecraft"));
                 Assert.That(definition.GetDocumentationBodies(), Is.EqualTo("Optical camera."));
                 Assert.That(definition.feature, Is.EqualTo([mass]));
-                Assert.That(mass.GetNumericValue(), Is.EqualTo(38));
+                Assert.That(mass.GetNumericValue().Number, Is.EqualTo(38));
                 Assert.That(mass.GetDocumentationBodies(), Is.EqualTo("Dry mass of the unit [kg]."));
                 Assert.That(mass.IsComposite, Is.False);
                 Assert.That(camera.qualifiedName, Is.EqualTo("Spacecraft::camera"));
@@ -218,7 +241,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(deletions.TrueForAll(dataVersion => originalIds.Contains(dataVersion.Identity.Id)), Is.True);
                 Assert.That(camera.DeclaredName, Is.EqualTo("mainCamera"));
                 Assert.That(camera.GetTypeNames(), Is.EqualTo(["SmallCamera"]));
-                Assert.That(mass.GetNumericValue(), Is.EqualTo(35.5));
+                Assert.That(mass.GetNumericValue().Number, Is.EqualTo(35.5));
                 Assert.That(mass.GetDocumentationBodies(), Is.EqualTo("Dry mass [kg]."));
                 Assert.That(elements, Has.Count.EqualTo(model.Count + 2));
             }
@@ -379,7 +402,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(cameraMass.subjectParameter.DeclaredName, Is.EqualTo("subj"));
                 Assert.That(cameraMass.subjectParameter.feature.Select(feature => feature.DeclaredName), Is.EqualTo(["mass"]));
                 Assert.That(cameraMass.requiredConstraint, Has.Count.EqualTo(1));
-                Assert.That(cameraMass.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.mass * 1.1 <= 40"));
+                Assert.That(cameraMass.requiredConstraint[0].GetTerm().Value.ToString(), Is.EqualTo("subj.mass * 1.1 <= 40"));
                 Assert.That(satisfy.owner, Is.SameAs(cameraMass.owner));
                 Assert.That(satisfy.GetDocumentationBodies(), Is.EqualTo("The camera alone carries this mass."));
                 Assert.That(satisfy.satisfiedRequirement, Is.SameAs(cameraMass));
@@ -387,7 +410,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(eclipseEnergy.ReqId, Is.EqualTo("REQ-SYS-006"));
                 Assert.That(eclipseEnergy.subjectParameter.feature.Select(feature => feature.DeclaredName), Is.EqualTo(["capacity", "mass"]));
                 Assert.That(eclipseEnergy.requiredConstraint, Has.Count.EqualTo(1));
-                Assert.That(eclipseEnergy.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.mass == 5.8"));
+                Assert.That(eclipseEnergy.requiredConstraint[0].GetTerm().Value.ToString(), Is.EqualTo("subj.mass == 5.8"));
             }
 
             // The constraints are replaced, and the attributes are reused: the one of the subject, or the one of its definition
@@ -413,9 +436,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(replacement.IsError, Is.False);
                 Assert.That(eclipseEnergy.subjectParameter.feature, Has.Count.EqualTo(2));
                 Assert.That(eclipseEnergy.requiredConstraint, Has.Count.EqualTo(1));
-                Assert.That(eclipseEnergy.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.capacity >= 300 * 1.2"));
+                Assert.That(eclipseEnergy.requiredConstraint[0].GetTerm().Value.ToString(), Is.EqualTo("subj.capacity >= 300 * 1.2"));
                 Assert.That(cameraMass.subjectParameter.ownedFeature.Select(feature => feature.DeclaredName), Is.EqualTo(["mass"]));
-                Assert.That(cameraMass.requiredConstraint[0].GetAttributeConstraint().ToString(), Is.EqualTo("subj.power <= 60"));
+                Assert.That(cameraMass.requiredConstraint[0].GetTerm().Value.ToString(), Is.EqualTo("subj.power <= 60"));
             }
 
             // A part that satisfies a requirement can only be deleted with its satisfy link.
@@ -471,8 +494,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(problems[1], Is.EqualTo("Change 2 (update): Only a requirement has a reqId or a constraint, not the PartUsage 'camera'."));
                 Assert.That(problems[2], Is.EqualTo($"Change 3 (update): Only a requirement has a reqId or a constraint, not the SatisfyRequirementUsage {satisfyDto.Id}."));
                 Assert.That(problems[3], Is.EqualTo("Change 4 (update): The attribute of the constraint is missing."));
-                Assert.That(problems[4], Is.EqualTo("Change 5 (update): The operator '=<' is not supported. Use '<', '<=', '>', '>=', '=='."));
-                Assert.That(problems[5], Is.EqualTo("Change 6 (update): The limit of the constraint is missing."));
+                Assert.That(problems[4], Is.EqualTo("Change 5 (update): The operator '=<' is not supported. Use '<', '<=', '>', '>=', '==', '!='."));
+                Assert.That(problems[5], Is.EqualTo("Change 6 (update): The limit of the constraint is missing: give a limit or a limitAttribute."));
                 Assert.That(problems[6], Is.EqualTo("Change 7 (update): The margin must be 0 or greater."));
                 Assert.That(problems[7], Is.EqualTo("Change 8 (update): A margin cannot be applied with '=='. Use '<=' or '>=' instead."));
                 Assert.That(problems[8], Is.EqualTo("Change 9 (create): The satisfying part must be a part, not the Package 'Requirements'."));
@@ -481,6 +504,126 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(problems[11], Does.StartWith("Change 13 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part"));
                 Assert.That(problems[12], Does.StartWith("Change 14 (create): The satisfied requirement and the satisfying part only apply to the creation of a SatisfyRequirementUsage."));
                 Assert.That(problems[13], Is.EqualTo($"Change 15 (create): The Package 'Requirements' already has a member named 'massBudget', whose identifier is {MassBudgetId}."));
+            }
+        }
+
+        [Test]
+        public void Apply_WithConstraintsAndValuesOfEveryForm_BuildsTheExpressions()
+        {
+            var dtos = ReadSatelliteDtos();
+            new ConstraintDtoBuilder(dtos).Enumeration(RequirementsPackageId, "OrbitKind", "sunSynchronous", "polar");
+
+            var result = this.applier.Apply(dtos,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "isRedundant", Value = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "band", Value = "S-band" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "heat", Value = 5, Unit = "W" } },
+                new ModelChange { Identity = "orbit", Payload = new ElementPayload { Type = "AttributeUsage", Owner = Eosat1Id.ToString(), Name = "orbit", Value = "OrbitKind::sunSynchronous" } },
+                new ModelChange { Identity = "orbit", Payload = new ElementPayload { Value = "polar" } },
+                new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "payloadSubsystem.camera.mass", Operator = "<=", Limit = 40, Unit = "kg" } } },
+                new ModelChange
+                {
+                    Identity = MassBudgetId.ToString(),
+                    Payload = new ElementPayload { Constraint = new ConstraintPayload { Kind = RequirementConstraintKind.Assumption, Attribute = "orbit", Operator = "==", Limit = "sunSynchronous" } }
+                },
+                new ModelChange
+                {
+                    Identity = MassBudgetId.ToString(),
+                    Payload = new ElementPayload { Constraint = new ConstraintPayload { Kind = RequirementConstraintKind.Assumption, Attribute = "orbit", Operator = "!=", Limit = "OrbitKind::polar" } }
+                },
+                new ModelChange { Identity = EclipseEnergyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "fuelLevel", Operator = ">=", LimitAttribute = "fuelTankCapacity", Margin = 10 } } },
+                new ModelChange { Identity = PayloadPowerId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "payloadSubsystem.camera.isRedundant", Operator = "==", Limit = true } } },
+                new ModelChange { Identity = PointingAccuracyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "band", Operator = "!=", Limit = "X-band" } } },
+                new ModelChange { Identity = ReactionWheelsId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "temperature", Operator = ">=", Limit = -20, Unit = "°C" } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = Eosat1Id.ToString() } }
+            ]);
+
+            var model = CommitRequestHelper.Apply(dtos, result.Value);
+            var elements = Assemble(model);
+            var camera = elements[CameraId].GetAttributeUsages().ToDictionary(attribute => attribute.DeclaredName);
+            var orbit = elements[Eosat1Id].GetAttributeUsages().Single(attribute => attribute.DeclaredName == "orbit");
+            var massBudget = (IRequirementUsage)elements[MassBudgetId];
+            var check = new RequirementChecker(elements.Values).CheckRequirements().Single(requirementCheck => requirementCheck.ReqId == "REQ-SYS-001");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(camera["isRedundant"].GetConstantValue(), Is.EqualTo(new BooleanValue(true)));
+                Assert.That(camera["band"].GetConstantValue(), Is.EqualTo(new TextValue("S-band")));
+                Assert.That(camera["heat"].GetConstantValue().ToString(), Is.EqualTo("5 [W]"));
+                Assert.That(orbit.GetConstantValue(), Is.EqualTo(new EnumValue("polar")));
+                Assert.That(massBudget.subjectParameter.ownedFeature.Select(feature => feature.DeclaredName), Is.EqualTo(["payloadSubsystem", "orbit"]));
+                Assert.That(massBudget.requiredConstraint.Single().GetTerm().Value.ToString(), Is.EqualTo("subj.payloadSubsystem.camera.mass <= 40 [kg]"));
+                Assert.That(massBudget.assumedConstraint.Single().GetTerm().Value.ToString(), Is.EqualTo("subj.orbit != OrbitKind::polar"));
+                Assert.That(Constraint(EclipseEnergyId), Is.EqualTo("subj.fuelLevel >= subj.fuelTankCapacity * 1.1"));
+                Assert.That(Constraint(PayloadPowerId), Is.EqualTo("subj.payloadSubsystem.camera.isRedundant == true"));
+                Assert.That(Constraint(PointingAccuracyId), Is.EqualTo("subj.band != \"X-band\""));
+                Assert.That(Constraint(ReactionWheelsId), Is.EqualTo("subj.temperature >= -20 [°C]"));
+                Assert.That(check.Status, Is.EqualTo(RequirementStatus.Satisfied));
+                Assert.That(check.Explanation,
+                    Is.EqualTo("assume subj.orbit != OrbitKind::polar: polar == polar; require subj.payloadSubsystem.camera.mass <= 40 [kg]: 38 [kg] <= 40 [kg]"));
+            }
+
+            // Writes the required constraint of a requirement.
+            string Constraint(Guid requirementId)
+            {
+                return ((IRequirementUsage)elements[requirementId]).requiredConstraint.Single().GetTerm().Value.ToString();
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidConstraintsAndValues_ReturnsEveryProblem()
+        {
+            var dtos = ReadSatelliteDtos();
+            var builder = new ConstraintDtoBuilder(dtos);
+            builder.Enumeration(RequirementsPackageId, "ModeA", "nominal");
+            builder.Enumeration(RequirementsPackageId, "ModeB", "nominal");
+            var massBudget = MassBudgetId.ToString();
+
+            var result = this.applier.Apply(dtos,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "isRedundant", Value = true, Unit = "kg" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "length", Value = 3, Unit = "furlong" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "band", Value = " " } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "mode", Value = "nominal" } },
+                new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Unit = "kg" } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, LimitAttribute = "massLimit" } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", LimitAttribute = "mass..limit" } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = ".mass", Operator = "<=", Limit = 150 } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "isRedundant", Operator = "<", Limit = true } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "!=", Limit = 150, Margin = 10 } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", LimitAttribute = "massLimit", Unit = "kg" } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Kind = (RequirementConstraintKind)5, Attribute = "mass", Operator = "<=", Limit = 150 } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "temperature", Operator = ">=", Limit = -20, Margin = 10 } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "temperature", Operator = "<=", Limit = 40, Unit = "°C", Margin = 10 } } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mode", Operator = "==", Limit = "nominal" } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = massBudget, SatisfyingPart = CameraId.ToString(), Unit = "kg" } }
+            ]);
+
+            var problems = result.Errors.Select(error => error.Description).ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(problems, Is.EqualTo(new[]
+                {
+                    "Change 1 (create): The unit 'kg' only applies to a numeric value.",
+                    "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, or a name such as kilogram.",
+                    "Change 3 (create): The value is empty: give a number, a Boolean or a text.",
+                    "Change 4 (create): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
+                    "Change 5 (update): The unit 'kg' only applies to a numeric value.",
+                    "Change 6 (update): Give either a limit or a limitAttribute, not both.",
+                    "Change 7 (update): The path 'mass..limit' has an empty name: write it as 'mass' or 'camera.mass'.",
+                    "Change 8 (update): The path '.mass' has an empty name: write it as 'mass' or 'camera.mass'.",
+                    "Change 9 (update): A Boolean or text limit can only be compared with '==' or '!=', not with '<'.",
+                    "Change 10 (update): A margin cannot be applied with '!='. Use '<=' or '>=' instead.",
+                    "Change 11 (update): The unit 'kg' only applies to a numeric value.",
+                    "Change 12 (update): The kind of the constraint must be Requirement or Assumption.",
+                    "Change 13 (update): A margin in percent only applies to a positive limit: include the margin in the limit instead.",
+                    "Change 14 (update): A margin in percent does not apply to a unit with an offset, such as °C: include the margin in the limit instead.",
+                    "Change 15 (update): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
+                    "Change 16 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text."
+                }));
             }
         }
 
