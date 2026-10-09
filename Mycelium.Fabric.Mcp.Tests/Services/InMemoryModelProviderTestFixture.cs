@@ -22,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.PSM.DTO;
@@ -247,6 +248,29 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             }
 
             this.changeApplier.Verify(applier => applier.Apply(It.Is<IReadOnlyCollection<DtoElement>>(model => model.Count == 548), changes), Times.Exactly(2));
+
+            // The ports and connectors are created elements, but not the conjugate of a port definition, nor the ends of a
+            // connector; the ends of an interface definition are.
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+            var connectionChanges = ConnectionChangesHelper.CreateChanges();
+            var connectionCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(this.modelProvider.ElementDtos, connectionChanges).Value;
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), connectionChanges)).Returns(connectionCommitRequest);
+
+            var connectionResult = this.modelProvider.ApplyChanges(connectionChanges);
+            var createdElements = connectionResult.CreatedElements.ToDictionary(createdElement => createdElement.QualifiedName ?? createdElement.Type);
+
+            string[] expectedTypes =
+            [
+                "PortDefinition", "AttributeUsage", "InterfaceDefinition", "PortUsage", "PortUsage", "PortUsage", "PortUsage", "PortUsage", "InterfaceUsage", "ConnectionUsage",
+                "BindingConnectorAsUsage"
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(connectionResult.Applied, Is.True);
+                Assert.That(connectionResult.CreatedElements.Select(createdElement => createdElement.Type), Is.EqualTo(expectedTypes));
+                Assert.That(createdElements.Keys, Is.SupersetOf(["EOSat1::DataInterface::target", "EOSat1::Components::OpticalCamera::dataOut", "EOSat1::Architecture::eosat1::imageLink"]));
+            }
         }
 
         [Test]

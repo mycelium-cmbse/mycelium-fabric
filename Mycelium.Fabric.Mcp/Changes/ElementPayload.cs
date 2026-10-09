@@ -9,7 +9,11 @@
 
 namespace Mycelium.Fabric.Mcp.Changes
 {
+    using System.Collections.Generic;
     using System.ComponentModel;
+    using System.Text.Json.Serialization;
+
+    using SysML2.NET.Core.Core.Types;
 
     /// <summary>
     /// The payload of a <see cref="ModelChange"/>: a compact description of an element, from which the server builds the
@@ -88,5 +92,30 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         [Description("Create, for a SatisfyRequirementUsage: the part that satisfies the requirement, for example the satellite or a subsystem, as an identifier (Id) or a temporary name.")]
         public string SatisfyingPart { get; init; }
+
+        /// <summary>
+        /// Gets the two ends of the created connector, as paths of names from its owner.
+        /// </summary>
+        [Description("Create, for a ConnectionUsage, an InterfaceUsage or a BindingConnectorAsUsage: its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. The ends of an interface are ports. They cannot be updated: delete the connector and create it again.")]
+        public IReadOnlyList<string> Ends { get; init; }
+
+        /// <summary>
+        /// Gets the direction of the element, which must be a feature.
+        /// </summary>
+        [Description("Create or update, for a feature such as a port or an attribute of a port definition: its direction, In, Out or Inout.")]
+        [JsonConverter(typeof(JsonStringEnumConverter<FeatureDirectionKind>))]
+        public FeatureDirectionKind? Direction { get; init; }
+
+        /// <summary>
+        /// Gets a value indicating whether the port is typed by the conjugate of its port definition.
+        /// </summary>
+        [Description("Create or update, for a port: true types it by the conjugate of its port definition (port cmd : ~CommandPort), whose directions are reversed, for the receiving side of an interface. With a definition, it defaults to false.")]
+        public bool? Conjugated { get; init; }
+
+        /// <summary>
+        /// Gets a value indicating whether the created feature is an end of its connection or interface definition.
+        /// </summary>
+        [Description("Create, for a feature of a ConnectionDefinition or a port of an InterfaceDefinition: true makes it one of its ends (end port supplier : PowerPort).")]
+        public bool? IsEnd { get; init; }
     }
 }

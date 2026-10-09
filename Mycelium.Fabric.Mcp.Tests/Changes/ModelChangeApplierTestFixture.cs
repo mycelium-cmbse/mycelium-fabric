@@ -26,11 +26,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Common;
+    using SysML2.NET.Core.Core.Types;
+    using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Attributes;
+    using SysML2.NET.Core.POCO.Systems.Connections;
+    using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.POCO.Systems.Interfaces;
     using SysML2.NET.Core.POCO.Systems.Parts;
+    using SysML2.NET.Core.POCO.Systems.Ports;
     using SysML2.NET.Core.POCO.Systems.Requirements;
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Core.Systems.Requirements;
@@ -107,6 +113,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         /// The <c>Id</c> of the requirement REQ-SYS-004 in <c>Satellite.json</c>.
         /// </summary>
         private static readonly Guid ReactionWheelsId = Guid.Parse("a2c360e5-0019-9ec5-031e-14eadfab77b8");
+
+        /// <summary>
+        /// The <c>Id</c> of the <c>onBoardComputer</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid OnBoardComputerId = Guid.Parse("3d4c9630-97ec-0a3a-296a-742885df1bc0");
 
         private ModelChangeApplier applier;
 
@@ -358,8 +369,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(problems, Has.Count.EqualTo(22));
                 Assert.That(problems[0], Is.EqualTo("Change 1: the change is empty."));
                 Assert.That(problems[1], Is.EqualTo("Change 2 (create): The name is missing."));
-                Assert.That(problems[2], Does.StartWith("Change 3 (create): 'Lens' is not the metaclass of a package, a definition or a usage"));
-                Assert.That(problems[3], Does.StartWith("Change 4 (create): 'FeatureTyping' is not the metaclass").And.EndWith("Relationships are built by the server."));
+                Assert.That(problems[2], Does.StartWith("Change 3 (create): 'Lens' is not the metaclass of a package, a definition, a usage or a connector"));
+                Assert.That(problems[3], Does.StartWith("Change 4 (create): 'FeatureTyping' is not the metaclass").And.EndWith("The other relationships are built by the server."));
                 Assert.That(problems[4], Does.StartWith("Change 5 (create): No element has the identifier"));
                 Assert.That(problems[5], Does.StartWith("Change 6 (create): The owner 'optics' is neither the identifier"));
                 Assert.That(problems[6], Does.StartWith("Change 7 (create): The owner 'lens' has not been created"));
@@ -643,6 +654,183 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 14 (update): A margin in percent does not apply to a unit with an offset, such as °C: include the margin in the limit instead.",
                 "Change 15 (update): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
                 "Change 16 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text."
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(problems, Is.EqualTo(expectedProblems));
+            }
+        }
+
+        [Test]
+        public void Apply_WithPortsAndConnectors_BuildsThemAsTheTextualNotation()
+        {
+            var dtos = ReadSatelliteDtos();
+            var result = this.applier.Apply(dtos, ConnectionChangesHelper.CreateChanges());
+
+            var elements = Assemble(CommitRequestHelper.Apply(dtos, result.Value));
+            var newElements = elements.Values.Where(element => dtos.TrueForAll(dto => dto.Id != element.Id)).ToList();
+            var named = newElements.Where(element => element.DeclaredName != null).ToDictionary(element => element.DeclaredName);
+            var dataPort = (IPortDefinition)named["DataPort"];
+            var dataInterface = (IInterfaceDefinition)named["DataInterface"];
+            var imageLink = (IInterfaceUsage)named["imageLink"];
+            var dataIn = (IPortUsage)named["dataIn"];
+            var connection = newElements.OfType<IConnectionUsage>().Single(connectionUsage => connectionUsage is not IInterfaceUsage);
+            var binding = newElements.OfType<IBindingConnectorAsUsage>().Single();
+            var cameraPath = imageLink.relatedFeature[0].chainingFeature;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(newElements.OfType<IConjugatedPortDefinition>().Single(), Is.SameAs(dataPort.conjugatedPortDefinition));
+                Assert.That(dataPort.conjugatedPortDefinition.originalPortDefinition, Is.SameAs(dataPort));
+                Assert.That(dataPort.GetDocumentationBodies(), Is.EqualTo("Image data."));
+                Assert.That(((IFeature)named["rate"]).Direction, Is.EqualTo(FeatureDirectionKind.Out));
+                Assert.That(dataInterface.ownedEndFeature.Select(feature => feature.DeclaredName), Is.EqualTo(["source", "target"]));
+                Assert.That(dataInterface.ownedEndFeature.All(feature => feature is IPortUsage { IsConstant: true, OwningRelationship: IEndFeatureMembership }), Is.True);
+                Assert.That(dataInterface.ownedEndFeature[1].GetTypeNames(), Is.EqualTo(["~DataPort"]));
+                Assert.That(dataIn.GetTypeNames(), Is.EqualTo(["~DataPort"]));
+                Assert.That(dataIn.ownedTyping.Single(), Is.InstanceOf<IConjugatedPortTyping>());
+                Assert.That(named["imageOut"].GetTypeNames(), Is.EqualTo(["DataPort"]));
+                Assert.That(imageLink.owner, Is.SameAs(elements[Eosat1Id]));
+                Assert.That(imageLink.IsComposite, Is.True);
+                Assert.That(imageLink.interfaceDefinition, Is.EqualTo([dataInterface]));
+                Assert.That(imageLink.GetDocumentationBodies(), Is.EqualTo("Images to the on-board computer."));
+                Assert.That(imageLink.GetEndPaths(), Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
+                Assert.That(imageLink.ownedEndFeature, Has.Count.EqualTo(2));
+                Assert.That(imageLink.ownedEndFeature.All(end => end is IReferenceUsage { IsEnd: true, IsConstant: true, OwningRelationship: IEndFeatureMembership }), Is.True);
+                Assert.That(cameraPath.Select(feature => feature.DeclaredName), Is.EqualTo(["payloadSubsystem", "camera", "dataOut"]));
+                Assert.That(cameraPath[1], Is.SameAs(elements[CameraId]));
+                Assert.That(cameraPath[2].owner.DeclaredName, Is.EqualTo("OpticalCamera"));
+                Assert.That(imageLink.relatedFeature[1].chainingFeature[2], Is.SameAs(dataIn));
+                Assert.That(connection.DeclaredName, Is.Null);
+                Assert.That(connection.relatedFeature, Is.EqualTo([elements[CameraId], elements[Guid.Parse("8f7fcbf6-8c6a-5546-1eb6-2e5adfe7a3d4")]]));
+                Assert.That(binding.GetEndPaths(), Is.EqualTo(["imageOut", "camera.dataOut"]));
+                Assert.That(binding.ownedEndFeature.All(end => !end.IsConstant), Is.True);
+            }
+        }
+
+        [Test]
+        public void Apply_WithPortAndConnectorUpdatesAndDeletions_ChangesThemUnlessStillConnected()
+        {
+            var dtos = ReadSatelliteDtos();
+            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value);
+            var newIds = model.Where(dto => dtos.TrueForAll(original => original.Id != dto.Id)).ToList();
+            var ids = newIds.Where(dto => dto.DeclaredName != null).ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+            var connectionId = newIds.Single(dto => dto.GetType().Name == "ConnectionUsage").Id;
+            var bindingId = newIds.Single(dto => dto.GetType().Name == "BindingConnectorAsUsage").Id;
+            var massMemoryId = "8f7fcbf6-8c6a-5546-1eb6-2e5adfe7a3d4";
+
+            var refusal = this.applier.Apply(model, [new ModelChange { Identity = ids["dataIn"] }, new ModelChange { Identity = massMemoryId }]);
+
+            string[] expectedProblems =
+            [
+                "Change 1 (delete): the PortUsage 'dataIn' is still referenced by 'EOSat1::Architecture::eosat1::imageLink'. Change or delete these elements first.",
+                $"Change 2 (delete): the PartUsage 'massMemory' is still referenced by the ConnectionUsage {connectionId}. Change or delete these elements first."
+            ];
+
+            Assert.That(refusal.Errors.Select(error => error.Description), Is.EqualTo(expectedProblems));
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = ids["imageLink"], Payload = new ElementPayload { Name = "cameraToComputer", Text = "Images and housekeeping." } },
+                new ModelChange { Identity = ids["dataIn"], Payload = new ElementPayload { Conjugated = false } },
+                new ModelChange { Identity = ids["dataOut"], Payload = new ElementPayload { Conjugated = true } },
+                new ModelChange { Identity = ids["imageOut"], Payload = new ElementPayload { Definition = ids["DataPort"], Direction = FeatureDirectionKind.Out } },
+                new ModelChange { Identity = ids["rate"], Payload = new ElementPayload { Direction = FeatureDirectionKind.In } },
+                new ModelChange { Identity = bindingId.ToString() },
+                new ModelChange { Identity = connectionId.ToString() },
+                new ModelChange { Identity = massMemoryId }
+            ]);
+
+            var elements = Assemble(CommitRequestHelper.Apply(model, result.Value));
+            var link = (IInterfaceUsage)elements[Guid.Parse(ids["imageLink"])];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(link.DeclaredName, Is.EqualTo("cameraToComputer"));
+                Assert.That(link.GetDocumentationBodies(), Is.EqualTo("Images and housekeeping."));
+                Assert.That(link.GetEndPaths(), Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
+                Assert.That(elements[Guid.Parse(ids["dataIn"])].GetTypeNames(), Is.EqualTo(["DataPort"]));
+                Assert.That(elements[Guid.Parse(ids["dataOut"])].GetTypeNames(), Is.EqualTo(["~DataPort"]));
+                Assert.That(((IFeature)elements[Guid.Parse(ids["imageOut"])]).Direction, Is.EqualTo(FeatureDirectionKind.Out));
+                Assert.That(((IFeature)elements[Guid.Parse(ids["rate"])]).Direction, Is.EqualTo(FeatureDirectionKind.In));
+                Assert.That(elements.Values.OfType<IConjugatedPortDefinition>().Count(), Is.EqualTo(1));
+                Assert.That(elements.Values.OfType<IConnectionUsage>().ToList(), Is.EqualTo([link]));
+                Assert.That(elements.Values.OfType<IBindingConnectorAsUsage>(), Is.Empty);
+                Assert.That(elements, Does.Not.ContainKey(Guid.Parse(massMemoryId)));
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidPortsAndConnectors_ReturnsEveryProblem()
+        {
+            var dtos = ReadSatelliteDtos();
+            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value);
+            var ids = model.Where(dto => dto.DeclaredName is "imageLink" or "dataOut" or "DataInterface").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+            var conjugatedPortDefinitionId = model.Single(dto => dto.GetType().Name == "ConjugatedPortDefinition").Id.ToString();
+            var eosat1 = ConnectionChangesHelper.Eosat1Id;
+            var payloadSubsystem = ConnectionChangesHelper.PayloadSubsystemId;
+            var opticalCamera = ConnectionChangesHelper.OpticalCameraId;
+            IReadOnlyList<string> validEnds = [ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn];
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Ends = [ConnectionChangesHelper.CameraDataOut] } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = eosat1, Ends = ["payloadSubsystem.lens", "dataHandlingSubsystem"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Ends = ["payloadSubsystem.camera", ConnectionChangesHelper.ComputerDataIn] } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Ends = ["camera", " camera "] } },
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Definition = opticalCamera, Ends = validEnds } },
+                new ModelChange { Payload = new ElementPayload { Type = "BindingConnectorAsUsage", Owner = payloadSubsystem, Definition = ids["DataInterface"], Ends = ["imageOut", "camera.dataOut"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Ends = ["camera", "massMemory"], Value = 1 } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = payloadSubsystem, Name = "lens", Ends = ["camera", "massMemory"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "Package", Owner = ConnectionChangesHelper.PackageId, Name = "Ports", Direction = FeatureDirectionKind.Out } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = payloadSubsystem, Name = "lens", Definition = opticalCamera, Conjugated = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "commandIn", Conjugated = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = opticalCamera, Name = "lens", IsEnd = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = ids["DataInterface"], Name = "latency", IsEnd = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "commandIn", Definition = opticalCamera } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConjugatedPortDefinition", Owner = ConnectionChangesHelper.PackageId, Name = "~CommandPort" } },
+                new ModelChange { Payload = new ElementPayload { Type = "FlowUsage", Owner = eosat1, Ends = validEnds } },
+                new ModelChange { Identity = ids["imageLink"], Payload = new ElementPayload { Ends = validEnds } },
+                new ModelChange { Identity = ids["dataOut"], Payload = new ElementPayload { IsEnd = true } },
+                new ModelChange { Identity = "bare", Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "bare" } },
+                new ModelChange { Identity = "bare", Payload = new ElementPayload { Conjugated = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "commandIn", Definition = conjugatedPortDefinitionId } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString(), Ends = validEnds } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Ends = ["camera", " "] } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Definition = opticalCamera, Ends = ["camera", "massMemory"] } }
+            ]);
+
+            var problems = result.Errors.Select(error => error.Description).ToList();
+
+            string[] expectedProblems =
+            [
+                "Change 1 (create): A connector connects two ends: give them as paths of names from its owner, for example ['camera.dataOut', 'obc.dataIn'].",
+                "Change 2 (create): The end 'payloadSubsystem.lens' is not valid: the PartUsage 'payloadSubsystem' and its definitions have no feature named 'lens'. Use list_children to read their features.",
+                "Change 3 (create): The end 'payloadSubsystem.camera' of an interface must be a port, not the PartUsage 'camera'.",
+                "Change 4 (create): The two ends are the same feature 'camera'.",
+                "Change 5 (create): The definition must be an interface definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 6 (create): A BindingConnectorAsUsage has no definition: it states that its two ends are the same thing.",
+                "Change 7 (create): A connector takes two ends, and optionally an owner, a name, a definition and a text.",
+                "Change 8 (create): Only a connector (ConnectionUsage, InterfaceUsage or BindingConnectorAsUsage) has ends, not the PartUsage 'lens'.",
+                "Change 9 (create): Only a feature, for example a port or an attribute, has a direction, not the Package 'Ports'.",
+                "Change 10 (create): Only a port can be conjugated, not the PartUsage 'lens'.",
+                "Change 11 (create): A conjugated port needs a definition: the port definition whose conjugate types it.",
+                "Change 12 (create): Only a feature of a connection or interface definition can be an end, not the PartUsage 'lens' of the PartDefinition 'OpticalCamera'.",
+                "Change 13 (create): The ends of an interface definition are ports, not the AttributeUsage 'latency'.",
+                "Change 14 (create): The definition must be a port definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 15 (create): 'ConjugatedPortDefinition' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server.",
+                "Change 16 (create): 'FlowUsage' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server.",
+                "Change 17 (update): The ends of a connector cannot change: delete the connector and create it again.",
+                "Change 18 (update): isEnd only applies to the creation of a feature: delete the feature and create it again.",
+                "Change 20 (update): The PortUsage 'bare' has no port definition to conjugate: give its definition.",
+                "Change 21 (create): A conjugated port definition cannot be given as a definition: give its port definition with conjugated true.",
+                "Change 22 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.",
+                "Change 23 (create): An end of the connector is empty.",
+                "Change 24 (create): The definition must be a connection definition, not the PartDefinition 'OpticalCamera'."
             ];
 
             using (Assert.EnterMultipleScope())

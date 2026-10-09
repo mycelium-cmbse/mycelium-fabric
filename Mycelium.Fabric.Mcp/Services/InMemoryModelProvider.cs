@@ -19,11 +19,15 @@ namespace Mycelium.Fabric.Mcp.Services
 
     using Mycelium.Fabric.Mcp.Changes;
 
+    using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
+    using SysML2.NET.Core.POCO.Kernel.Connectors;
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
+    using SysML2.NET.Core.POCO.Systems.Connections;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.POCO.Systems.Ports;
     using SysML2.NET.Dal;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -43,11 +47,12 @@ namespace Mycelium.Fabric.Mcp.Services
     public class InMemoryModelProvider : IModelProvider
     {
         /// <summary>
-        /// The kinds of membership through which a change owns the element it creates: an <c>OwningMembership</c>, or a
-        /// <c>FeatureMembership</c> for a feature of a type. The server owns the elements it builds around them, such as the
-        /// subject of a requirement, through other kinds of membership.
+        /// The kinds of membership through which a change owns the element it creates: an <c>OwningMembership</c>, a
+        /// <c>FeatureMembership</c> for a feature of a type, or an <c>EndFeatureMembership</c> for an end of a connection
+        /// definition. The server owns the elements it builds around them, such as the subject of a requirement, through other
+        /// kinds of membership.
         /// </summary>
-        private static readonly System.Type[] MemberMembershipTypes = [typeof(OwningMembership), typeof(FeatureMembership)];
+        private static readonly System.Type[] MemberMembershipTypes = [typeof(OwningMembership), typeof(FeatureMembership), typeof(EndFeatureMembership)];
 
         /// <summary>
         /// The <see cref="IModelChangeApplier"/> that turns a batch of changes into the change of a commit.
@@ -239,6 +244,24 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
+        /// Tells whether an element is of a kind that a change creates: a package, a definition, a usage that is not a
+        /// relationship, a connection definition or a connector. The conjugate of a port definition and the ends of a
+        /// connector are built by the server.
+        /// </summary>
+        /// <param name="element">The element.</param>
+        /// <returns><c>true</c> when a change creates elements of this kind.</returns>
+        private static bool IsCreatedByChange(IElement element)
+        {
+            return element switch
+            {
+                IConjugatedPortDefinition or { owner: IConnector } => false,
+                IConnectionDefinition or IConnectorAsUsage => true,
+                IPackage or IDefinition or IUsage => element is not IRelationship,
+                _ => false
+            };
+        }
+
+        /// <summary>
         /// Tells whether a new element is owned the way a change creates it: through one of the
         /// <see cref="MemberMembershipTypes"/>, and so is each of its owners that is new too.
         /// </summary>
@@ -289,7 +312,7 @@ namespace Mycelium.Fabric.Mcp.Services
             return commitRequest.Change
                 .Where(dataVersion => newElementIds.Contains(dataVersion.Identity.Id))
                 .Select(dataVersion => this.elementsById[dataVersion.Identity.Id])
-                .Where(element => element is (IPackage or IDefinition or IUsage) and not IRelationship && IsOwnedAsMember(element, newElementIds))
+                .Where(element => IsCreatedByChange(element) && IsOwnedAsMember(element, newElementIds))
                 .Select(element => new CreatedElement(element.Id, element.qualifiedName, element.GetType().Name))
                 .ToList();
         }

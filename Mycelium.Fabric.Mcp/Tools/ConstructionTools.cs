@@ -61,8 +61,11 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "an attribute or path of the subject, an operator, a limit with an optional unit or a limitAttribute, a margin, and kind Assumption for an assumption); "
             + "the identity is then an optional temporary name, that later changes of the same batch use instead of an identifier. "
             + "A SatisfyRequirementUsage (satisfy link) takes a satisfiedRequirement and a satisfyingPart instead of a name; one per part that satisfies the requirement. "
-            + "Update: the identity of the element and a payload with only the properties to change (name, definition, value, text, reqId or constraint). "
-            + "Delete: the identity of the element and no payload; refused while another element references it. Existing elements are designated by their identifier (Id).")]
+            + "Ports: a PortDefinition owns the attributes or items that cross the port, with a direction (In, Out, Inout); a PortUsage takes it as definition, with conjugated true on the receiving side. "
+            + "Connectors: a ConnectionUsage, an InterfaceUsage (between two ports, definition: an InterfaceDefinition whose ends are ports created with isEnd true) or a BindingConnectorAsUsage "
+            + "takes two ends, paths of names from its owner (['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']), and an optional name. "
+            + "Update: the identity of the element and a payload with only the properties to change (name, definition, value, text, direction, conjugated, reqId or constraint). "
+            + "Delete: the identity of the element and no payload; refused while another element references it, for example a port connected by an interface. Existing elements are designated by their identifier (Id).")]
         [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage; if not, the problems, each with the number of its change.")]
         public ApplyChangesResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes)
         {

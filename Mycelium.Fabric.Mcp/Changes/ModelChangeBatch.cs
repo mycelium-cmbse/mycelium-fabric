@@ -23,14 +23,18 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
     using SysML2.NET.Core.DTO.Systems.Attributes;
+    using SysML2.NET.Core.DTO.Systems.Connections;
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.DTO.Systems.Interfaces;
     using SysML2.NET.Core.DTO.Systems.Occurrences;
+    using SysML2.NET.Core.DTO.Systems.Ports;
     using SysML2.NET.Core.DTO.Systems.Requirements;
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Dal;
     using SysML2.NET.PIM;
     using SysML2.NET.PSM.DTO;
 
+    using PocoConnector = SysML2.NET.Core.POCO.Kernel.Connectors.IConnector;
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
     using PocoSatisfyRequirementUsage = SysML2.NET.Core.POCO.Systems.Requirements.ISatisfyRequirementUsage;
 
@@ -63,8 +67,16 @@ namespace Mycelium.Fabric.Mcp.Changes
         private const string DefinitionRole = "definition";
 
         /// <summary>
+        /// The connection definitions and connectors that a change can create, although they are relationships: the server
+        /// relates them to the features of their ends, which are created in a definition, or built from paths for a connector.
+        /// </summary>
+        private static readonly System.Type[] ConnectionMetaclasses =
+            [typeof(ConnectionDefinition), typeof(InterfaceDefinition), typeof(ConnectionUsage), typeof(InterfaceUsage), typeof(BindingConnectorAsUsage)];
+
+        /// <summary>
         /// The metaclasses that a change can create, indexed by their name: the concrete DTO classes of SysML2.NET that are
-        /// packages, definitions or usages, but not relationships, whose related elements only the server can build.
+        /// packages, definitions or usages, but not relationships, whose related elements only the server can build, and the
+        /// <see cref="ConnectionMetaclasses"/>.
         /// </summary>
         private static readonly Dictionary<string, System.Type> CreatableMetaclasses = typeof(IElement).Assembly.GetTypes()
             .Where(type => type is { IsClass: true, IsAbstract: false } && IsCreatable(type))
@@ -205,14 +217,28 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Tells whether a change can create an element of the given DTO class: a package, a definition or a usage that is
-        /// not a relationship.
+        /// not a relationship, or one of the <see cref="ConnectionMetaclasses"/>. A conjugated port definition is built by the
+        /// server with its port definition.
         /// </summary>
         /// <param name="type">The DTO class.</param>
         /// <returns><c>true</c> when a change can create an element of this class.</returns>
         private static bool IsCreatable(System.Type type)
         {
-            return (typeof(IPackage).IsAssignableFrom(type) || typeof(IDefinition).IsAssignableFrom(type) || typeof(IUsage).IsAssignableFrom(type))
-                && !typeof(IRelationship).IsAssignableFrom(type);
+            var isPackageDefinitionOrUsage = typeof(IPackage).IsAssignableFrom(type) || typeof(IDefinition).IsAssignableFrom(type) || typeof(IUsage).IsAssignableFrom(type);
+
+            return (isPackageDefinitionOrUsage && !typeof(IRelationship).IsAssignableFrom(type) && !typeof(IConjugatedPortDefinition).IsAssignableFrom(type))
+                || ConnectionMetaclasses.Contains(type);
+        }
+
+        /// <summary>
+        /// Tells whether a change can update or delete an element: any element that is not a relationship, a connection
+        /// definition or a connector.
+        /// </summary>
+        /// <param name="element">The element.</param>
+        /// <returns><c>true</c> when a change can update or delete the element.</returns>
+        private static bool IsChangeable(IElement element)
+        {
+            return element is not IRelationship or IConnectionDefinition or IConnectorAsUsage;
         }
 
         /// <summary>
@@ -289,6 +315,12 @@ namespace Mycelium.Fabric.Mcp.Changes
                 return;
             }
 
+            if (member is IConnectorAsUsage)
+            {
+                this.CreateConnector(member, change);
+                return;
+            }
+
             CheckName(payload.Name);
             member.DeclaredName = payload.Name;
 
@@ -311,6 +343,8 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             this.CheckRequirementProperties(member, payload);
+            CheckFeatureProperties(member, owner, payload);
+            SetFeatureFlags(member, owner, payload);
             this.AddOwnedMember(owner, member, change.Identity);
 
             if (!string.IsNullOrWhiteSpace(payload.Text))
@@ -320,7 +354,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (definition != null)
             {
-                this.AddTyping(member, definition);
+                this.AddTyping(member, definition, payload.Conjugated == true);
             }
 
             if (payload.Value != null)
@@ -328,13 +362,18 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.AddValue(member, payload.Value.Value, payload.Unit);
             }
 
+            if (member is IPortDefinition)
+            {
+                this.GetOrCreateConjugatedPortDefinition(member);
+            }
+
             this.SetRequirementProperties(member, payload);
         }
 
         /// <summary>
-        /// Updates the properties of an element given by the payload: its name, its definition, its value, its documentation
-        /// and, for a requirement, its <c>ReqId</c> and its constraint. A new definition, value, documentation or constraint
-        /// replaces the current one.
+        /// Updates the properties of an element given by the payload: its name, its definition, its value, its documentation,
+        /// its direction, the conjugation of a port and, for a requirement, its <c>ReqId</c> and its constraint. A new
+        /// definition, value, documentation or constraint replaces the current one.
         /// </summary>
         /// <param name="change">The change that updates the element designated by its identity.</param>
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
@@ -342,7 +381,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
             var element = this.Resolve(change.Identity, ElementRole);
-            CheckKind(element, element is not IRelationship, ElementRole, "an element that is not a relationship");
+            CheckKind(element, IsChangeable(element), ElementRole, "an element that is not a relationship");
 
             var definition = this.CheckUpdate(element, payload);
 
@@ -355,7 +394,13 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (definition != null)
             {
                 this.RemoveOwnedRelationships<IFeatureTyping>(element);
-                this.AddTyping(element, definition);
+                this.AddTyping(element, definition, payload.Conjugated == true);
+            }
+
+            if (payload.Direction != null)
+            {
+                ((IFeature)element).Direction = payload.Direction;
+                this.MarkModified(element);
             }
 
             if (payload.Value != null)
@@ -378,7 +423,10 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         /// <param name="element">The updated element.</param>
         /// <param name="payload">The properties to change.</param>
-        /// <returns>The new definition of the element, or <c>null</c> when the payload does not change it.</returns>
+        /// <returns>
+        /// The new definition of the element, or <c>null</c> when the payload does not change it. When only the conjugation
+        /// of a port changes, it is the current port definition of the port.
+        /// </returns>
         /// <exception cref="InvalidChangeException">Thrown when the payload cannot be applied to the element.</exception>
         private IElement CheckUpdate(IElement element, ElementPayload payload)
         {
@@ -389,10 +437,13 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             CheckValue(payload.Value, payload.Unit);
 
-            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null } && string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null }
+                && string.IsNullOrWhiteSpace(payload.ReqId))
             {
-                throw new InvalidChangeException("The payload changes nothing: give the name, definition, value, text, reqId or constraint to change, or no payload to delete the element.");
+                throw new InvalidChangeException("The payload changes nothing: give the name, definition, value, text, direction, conjugated, reqId or constraint to change, or no payload to delete the element.");
             }
+
+            this.CheckFeatureUpdate(element, payload);
 
             if (payload.Name != null)
             {
@@ -412,7 +463,12 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             this.CheckRequirementProperties(element, payload);
 
-            return payload.Definition == null ? null : this.ResolveDefinition(element, payload.Definition);
+            return payload switch
+            {
+                { Definition: not null } => this.ResolveDefinition(element, payload.Definition),
+                { Conjugated: not null } => this.GetPortDefinition(element),
+                _ => null
+            };
         }
 
         /// <summary>
@@ -424,7 +480,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         private void MarkForDeletion(ModelChange change, int changeNumber)
         {
             var element = this.Resolve(change.Identity, ElementRole);
-            CheckKind(element, element is not IRelationship, ElementRole, "an element that is not a relationship");
+            CheckKind(element, IsChangeable(element), ElementRole, "an element that is not a relationship");
 
             this.deletions.Add((changeNumber, element));
         }
@@ -503,19 +559,21 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Describes, in a message, the element that holds a reference: the nearest owner of the referencing relationship
-        /// that has a qualified name (for example the part typed by a definition), or the satisfy link that contains it, which
-        /// has no name and is designated by its identifier so that it can be deleted.
+        /// that has a qualified name (for example the part typed by a definition), or the satisfy link or the unnamed
+        /// connector that contains it, designated by its identifier so that it can be deleted. A connector, owned through a
+        /// membership, is itself the referencing relationship.
         /// </summary>
         /// <param name="relationship">The referencing relationship.</param>
         /// <returns>The description of the referencing element.</returns>
         private static string DescribeReferencingElement(PocoRelationship relationship)
         {
-            for (var element = relationship.OwningRelatedElement; element != null; element = element.owner)
+            for (var element = relationship.OwningRelatedElement ?? relationship; element != null; element = element.owner)
             {
                 switch (element)
                 {
                     case PocoSatisfyRequirementUsage:
-                        return $"the SatisfyRequirementUsage {element.Id}";
+                    case PocoConnector { qualifiedName: null }:
+                        return $"the {element.GetType().Name} {element.Id}";
                     case { qualifiedName: { } qualifiedName }:
                         return $"'{qualifiedName}'";
                 }
@@ -615,8 +673,9 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="reference">The <c>Id</c> or temporary name of the definition.</param>
         /// <returns>The designated definition.</returns>
         /// <exception cref="InvalidChangeException">
-        /// Thrown when the element is not a feature, or when the reference designates no element (see <see cref="Resolve"/>)
-        /// or an element that is not a classifier.
+        /// Thrown when the element is not a feature or is a binding, or when the reference designates no element (see
+        /// <see cref="Resolve"/>) or an element that is not a classifier of the kind of the feature (see
+        /// <see cref="CheckDefinitionKind"/>).
         /// </exception>
         private IElement ResolveDefinition(IElement feature, string reference)
         {
@@ -625,8 +684,14 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException($"Only a feature, for example a part or an attribute, has a definition, not the {Describe(feature)}.");
             }
 
+            if (feature is IBindingConnectorAsUsage)
+            {
+                throw new InvalidChangeException("A BindingConnectorAsUsage has no definition: it states that its two ends are the same thing.");
+            }
+
             var definition = this.Resolve(reference, DefinitionRole);
             CheckKind(definition, definition is IClassifier, DefinitionRole, "a classifier, for example a part definition");
+            CheckDefinitionKind(feature, definition);
 
             return definition;
         }
@@ -662,17 +727,20 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates the public membership through which an element owns a member: a <c>FeatureMembership</c> for a feature
-        /// (part, attribute...) of a type (part definition, part), and an <c>OwningMembership</c> for any other member, for
-        /// example an element of a package.
+        /// (part, attribute...) of a type (part definition, part), an <c>EndFeatureMembership</c> for an end feature, and an
+        /// <c>OwningMembership</c> for any other member, for example an element of a package.
         /// </summary>
         /// <param name="owner">The element that owns the member.</param>
         /// <param name="member">The owned member.</param>
         /// <returns>The new membership, not added to the working copy yet.</returns>
         private static IMembership CreateMembership(IElement owner, IElement member)
         {
-            return member is IFeature && owner is IType
-                ? new FeatureMembership { Visibility = VisibilityKind.Public }
-                : new OwningMembership { Visibility = VisibilityKind.Public };
+            return (member, owner) switch
+            {
+                (IFeature { IsEnd: true }, IType) => new EndFeatureMembership { Visibility = VisibilityKind.Public },
+                (IFeature, IType) => new FeatureMembership { Visibility = VisibilityKind.Public },
+                _ => new OwningMembership { Visibility = VisibilityKind.Public }
+            };
         }
 
         /// <summary>
@@ -686,12 +754,22 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Types a feature by a definition, as <c>camera : Camera</c> does: a <c>FeatureTyping</c> owned by the feature.
+        /// Types a feature by a definition, as <c>camera : Camera</c> does: a <c>FeatureTyping</c> owned by the feature, or,
+        /// for <c>port cmd : ~CommandPort</c>, a <c>ConjugatedPortTyping</c> by the conjugate of the port definition.
         /// </summary>
         /// <param name="feature">The typed feature.</param>
         /// <param name="definition">The definition.</param>
-        private void AddTyping(IElement feature, IElement definition)
+        /// <param name="isConjugated">Whether the feature is a port typed by the conjugate of its port definition.</param>
+        private void AddTyping(IElement feature, IElement definition, bool isConjugated = false)
         {
+            if (isConjugated)
+            {
+                var conjugatedPortDefinition = this.GetOrCreateConjugatedPortDefinition(definition);
+                this.AddOwnedRelationship(feature, new ConjugatedPortTyping { TypedFeature = feature.Id, ConjugatedPortDefinition = conjugatedPortDefinition.Id });
+
+                return;
+            }
+
             this.AddOwnedRelationship(feature, new FeatureTyping { TypedFeature = feature.Id, Type = definition.Id });
         }
 
@@ -901,7 +979,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             if (!CreatableMetaclasses.TryGetValue(type, out var metaclass))
             {
-                throw new InvalidChangeException($"'{type}' is not the metaclass of a package, a definition or a usage, for example Package, PartDefinition, PartUsage, AttributeUsage or RequirementUsage. Relationships are built by the server.");
+                throw new InvalidChangeException($"'{type}' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server.");
             }
 
             var element = (IElement)Activator.CreateInstance(metaclass);

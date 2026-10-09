@@ -31,8 +31,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IElement element)
         {
             /// <summary>
-            /// Gets the declared names of the types of the element (for example <c>OpticalCamera</c> for
-            /// <c>camera : OpticalCamera</c>). Only an <see cref="IFeature"/> can be typed.
+            /// Gets the names of the types of the element (for example <c>OpticalCamera</c> for <c>camera : OpticalCamera</c>,
+            /// or <c>~CommandPort</c> for a port typed by the conjugate of <c>CommandPort</c>). Only an <see cref="IFeature"/>
+            /// can be typed.
             /// </summary>
             /// <returns>The names of the types of the element, empty when it is not a typed <see cref="IFeature"/>.</returns>
             /// <exception cref="ArgumentNullException">
@@ -42,7 +43,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
             {
                 ArgumentNullException.ThrowIfNull(element);
 
-                return element is IFeature feature ? [.. (feature.type ?? []).Select(type => type.DeclaredName)] : [];
+                return element is IFeature feature ? [.. (feature.type ?? []).Select(type => type.name)] : [];
             }
 
             /// <summary>
