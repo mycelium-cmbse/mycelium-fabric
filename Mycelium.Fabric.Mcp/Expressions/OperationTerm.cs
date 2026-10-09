@@ -271,7 +271,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
             var items = Flatten([sequence]);
             var position = (int)index.Number;
 
-            return position >= 1 && position <= items.Count && position == index.Number
+            return double.IsInteger(index.Number) && position >= 1 && position <= items.Count
                 ? items[position - 1]
                 : Error.Validation(description: $"The index {index} is out of the sequence {sequence}.");
         }

@@ -153,7 +153,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("A margin in percent only applies to a positive limit: include the margin in the limit instead.");
             }
 
-            if (margin > 0 && constraint.Unit != null && ParseUnit(constraint.Unit).Offset != 0)
+            if (margin > 0 && constraint.Unit != null && Math.Abs(ParseUnit(constraint.Unit).Offset) > 0)
             {
                 throw new InvalidChangeException($"A margin in percent does not apply to a unit with an offset, such as {constraint.Unit}: include the margin in the limit instead.");
             }

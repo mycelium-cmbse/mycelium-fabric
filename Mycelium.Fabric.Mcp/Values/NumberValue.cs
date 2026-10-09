@@ -63,7 +63,7 @@ namespace Mycelium.Fabric.Mcp.Values
         /// <returns>The number as text, for example <c>150.96</c>.</returns>
         public static string Format(double number)
         {
-            return Math.Abs(number) >= 0.001 || number == 0
+            return Math.Abs(number) >= 0.001 || IsZero(number)
                 ? Math.Round(number, DecimalCount).ToString(CultureInfo.InvariantCulture)
                 : number.ToString("G4", CultureInfo.InvariantCulture);
         }
@@ -102,7 +102,7 @@ namespace Mycelium.Fabric.Mcp.Values
                 return aligned.Errors;
             }
 
-            if (aligned.Value.Right == 0)
+            if (IsZero(aligned.Value.Right))
             {
                 return Error.Validation(description: "The expression divides by zero.");
             }
@@ -138,7 +138,7 @@ namespace Mycelium.Fabric.Mcp.Values
         {
             ArgumentNullException.ThrowIfNull(other);
 
-            if (other.Number == 0)
+            if (IsZero(other.Number))
             {
                 return Error.Validation(description: "The expression divides by zero.");
             }
@@ -172,7 +172,7 @@ namespace Mycelium.Fabric.Mcp.Values
                 return new NumberValue(Math.Pow(this.Number, exponent.Number));
             }
 
-            if (exponent.Number != Math.Floor(exponent.Number))
+            if (!double.IsInteger(exponent.Number))
             {
                 return Error.Validation(description: $"{this} cannot be raised to the power {exponent}, which is not an integer.");
             }
@@ -234,7 +234,7 @@ namespace Mycelium.Fabric.Mcp.Values
         {
             if (double.IsInfinity(left) || double.IsInfinity(right))
             {
-                return left == right;
+                return double.IsPositiveInfinity(left) ? double.IsPositiveInfinity(right) : double.IsNegativeInfinity(left) && double.IsNegativeInfinity(right);
             }
 
             return Math.Abs(left - right) <= RelativeTolerance * Math.Max(1, Math.Max(Math.Abs(left), Math.Abs(right)));
@@ -247,6 +247,16 @@ namespace Mycelium.Fabric.Mcp.Values
         public override string ToString()
         {
             return this.Unit == null ? Format(this.Number) : $"{Format(this.Number)} [{this.Unit}]";
+        }
+
+        /// <summary>
+        /// Tells whether a number is zero, without comparing floating-point numbers for equality.
+        /// </summary>
+        /// <param name="number">The number.</param>
+        /// <returns><c>true</c> when the number is zero.</returns>
+        private static bool IsZero(double number)
+        {
+            return Math.Abs(number) < double.Epsilon;
         }
 
         /// <summary>
