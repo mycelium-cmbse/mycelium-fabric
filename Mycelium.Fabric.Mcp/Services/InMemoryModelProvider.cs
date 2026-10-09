@@ -35,9 +35,9 @@ namespace Mycelium.Fabric.Mcp.Services
     /// API and keeps it in memory. It holds no element until <see cref="LoadModel"/> is called.
     /// </summary>
     /// <remarks>
-    /// The model is kept twice: as DTOs, which hold identifiers and are the payloads of the <see cref="DataVersionRequest"/>
-    /// records of a <see cref="CommitRequest"/>, and as the POCOs that SysML2.NET builds from them, which the tools
-    /// navigate. A commit replaces the DTOs it changes, then new POCOs replace the current ones. Only the identifier of the
+    /// The model is kept twice: as DTOs, which hold identifiers, are the payloads of the <see cref="DataVersionRequest"/>
+    /// records of a <see cref="CommitRequest"/> and are exported, and as the POCOs that SysML2.NET builds from them, which the
+    /// tools navigate. A commit replaces the DTOs it changes, then new POCOs replace the current ones. Only the identifier of the
     /// last commit is kept: the history of the commits is left to the persistence of the Fabric server.
     /// </remarks>
     public class InMemoryModelProvider : IModelProvider
@@ -55,14 +55,14 @@ namespace Mycelium.Fabric.Mcp.Services
         private readonly IModelChangeApplier changeApplier;
 
         /// <summary>
+        /// The <see cref="IDeSerializer"/> that reads the DTOs of a model file.
+        /// </summary>
+        private readonly IDeSerializer deSerializer;
+
+        /// <summary>
         /// The lock that prevents two commits, or a commit and a load, from modifying the model at the same time.
         /// </summary>
         private readonly Lock modelLock = new();
-
-        /// <summary>
-        /// The DTOs of the loaded model, from which its elements are built.
-        /// </summary>
-        private List<DtoElement> elementDtos = [];
 
         /// <summary>
         /// The elements of the loaded model, indexed by their <c>Id</c>.
@@ -79,14 +79,17 @@ namespace Mycelium.Fabric.Mcp.Services
         /// Initializes a new instance of the <see cref="InMemoryModelProvider"/> class.
         /// </summary>
         /// <param name="changeApplier">The <see cref="IModelChangeApplier"/> that turns a batch of changes into a commit.</param>
+        /// <param name="deSerializer">The <see cref="IDeSerializer"/> that reads the DTOs of a model file.</param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="changeApplier"/> is <c>null</c>.
+        /// Thrown when <paramref name="changeApplier"/> or <paramref name="deSerializer"/> is <c>null</c>.
         /// </exception>
-        public InMemoryModelProvider(IModelChangeApplier changeApplier)
+        public InMemoryModelProvider(IModelChangeApplier changeApplier, IDeSerializer deSerializer)
         {
             ArgumentNullException.ThrowIfNull(changeApplier);
+            ArgumentNullException.ThrowIfNull(deSerializer);
 
             this.changeApplier = changeApplier;
+            this.deSerializer = deSerializer;
         }
 
         /// <summary>
@@ -98,6 +101,12 @@ namespace Mycelium.Fabric.Mcp.Services
         /// Gets the root elements of the loaded model, that is the elements that have no owner.
         /// </summary>
         public IReadOnlyList<IElement> RootElements { get; private set; } = [];
+
+        /// <summary>
+        /// Gets the DTOs of all the elements of the loaded model, from which its elements are built. A commit replaces the
+        /// list rather than modifying it, so that a reader keeps a consistent model.
+        /// </summary>
+        public IReadOnlyList<DtoElement> ElementDtos { get; private set; } = [];
 
         /// <summary>
         /// Loads the model stored at the given location, replacing the model loaded before.
@@ -120,7 +129,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
             using var stream = File.OpenRead(modelPath.LocalPath);
 
-            var dtos = ReadElementDtos(stream);
+            var dtos = this.ReadElementDtos(stream);
 
             lock (this.modelLock)
             {
@@ -146,7 +155,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
             lock (this.modelLock)
             {
-                var commitRequest = this.changeApplier.Apply(this.elementDtos, changes);
+                var commitRequest = this.changeApplier.Apply(this.ElementDtos, changes);
 
                 if (commitRequest.IsError)
                 {
@@ -214,19 +223,6 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Reads the DTOs of the elements stored in a JSON stream of the Systems Modeling API.
-        /// </summary>
-        /// <param name="stream">The <see cref="Stream"/> that contains the JSON.</param>
-        /// <returns>The DTOs of the elements.</returns>
-        private static List<DtoElement> ReadElementDtos(Stream stream)
-        {
-            return new DeSerializer()
-                .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
-                .OfType<DtoElement>()
-                .ToList();
-        }
-
-        /// <summary>
         /// Tells whether a <see cref="DataVersionRequest"/> can be committed: it has an identity, and either no payload or
         /// the element that has this identity as payload.
         /// </summary>
@@ -260,6 +256,19 @@ namespace Mycelium.Fabric.Mcp.Services
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Reads the DTOs of the elements stored in a JSON stream of the Systems Modeling API.
+        /// </summary>
+        /// <param name="stream">The <see cref="Stream"/> that contains the JSON.</param>
+        /// <returns>The DTOs of the elements.</returns>
+        private List<DtoElement> ReadElementDtos(Stream stream)
+        {
+            return this.deSerializer
+                .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
+                .OfType<DtoElement>()
+                .ToList();
         }
 
         /// <summary>
@@ -310,7 +319,7 @@ namespace Mycelium.Fabric.Mcp.Services
                 PreviousCommit = this.headCommitId == Guid.Empty ? [] : [this.headCommitId]
             };
 
-            var dtosById = this.elementDtos.ToDictionary(dto => dto.Id);
+            var dtosById = this.ElementDtos.ToDictionary(dto => dto.Id);
 
             foreach (var dataVersion in commitRequest.Change)
             {
@@ -349,7 +358,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
             var loadedElementsById = loadedElements.ToDictionary(element => element.Id);
 
-            this.elementDtos = dtos;
+            this.ElementDtos = dtos;
             this.Elements = loadedElements;
             this.RootElements = loadedRootElements;
             this.elementsById = loadedElementsById;

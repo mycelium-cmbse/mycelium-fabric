@@ -35,6 +35,38 @@ namespace Mycelium.Fabric.Mcp.Changes
     public class ModelChangeApplier : IModelChangeApplier
     {
         /// <summary>
+        /// The options of the JSON writer, shared by every copy: the default ones, since the copy is read back at once.
+        /// </summary>
+        private static readonly JsonWriterOptions WriterOptions = new();
+
+        /// <summary>
+        /// The <see cref="ISerializer"/> that writes the DTOs to copy.
+        /// </summary>
+        private readonly ISerializer serializer;
+
+        /// <summary>
+        /// The <see cref="IDeSerializer"/> that reads the copied DTOs back.
+        /// </summary>
+        private readonly IDeSerializer deSerializer;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ModelChangeApplier"/> class.
+        /// </summary>
+        /// <param name="serializer">The <see cref="ISerializer"/> that writes the DTOs to copy.</param>
+        /// <param name="deSerializer">The <see cref="IDeSerializer"/> that reads the copied DTOs back.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="serializer"/> or <paramref name="deSerializer"/> is <c>null</c>.
+        /// </exception>
+        public ModelChangeApplier(ISerializer serializer, IDeSerializer deSerializer)
+        {
+            ArgumentNullException.ThrowIfNull(serializer);
+            ArgumentNullException.ThrowIfNull(deSerializer);
+
+            this.serializer = serializer;
+            this.deSerializer = deSerializer;
+        }
+
+        /// <summary>
         /// Applies a batch of changes, in order, to a copy of the given model, and returns the <see cref="CommitRequest"/>
         /// that makes the same modifications. Every change is checked, so that all the problems of the batch are reported at
         /// once.
@@ -52,7 +84,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(changes);
 
-            var batch = new ModelChangeBatch(CopyElements(model));
+            var batch = new ModelChangeBatch(this.CopyElements(model));
             var problems = batch.Apply(changes);
 
             if (problems.Count > 0)
@@ -69,14 +101,14 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         /// <param name="elements">The DTOs to copy.</param>
         /// <returns>The copied DTOs.</returns>
-        private static List<IElement> CopyElements(IReadOnlyCollection<IElement> elements)
+        private List<IElement> CopyElements(IReadOnlyCollection<IElement> elements)
         {
             using var stream = new MemoryStream();
 
-            new Serializer().Serialize(elements, SerializationModeKind.JSON, false, stream, new JsonWriterOptions());
+            this.serializer.Serialize(elements, SerializationModeKind.JSON, false, stream, WriterOptions);
             stream.Position = 0;
 
-            return new DeSerializer()
+            return this.deSerializer
                 .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
                 .OfType<IElement>()
                 .ToList();

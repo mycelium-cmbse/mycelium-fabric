@@ -22,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Requirements;
     using SysML2.NET.Extensions;
+    using SysML2.NET.Serializer.Json;
 
     /// <summary>
     /// Suite of tests for the <see cref="SatisfyRequirementUsageExtensions"/> class.
@@ -42,7 +43,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [Test]
         public void VerifyResolveSatisfyingFeature()
         {
-            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             var satisfyId = modelProvider.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId, SatisfyingPart = Eosat1Id.ToString() } }]).CreatedElements[0].Id;

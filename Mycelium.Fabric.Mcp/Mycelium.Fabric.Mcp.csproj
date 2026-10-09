@@ -18,6 +18,7 @@
 
     <ItemGroup>
       <PackageReference Include="ErrorOr" Version="2.1.1" />
+      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
       <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
       <PackageReference Include="SysML2.NET.Dal" Version="0.24.1" />
       <PackageReference Include="SysML2.NET.Serializer.Json" Version="0.24.1" />

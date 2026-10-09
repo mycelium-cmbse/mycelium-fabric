@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
     using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Serializer.Json;
 
     using AttributeUsageDto = SysML2.NET.Core.DTO.Systems.Attributes.AttributeUsage;
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
@@ -72,7 +73,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier().Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
                 [new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150 } } }]);
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);

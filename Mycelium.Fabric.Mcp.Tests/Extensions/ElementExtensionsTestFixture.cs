@@ -22,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Parts;
+    using SysML2.NET.Serializer.Json;
 
     /// <summary>
     /// Suite of tests for the <see cref="ElementExtensions"/> class.
@@ -46,7 +47,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [SetUp]
         public void SetUp()
         {
-            var modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
+            var modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             this.payloadSubsystem = modelProvider.GetElementById(PayloadSubsystemId);

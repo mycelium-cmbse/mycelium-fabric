@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
     using SysML2.NET.Core.DTO.Kernel.Expressions;
     using SysML2.NET.Core.DTO.Systems.Requirements;
     using SysML2.NET.Core.Systems.Requirements;
+    using SysML2.NET.Serializer.Json;
 
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
 
@@ -85,7 +86,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier().Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
             [
                 new ModelChange { Identity = RequirementIds[0], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[0], SatisfyingPart = Eosat1Id } },
@@ -160,7 +161,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier().Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
             [
                 new ModelChange { Identity = RequirementIds[0], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Identity = RequirementIds[1], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "power", Operator = "<", Limit = 70 } } },
@@ -286,7 +287,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
 
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier().Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
             [
                 .. cases.SelectMany((_, index) => new[]
                 {
@@ -350,7 +351,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier().Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
             [
                 new ModelChange { Identity = RequirementIds[0], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[0], SatisfyingPart = Eosat1Id } },

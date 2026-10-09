@@ -22,6 +22,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
+    using SysML2.NET.Serializer.Json;
+
     /// <summary>
     /// Suite of tests for the <see cref="RequirementTools"/> class.
     /// </summary>
@@ -163,7 +165,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="InMemoryModelProvider"/> with the loaded model.</returns>
         private static InMemoryModelProvider CreateSatelliteModelProvider()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return satelliteModelProvider;

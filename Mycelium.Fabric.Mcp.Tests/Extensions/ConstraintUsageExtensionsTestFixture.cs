@@ -21,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
     using SysML2.NET.Core.POCO.Systems.Constraints;
     using SysML2.NET.Core.Systems.Requirements;
+    using SysML2.NET.Serializer.Json;
 
     using ConstraintUsageDto = SysML2.NET.Core.DTO.Systems.Constraints.ConstraintUsage;
 
@@ -45,7 +46,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier().Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
             [
                 new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Identity = EclipseEnergyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 } } }

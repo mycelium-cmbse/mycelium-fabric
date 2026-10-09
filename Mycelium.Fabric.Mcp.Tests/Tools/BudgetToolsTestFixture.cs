@@ -27,6 +27,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Extensions;
+    using SysML2.NET.Serializer.Json;
 
     /// <summary>
     /// Suite of tests for the <see cref="BudgetTools"/> class.
@@ -172,7 +173,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             }
 
             // Once REQ-SYS-001 is verifiable for the whole satellite, a what-if on the payload checks it again.
-            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             satelliteModelProvider.ApplyChanges(
@@ -195,7 +196,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void Budgets_WithUnits_ConvertTheValues()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier());
+            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             var massMemoryId = satelliteModelProvider.Elements.Single(element => element.DeclaredName == "massMemory").Id;
 
@@ -245,7 +246,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="BudgetTools"/> on the loaded model.</returns>
         private static BudgetTools CreateSatelliteTools()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object);
+            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return new BudgetTools(satelliteModelProvider);
