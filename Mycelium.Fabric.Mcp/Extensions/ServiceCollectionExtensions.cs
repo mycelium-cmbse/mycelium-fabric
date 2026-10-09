@@ -19,6 +19,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
+    using Mycelium.Fabric.Mcp.Validation;
+    using Mycelium.Fabric.Mcp.Validation.Rules;
 
     using SysML2.NET.Serializer.Json;
 
@@ -34,7 +36,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// Registers the MCP server, its tools, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/> unless the
             /// host has registered its own, the <see cref="ModelChangeApplier"/>, an <see cref="InMemoryModelProvider"/> that
             /// loads the model from the given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the
-            /// export folder of the <see cref="ModelExportOptions"/>, read from the configuration of the host.
+            /// export folder of the <see cref="ModelExportOptions"/>, read from the configuration of the host, and a
+            /// <see cref="ModelValidator"/> with its <see cref="IValidationRule"/>s.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -69,12 +72,23 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return new JsonModelExporter(serviceProvider.GetRequiredService<ISerializer>(), new Uri(exportDirectory));
                 });
 
+                services.AddSingleton<IValidationRule, BrokenReferenceRule>();
+                services.AddSingleton<IValidationRule, OrphanElementRule>();
+                services.AddSingleton<IValidationRule, DuplicateNameRule>();
+                services.AddSingleton<IValidationRule, UntypedUsageRule>();
+                services.AddSingleton<IValidationRule, RequirementWithoutConstraintRule>();
+                services.AddSingleton<IValidationRule, RequirementWithoutSatisfyRule>();
+                services.AddSingleton<IValidationRule, UnusedDefinitionRule>();
+                services.AddSingleton<IValidationRule, RequirementWithoutIdRule>();
+                services.AddSingleton<IModelValidator, ModelValidator>();
+
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
                     .WithTools<ConstructionTools>()
-                    .WithTools<ExportTools>();
+                    .WithTools<ExportTools>()
+                    .WithTools<ValidationTools>();
             }
         }
     }
