@@ -25,6 +25,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.TradeOff;
 
     using SysML2.NET.Serializer.Json;
 
@@ -62,6 +63,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
             var exportOptionsRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConfigureOptions<ModelExportOptions>)).ToList();
             var exporterRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelExporter)).ToList();
+            var solverRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(ITradeOffSolver)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
 
             using (Assert.EnterMultipleScope())
@@ -81,7 +83,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(exportOptionsRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(10));
+                Assert.That(solverRegistrations, Has.Count.EqualTo(1));
+                Assert.That(solverRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(solverRegistrations[0].ImplementationType, Is.EqualTo(typeof(CpSatTradeOffSolver)));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(11));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
