@@ -120,9 +120,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(cameraReport.Rules.Select(rule => rule.IssueCount), Is.EqualTo([1, 1]));
                 Assert.That(cameraReport.Issues, Is.EqualTo(issues.Take(1)));
                 Assert.That(cameraReport.NextOffset, Is.EqualTo(1));
+                this.modelValidator.Verify(validator => validator.Validate(elements), Times.Exactly(4));
             }
-
-            this.modelValidator.Verify(validator => validator.Validate(elements), Times.Exactly(4));
 
             // EOSat-1 is well formed: its six requirements are only text, and no part satisfies them.
             var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());

@@ -11,7 +11,6 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
 
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Exceptions;
