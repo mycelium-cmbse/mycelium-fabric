@@ -42,6 +42,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// </summary>
         private static readonly Guid PayloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
 
+        /// <summary>
+        /// The names of the rules to check when only the <c>untyped-usage</c> rule is chosen.
+        /// </summary>
+        private static readonly string[] UntypedUsageRuleNames = ["untyped-usage"];
+
         private Mock<IModelProvider> modelProvider;
 
         private Mock<IModelValidator> modelValidator;
@@ -85,7 +90,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             this.modelProvider.Setup(provider => provider.GetRequiredElementById(camera.Id)).Returns(elements.Single(element => element.Id == camera.Id));
             this.modelValidator.Setup(validator => validator.Rules).Returns([CreateRule("broken-reference", ValidationSeverity.Error), CreateRule("untyped-usage", ValidationSeverity.Warning)]);
             this.modelValidator.Setup(validator => validator.Validate(elements, null)).Returns(issues);
-            this.modelValidator.Setup(validator => validator.Validate(elements, It.Is<IReadOnlyCollection<string>>(names => names != null && names.SequenceEqual(new[] { "untyped-usage" }))))
+            this.modelValidator.Setup(validator => validator.Validate(elements, It.Is<IReadOnlyCollection<string>>(names => names != null && names.SequenceEqual(UntypedUsageRuleNames))))
                 .Returns(issues.Skip(1).ToList());
 
             var tools = new ValidationTools(this.modelProvider.Object, this.modelValidator.Object);
