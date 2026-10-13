@@ -141,10 +141,12 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <returns>The new expression.</returns>
         private FeatureReferenceExpression CreateUnitReference(Unit unit)
         {
-            var unitElement = this.elementsById.Values
+            var candidates = this.elementsById.Values
                 .OfType<IAttributeUsage>()
-                .Where(candidate => candidate.DeclaredShortName == unit.Symbol && !this.IsMarkedForDeletion(candidate))
-                .FirstOrDefault(candidate => UnitCatalog.LibraryPackages.Contains(this.GetQualifiedName(this.GetOwner(candidate))));
+                .Where(candidate => candidate.DeclaredShortName == unit.Symbol && !this.IsMarkedForDeletion(candidate));
+
+            var unitElement = this.AssembleElements(candidates)
+                .FirstOrDefault(candidate => UnitCatalog.LibraryPackages.Contains(candidate.owningNamespace?.qualifiedName));
 
             var reference = this.Add(new FeatureReferenceExpression());
             var unitId = unitElement?.Id ?? CreateUnitId(unit.Symbol);
@@ -164,21 +166,24 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the text names several enumeration values.</exception>
         private IElement FindEnumerationValue(string text)
         {
-            var enumerationValues = this.elementsById.Values
+            var candidates = this.elementsById.Values
                 .OfType<IEnumerationUsage>()
-                .Where(candidate => this.GetOwner(candidate) is IEnumerationDefinition && !this.IsMarkedForDeletion(candidate))
-                .Select(candidate => (Element: (IElement)candidate, QualifiedName: this.GetQualifiedName(candidate)))
-                .Where(candidate => candidate.QualifiedName == text || (candidate.QualifiedName?.EndsWith($"{QualifiedNameSeparator}{text}", StringComparison.Ordinal) ?? false))
+                .Where(candidate => this.GetOwner(candidate) is IEnumerationDefinition && !this.IsMarkedForDeletion(candidate));
+
+            var enumerationValues = this.AssembleElements(candidates)
+                .Where(candidate => candidate.qualifiedName == text || (candidate.qualifiedName?.EndsWith($"{QualifiedNameSeparator}{text}", StringComparison.Ordinal) ?? false))
                 .ToList();
 
             if (enumerationValues.Count > 1)
             {
-                var qualifiedNames = enumerationValues.Select(candidate => $"'{candidate.QualifiedName}'");
+                var qualifiedNames = enumerationValues
+                    .Select(candidate => $"'{candidate.qualifiedName}'")
+                    .Order(StringComparer.Ordinal);
 
                 throw new InvalidChangeException($"'{text}' names several enumeration values: write {string.Join(" or ", qualifiedNames)}.");
             }
 
-            return enumerationValues.FirstOrDefault().Element;
+            return enumerationValues.Count == 0 ? null : this.elementsById[enumerationValues[0].Id];
         }
     }
 }

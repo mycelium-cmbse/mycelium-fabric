@@ -31,6 +31,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.PIM;
     using SysML2.NET.PSM.DTO;
 
+    using PocoElement = SysML2.NET.Core.POCO.Root.Elements.IElement;
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
     using PocoSatisfyRequirementUsage = SysML2.NET.Core.POCO.Systems.Requirements.ISatisfyRequirementUsage;
 
@@ -471,13 +472,35 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <returns>The relationships of the working copy.</returns>
         private List<PocoRelationship> AssembleRelationships()
         {
+            return this.AssembleElements()
+                .OfType<PocoRelationship>()
+                .ToList();
+        }
+
+        /// <summary>
+        /// Builds the POCOs of the working copy with SysML2.NET, which computes their derived properties, such as
+        /// <c>qualifiedName</c>, from the whole working copy.
+        /// </summary>
+        /// <returns>The POCOs of the working copy.</returns>
+        private IEnumerable<PocoElement> AssembleElements()
+        {
             var assembler = new Assembler();
             assembler.Synchronize(this.elementsById.Values);
 
-            return assembler.Cache.Values
-                .Select(lazyElement => lazyElement.Value)
-                .OfType<PocoRelationship>()
-                .ToList();
+            return assembler.Cache.Values.Select(lazyElement => lazyElement.Value);
+        }
+
+        /// <summary>
+        /// Gets the POCOs of some elements of the working copy, to read the derived properties that SysML2.NET computes, such
+        /// as <c>qualifiedName</c>. The working copy is built only when there is an element.
+        /// </summary>
+        /// <param name="elements">The elements of the working copy.</param>
+        /// <returns>The POCOs of these elements.</returns>
+        private List<PocoElement> AssembleElements(IEnumerable<IElement> elements)
+        {
+            var elementIds = elements.Select(element => element.Id).ToHashSet();
+
+            return elementIds.Count == 0 ? [] : [.. this.AssembleElements().Where(element => elementIds.Contains(element.Id))];
         }
 
         /// <summary>
@@ -858,33 +881,6 @@ namespace Mycelium.Fabric.Mcp.Changes
             };
 
             return ownerId == null ? null : this.elementsById.GetValueOrDefault(ownerId.Value);
-        }
-
-        /// <summary>
-        /// Gets the qualified name of an element of the working copy, as SysML2.NET computes it on the POCOs: the names of its
-        /// owners and its own, without the root namespace of the model, which has no name.
-        /// </summary>
-        /// <param name="element">The element, or <c>null</c>.</param>
-        /// <returns>The qualified name, for example <c>EOSat1::OrbitKind::polar</c>, or <c>null</c> when the element or one of its owners has no name.</returns>
-        private string GetQualifiedName(IElement element)
-        {
-            var names = new List<string>();
-
-            for (var current = element; current != null; current = this.GetOwner(current))
-            {
-                var name = current.DeclaredName ?? current.DeclaredShortName;
-
-                if (name != null)
-                {
-                    names.Insert(0, name);
-                }
-                else if (this.GetOwner(current) != null)
-                {
-                    return null;
-                }
-            }
-
-            return names.Count == 0 ? null : string.Join(QualifiedNameSeparator, names);
         }
 
         /// <summary>
