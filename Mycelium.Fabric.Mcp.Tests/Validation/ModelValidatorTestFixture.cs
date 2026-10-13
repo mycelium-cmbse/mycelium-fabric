@@ -103,6 +103,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
                 Assert.That(DescribeIn(issues, power.OwningRelationship), Is.EqualTo("FeatureMembership of power"));
                 Assert.That(DescribeIn(issuesWithoutMass, mass.OwningRelationship), Is.EqualTo("FeatureMembership"));
             }
+
+            // Only the chosen rules are run.
+            this.warningRule.Invocations.Clear();
+            var errorIssues = validator.Validate(elements, ["error-rule"]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => validator.Validate(elements, ["error-rule", "unknown"]), Throws.TypeOf<ArgumentException>().With.Message.StartsWith("No rule is named 'unknown'."));
+                Assert.That(errorIssues, Is.EqualTo(issues.Take(1)));
+                this.warningRule.Verify(rule => rule.FindProblem(It.IsAny<IElement>(), It.IsAny<ValidationContext>()), Times.Never);
+            }
         }
 
         /// <summary>

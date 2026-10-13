@@ -19,19 +19,12 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
     public class RequirementWithoutConstraintRule : RequirementRule
     {
         /// <summary>
-        /// Gets the name of the rule.
+        /// Initializes a new instance of the <see cref="RequirementWithoutConstraintRule"/> class.
         /// </summary>
-        public override string Name => "requirement-without-constraint";
-
-        /// <summary>
-        /// Gets the <see cref="ValidationSeverity"/> of the issues found by the rule.
-        /// </summary>
-        public override ValidationSeverity Severity => ValidationSeverity.Warning;
-
-        /// <summary>
-        /// Gets the description of what the rule checks.
-        /// </summary>
-        public override string Description => "A requirement has no required constraint, so it is only text and cannot be verified.";
+        public RequirementWithoutConstraintRule() : base("requirement-without-constraint", ValidationSeverity.Warning,
+            "A requirement has no required constraint, so it is only text and cannot be verified.")
+        {
+        }
 
         /// <summary>
         /// Checks that a requirement has a required constraint.

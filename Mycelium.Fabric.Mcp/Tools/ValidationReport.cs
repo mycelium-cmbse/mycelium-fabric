@@ -21,7 +21,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="WarningCount">The number of warnings in the checked elements.</param>
     /// <param name="InformationCount">The number of information issues in the checked elements.</param>
     /// <param name="Rules">Each rule checked, with its number of issues, the most serious first.</param>
-    /// <param name="TotalFound">The number of issues that match the requested severity and rule.</param>
+    /// <param name="TotalFound">The number of issues that match the requested severity.</param>
     /// <param name="Issues">The matching issues of the requested page, the most serious first.</param>
     /// <param name="NextOffset">The offset that gives the next page, or <c>null</c> when this page is the last one.</param>
     public sealed record ValidationReport(int ElementCount, int ErrorCount, int WarningCount, int InformationCount, IReadOnlyList<RuleSummary> Rules,

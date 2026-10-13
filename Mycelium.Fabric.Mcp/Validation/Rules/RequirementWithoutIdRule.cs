@@ -18,19 +18,12 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
     public class RequirementWithoutIdRule : RequirementRule
     {
         /// <summary>
-        /// Gets the name of the rule.
+        /// Initializes a new instance of the <see cref="RequirementWithoutIdRule"/> class.
         /// </summary>
-        public override string Name => "requirement-without-id";
-
-        /// <summary>
-        /// Gets the <see cref="ValidationSeverity"/> of the issues found by the rule.
-        /// </summary>
-        public override ValidationSeverity Severity => ValidationSeverity.Information;
-
-        /// <summary>
-        /// Gets the description of what the rule checks.
-        /// </summary>
-        public override string Description => "A requirement has no identifier (reqId), so it cannot be traced to the document it comes from.";
+        public RequirementWithoutIdRule() : base("requirement-without-id", ValidationSeverity.Information,
+            "A requirement has no identifier (reqId), so it cannot be traced to the document it comes from.")
+        {
+        }
 
         /// <summary>
         /// Checks that a requirement has an identifier.

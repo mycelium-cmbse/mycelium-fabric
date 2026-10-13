@@ -84,13 +84,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             this.modelProvider.Setup(provider => provider.Elements).Returns(elements);
             this.modelProvider.Setup(provider => provider.GetRequiredElementById(camera.Id)).Returns(elements.Single(element => element.Id == camera.Id));
             this.modelValidator.Setup(validator => validator.Rules).Returns([CreateRule("broken-reference", ValidationSeverity.Error), CreateRule("untyped-usage", ValidationSeverity.Warning)]);
-            this.modelValidator.Setup(validator => validator.Validate(elements)).Returns(issues);
+            this.modelValidator.Setup(validator => validator.Validate(elements, null)).Returns(issues);
+            this.modelValidator.Setup(validator => validator.Validate(elements, It.Is<IReadOnlyCollection<string>>(names => names != null && names.SequenceEqual(new[] { "untyped-usage" }))))
+                .Returns(issues.Skip(1).ToList());
 
             var tools = new ValidationTools(this.modelProvider.Object, this.modelValidator.Object);
 
             var firstPage = tools.ValidateModel();
             var errors = tools.ValidateModel(severity: ValidationSeverity.Error);
-            var lastWarnings = tools.ValidateModel(rule: "untyped-usage", offset: 20);
+            var allRules = tools.ValidateModel(rules: []);
+            var lastWarnings = tools.ValidateModel(rules: ["untyped-usage", "untyped-usage"], offset: 20);
             var cameraReport = tools.ValidateModel(camera.Id, limit: 1);
 
             using (Assert.EnterMultipleScope())
@@ -98,7 +101,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(() => tools.ValidateModel(offset: -1), Throws.TypeOf<McpException>());
                 Assert.That(() => tools.ValidateModel(limit: 0), Throws.TypeOf<McpException>());
                 Assert.That(() => tools.ValidateModel(limit: 21), Throws.TypeOf<McpException>());
-                Assert.That(() => tools.ValidateModel(rule: "unknown"), Throws.TypeOf<McpException>().With.Message.EqualTo("No rule is named 'unknown'. The rules are: broken-reference, untyped-usage."));
+                Assert.That(() => tools.ValidateModel(rules: ["untyped-usage", "unknown", "other"]),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("No rule is named 'unknown', 'other'. The rules are: broken-reference, untyped-usage."));
                 Assert.That(() => tools.ValidateModel(Guid.NewGuid()), Throws.TypeOf<McpException>());
                 Assert.That(firstPage.ElementCount, Is.EqualTo(elements.Count));
                 Assert.That(firstPage.ErrorCount, Is.EqualTo(1));
@@ -111,6 +115,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(errors.TotalFound, Is.EqualTo(1));
                 Assert.That(errors.Issues, Is.EqualTo(issues.Take(1)));
                 Assert.That(errors.NextOffset, Is.Null);
+                Assert.That(allRules.Rules, Is.EqualTo(firstPage.Rules));
+                Assert.That(allRules.Issues, Is.EqualTo(firstPage.Issues));
+                Assert.That(lastWarnings.Rules, Is.EqualTo([new RuleSummary("untyped-usage", ValidationSeverity.Warning, "The untyped-usage.", 22)]));
                 Assert.That(lastWarnings.TotalFound, Is.EqualTo(22));
                 Assert.That(lastWarnings.Issues.Select(issue => issue.Message), Is.EqualTo(["Untyped 19.", "Untyped 20."]));
                 Assert.That(lastWarnings.NextOffset, Is.Null);
@@ -120,20 +127,21 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(cameraReport.Rules.Select(rule => rule.IssueCount), Is.EqualTo([1, 1]));
                 Assert.That(cameraReport.Issues, Is.EqualTo(issues.Take(1)));
                 Assert.That(cameraReport.NextOffset, Is.EqualTo(1));
-                this.modelValidator.Verify(validator => validator.Validate(elements), Times.Exactly(4));
+                this.modelValidator.Verify(validator => validator.Validate(elements, null), Times.Exactly(4));
+                this.modelValidator.Verify(validator => validator.Validate(elements, It.IsNotNull<IReadOnlyCollection<string>>()), Times.Once);
             }
 
             // EOSat-1 is well formed: its six requirements are only text, and no part satisfies them.
             var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
-            IValidationRule[] rules = [new BrokenReferenceRule(), new OrphanElementRule(), new DuplicateNameRule(), new UntypedUsageRule(), new RequirementWithoutConstraintRule(),
+            IValidationRule[] rules = [new BrokenReferenceRule(), new OrphanElementRule(), new DuplicateQualifiedNameRule(), new UntypedUsageRule(), new RequirementWithoutConstraintRule(),
                 new RequirementWithoutSatisfyRule(), new UnusedDefinitionRule(), new RequirementWithoutIdRule()];
 
             var satelliteTools = new ValidationTools(satelliteModelProvider, new ModelValidator(rules));
 
             var report = satelliteTools.ValidateModel();
-            var constraintReport = satelliteTools.ValidateModel(rule: "requirement-without-constraint");
+            var requirementReport = satelliteTools.ValidateModel(rules: ["requirement-without-id", "requirement-without-constraint"]);
             var payloadReport = satelliteTools.ValidateModel(PayloadSubsystemId);
 
             using (Assert.EnterMultipleScope())
@@ -142,10 +150,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(report.ErrorCount, Is.EqualTo(0));
                 Assert.That(report.WarningCount, Is.EqualTo(12));
                 Assert.That(report.InformationCount, Is.EqualTo(0));
-                Assert.That(report.Rules.Select(rule => rule.Name), Is.EqualTo(["broken-reference", "duplicate-name", "orphan-element", "requirement-without-constraint", "requirement-without-satisfy",
+                Assert.That(report.Rules.Select(rule => rule.Name), Is.EqualTo(["broken-reference", "duplicate-qualified-name", "orphan-element", "requirement-without-constraint", "requirement-without-satisfy",
                     "untyped-usage", "requirement-without-id", "unused-definition"]));
-                Assert.That(constraintReport.TotalFound, Is.EqualTo(6));
-                Assert.That(constraintReport.Issues[0].Element, Is.EqualTo("EOSat1::Requirements::attitudeKnowledge"));
+                Assert.That(requirementReport.Rules.Select(rule => rule.Name), Is.EqualTo(["requirement-without-constraint", "requirement-without-id"]));
+                Assert.That(requirementReport.WarningCount, Is.EqualTo(6));
+                Assert.That(requirementReport.TotalFound, Is.EqualTo(6));
+                Assert.That(requirementReport.Issues[0].Element, Is.EqualTo("EOSat1::Requirements::attitudeKnowledge"));
                 Assert.That(payloadReport.ElementCount, Is.GreaterThan(1).And.LessThan(548));
                 Assert.That(payloadReport.TotalFound, Is.EqualTo(0));
             }

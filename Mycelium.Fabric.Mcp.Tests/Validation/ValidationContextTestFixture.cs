@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
     using SysML2.NET.Core.DTO.Core.Features;
     using SysML2.NET.Core.DTO.Core.Types;
     using SysML2.NET.Core.DTO.Kernel.Packages;
+    using SysML2.NET.Core.DTO.Root.Namespaces;
     using SysML2.NET.Core.DTO.Systems.Parts;
     using SysML2.NET.Core.DTO.Systems.Requirements;
 
@@ -37,6 +38,30 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
             {
                 Assert.That(() => new ValidationContext(null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => new ValidationContext([]), Throws.Nothing);
+            }
+        }
+
+        [Test]
+        public void VerifyGetQualifiedName()
+        {
+            // A package owns two parts and an anonymous part. When the camera is removed, the qualified name of the lens cannot be
+            // computed.
+            var builder = new DtoModelBuilder();
+            var package = builder.AddMember(builder.RootNamespace, new Package { DeclaredName = "Model" });
+            var camera = builder.AddMember(package, new PartUsage { DeclaredName = "camera" });
+            var anonymousPart = builder.AddMember(package, new PartUsage());
+            var lens = builder.AddMember(package, new PartUsage { DeclaredName = "lens" });
+            var elements = builder.Build();
+
+            builder.Remove(camera);
+            var elementsWithoutCamera = builder.Build();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ValidationContext.GetQualifiedName(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(ValidationContext.GetQualifiedName(elements.Single(element => element.Id == lens.Id)), Is.EqualTo("Model::lens"));
+                Assert.That(ValidationContext.GetQualifiedName(elements.Single(element => element.Id == anonymousPart.Id)), Is.Null);
+                Assert.That(ValidationContext.GetQualifiedName(elementsWithoutCamera.Single(element => element.Id == lens.Id)), Is.Null);
             }
         }
 
@@ -97,6 +122,29 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
                 Assert.That(context.IsSatisfied(Get(nested.Id)), Is.True);
                 Assert.That(context.IsSatisfied(Get(negated.Id)), Is.False);
                 Assert.That(context.IsSatisfied(Get(alone.Id)), Is.False);
+            }
+        }
+
+        [Test]
+        public void VerifyCountElementsNamed()
+        {
+            // Two root namespaces declare a Payload package with a camera part, and an Aocs package owns a camera too.
+            var builder = new DtoModelBuilder();
+            var payload = builder.AddMember(builder.RootNamespace, new Package { DeclaredName = "Payload" });
+            var otherPayload = builder.AddMember(builder.Add(new Namespace()), new Package { DeclaredName = "Payload" });
+            var aocs = builder.AddMember(builder.RootNamespace, new Package { DeclaredName = "Aocs" });
+            builder.AddMember(payload, new PartUsage { DeclaredName = "camera" });
+            builder.AddMember(otherPayload, new PartUsage { DeclaredName = "camera" });
+            builder.AddMember(aocs, new PartUsage { DeclaredName = "camera" });
+
+            var context = new ValidationContext(builder.Build());
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => context.CountElementsNamed(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(context.CountElementsNamed("Payload::camera"), Is.EqualTo(2));
+                Assert.That(context.CountElementsNamed("Aocs::camera"), Is.EqualTo(1));
+                Assert.That(context.CountElementsNamed("Payload::antenna"), Is.Zero);
             }
         }
     }

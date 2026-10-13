@@ -42,22 +42,38 @@ namespace Mycelium.Fabric.Mcp.Validation
         public IReadOnlyList<IValidationRule> Rules { get; }
 
         /// <summary>
-        /// Checks each element of a model against each rule. A rule that cannot check an element, because SysML2.NET cannot
-        /// compute a derived property of an incomplete model, skips it.
+        /// Checks each element of a model against each rule, or against the chosen rules only: the other rules are not run. A
+        /// rule that cannot check an element, because SysML2.NET cannot compute a derived property of an incomplete model,
+        /// skips it.
         /// </summary>
         /// <param name="elements">All the elements of the model.</param>
+        /// <param name="ruleNames">The names of the rules to check, or <c>null</c> to check all of them.</param>
         /// <returns>The issues found, the most serious first, then sorted by rule and by element.</returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="elements"/> is <c>null</c>.
         /// </exception>
-        public IReadOnlyList<ValidationIssue> Validate(IReadOnlyList<IElement> elements)
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="ruleNames"/> holds a name that is not the name of a rule.
+        /// </exception>
+        public IReadOnlyList<ValidationIssue> Validate(IReadOnlyList<IElement> elements, IReadOnlyCollection<string> ruleNames = null)
         {
             ArgumentNullException.ThrowIfNull(elements);
+
+            var unknownRuleNames = (ruleNames ?? []).Except(this.Rules.Select(rule => rule.Name), StringComparer.Ordinal).ToList();
+
+            if (unknownRuleNames.Count > 0)
+            {
+                throw new ArgumentException($"No rule is named {string.Join(", ", unknownRuleNames.Select(name => $"'{name}'"))}.", nameof(ruleNames));
+            }
+
+            var rules = this.Rules
+                .Where(rule => ruleNames == null || ruleNames.Contains(rule.Name, StringComparer.Ordinal))
+                .ToList();
 
             var context = new ValidationContext(elements);
 
             return elements
-                .SelectMany(element => this.Rules
+                .SelectMany(element => rules
                     .Select(rule => (Rule: rule, Problem: FindProblem(rule, element, context)))
                     .Where(result => result.Problem != null)
                     .Select(result => new ValidationIssue(result.Rule.Name, result.Rule.Severity, element.Id, Describe(element), result.Problem)))
@@ -95,7 +111,7 @@ namespace Mycelium.Fabric.Mcp.Validation
         /// <returns>The description of the element.</returns>
         private static string Describe(IElement element)
         {
-            var name = GetQualifiedName(element) ?? element.DeclaredName;
+            var name = ValidationContext.GetQualifiedName(element) ?? element.DeclaredName;
 
             if (!string.IsNullOrEmpty(name))
             {
@@ -113,24 +129,6 @@ namespace Mycelium.Fabric.Mcp.Validation
             var ownedElementName = element is IRelationship { OwnedRelatedElement: [var ownedElement, ..] } ? ownedElement?.DeclaredName : null;
 
             return ownedElementName == null ? metaclass : $"{metaclass} of {ownedElementName}";
-        }
-
-        /// <summary>
-        /// Gets the qualified name of an element. SysML2.NET cannot compute it when a namespace that contains the element has
-        /// a membership whose member is not in the model.
-        /// </summary>
-        /// <param name="element">The element.</param>
-        /// <returns>The qualified name of the element, or <c>null</c> when it has none or it cannot be computed.</returns>
-        private static string GetQualifiedName(IElement element)
-        {
-            try
-            {
-                return element.qualifiedName;
-            }
-            catch (IncompleteModelException)
-            {
-                return null;
-            }
         }
     }
 }

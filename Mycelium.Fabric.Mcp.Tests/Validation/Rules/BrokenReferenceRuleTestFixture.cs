@@ -16,7 +16,18 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
     using Mycelium.Fabric.Mcp.Validation;
     using Mycelium.Fabric.Mcp.Validation.Rules;
 
+    using SysML2.NET.Core.DTO.Core.Classifiers;
     using SysML2.NET.Core.DTO.Core.Features;
+    using SysML2.NET.Core.DTO.Core.Types;
+    using SysML2.NET.Core.DTO.Kernel.Connectors;
+    using SysML2.NET.Core.DTO.Kernel.Packages;
+    using SysML2.NET.Core.DTO.Root.Annotations;
+    using SysML2.NET.Core.DTO.Root.Dependencies;
+    using SysML2.NET.Core.DTO.Root.Namespaces;
+    using SysML2.NET.Core.DTO.Systems.Connections;
+    using SysML2.NET.Core.DTO.Systems.Parts;
+
+    using DtoRelationship = SysML2.NET.Core.DTO.Root.Elements.IRelationship;
 
     /// <summary>
     /// Suite of tests for the <see cref="BrokenReferenceRule"/> class.
@@ -33,7 +44,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
             {
                 Assert.That(rule.Name, Is.EqualTo("broken-reference"));
                 Assert.That(rule.Severity, Is.EqualTo(ValidationSeverity.Error));
-                Assert.That(rule.Description, Does.StartWith("A relationship refers to an element that is not in the model"));
+                Assert.That(rule.Description, Does.StartWith("A relationship misses an element that the metamodel requires"));
             }
         }
 
@@ -61,11 +72,59 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
             {
                 Assert.That(() => rule.FindProblem(null, context), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => rule.FindProblem(elements[0], null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(FindProblem(cameraTyping.Id), Is.EqualTo("The FeatureTyping refers to an element that is not in the model: it has been removed, or it was never loaded."));
+                Assert.That(FindProblem(cameraTyping.Id), Is.EqualTo("The FeatureTyping has no type, which the metamodel requires: the element it refers to has been removed, or it was never loaded."));
                 Assert.That(FindProblem(opticalCamera.OwningRelationship), Does.StartWith("The OwningMembership refers to an element that is not in the model"));
                 Assert.That(FindProblem(satelliteTyping.Id), Is.Null);
                 Assert.That(FindProblem(orphanMembershipId), Is.Null);
                 Assert.That(FindProblem(camera.Id), Is.Null);
+            }
+
+            // A connection and a binding connector without ends, whose ends are optional, a dependency between two definitions,
+            // a dependency whose supplier is not in the model, an import of the package, and a
+            // relationship of each other metaclass that has required ends.
+            var linkBuilder = new DtoModelBuilder();
+            var package = linkBuilder.AddMember(linkBuilder.RootNamespace, new Package { DeclaredName = "Links" });
+            var antenna = linkBuilder.AddMember(package, new PartDefinition { DeclaredName = "Antenna" });
+            var radio = linkBuilder.AddMember(package, new PartDefinition { DeclaredName = "Radio" });
+            var antennaPart = linkBuilder.AddMember(package, new PartUsage { DeclaredName = "antenna" });
+            var connection = linkBuilder.AddRelationship(antennaPart, new ConnectionUsage { DeclaredName = "rfLink" });
+            var bindingConnector = linkBuilder.AddRelationship(antennaPart, new BindingConnector());
+            var dependency = linkBuilder.AddMember(package, new Dependency { DeclaredName = "needsRadio", Client = [antenna.Id], Supplier = [radio.Id] });
+            var brokenDependency = linkBuilder.AddMember(package, new Dependency { DeclaredName = "needsOldRadio", Client = [antenna.Id], Supplier = [Guid.NewGuid()] });
+            var import = linkBuilder.AddRelationship(package, new NamespaceImport { ImportedNamespace = package.Id });
+
+            var comment = linkBuilder.AddMember(package, new Comment { Body = "The antenna." });
+
+            DtoRelationship[] validRelationships =
+            [
+                linkBuilder.AddRelationship(package, new Membership { MemberElement = radio.Id, MemberName = "receiver" }),
+                linkBuilder.AddRelationship(package, new MembershipImport { ImportedMembership = radio.OwningRelationship.Value }),
+                linkBuilder.AddRelationship(antennaPart, new ReferenceSubsetting { ReferencedFeature = antennaPart.Id }),
+                linkBuilder.AddRelationship(radio, new Subclassification { Subclassifier = radio.Id, Superclassifier = antenna.Id }),
+                linkBuilder.AddRelationship(radio, new Conjugation { ConjugatedType = radio.Id, OriginalType = antenna.Id }),
+                linkBuilder.AddRelationship(comment, new Annotation { AnnotatedElement = antenna.Id }),
+                linkBuilder.AddRelationship(radio, new Disjoining { TypeDisjoined = radio.Id, DisjoiningType = antenna.Id }),
+                linkBuilder.AddRelationship(radio, new Differencing { DifferencingType = antenna.Id }),
+                linkBuilder.AddRelationship(radio, new Intersecting { IntersectingType = antenna.Id }),
+                linkBuilder.AddRelationship(radio, new Unioning { UnioningType = antenna.Id }),
+                linkBuilder.AddRelationship(antennaPart, new FeatureChaining { ChainingFeature = antennaPart.Id }),
+                linkBuilder.AddRelationship(antennaPart, new FeatureInverting { FeatureInverted = antennaPart.Id, InvertingFeature = antennaPart.Id }),
+                linkBuilder.AddRelationship(antennaPart, new TypeFeaturing { FeatureOfType = antennaPart.Id, FeaturingType = antenna.Id }),
+            ];
+
+            var linkElements = linkBuilder.Build();
+            var linkContext = new ValidationContext(linkElements);
+
+            string FindLinkProblem(Guid elementId) => rule.FindProblem(linkElements.Single(element => element.Id == elementId), linkContext);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(FindLinkProblem(connection.Id), Is.Null);
+                Assert.That(FindLinkProblem(bindingConnector.Id), Is.Null);
+                Assert.That(FindLinkProblem(dependency.Id), Is.Null);
+                Assert.That(FindLinkProblem(brokenDependency.Id), Is.EqualTo("The Dependency has no supplier, which the metamodel requires: the element it refers to has been removed, or it was never loaded."));
+                Assert.That(FindLinkProblem(import.Id), Is.Null);
+                Assert.That(validRelationships.Select(relationship => FindLinkProblem(relationship.Id)), Is.All.Null);
             }
         }
     }

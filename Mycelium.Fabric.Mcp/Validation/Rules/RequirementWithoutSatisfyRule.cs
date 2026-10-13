@@ -18,19 +18,12 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
     public class RequirementWithoutSatisfyRule : RequirementRule
     {
         /// <summary>
-        /// Gets the name of the rule.
+        /// Initializes a new instance of the <see cref="RequirementWithoutSatisfyRule"/> class.
         /// </summary>
-        public override string Name => "requirement-without-satisfy";
-
-        /// <summary>
-        /// Gets the <see cref="ValidationSeverity"/> of the issues found by the rule.
-        /// </summary>
-        public override ValidationSeverity Severity => ValidationSeverity.Warning;
-
-        /// <summary>
-        /// Gets the description of what the rule checks.
-        /// </summary>
-        public override string Description => "No satisfy link refers to a requirement, so no part is known to satisfy it and it cannot be checked on the design.";
+        public RequirementWithoutSatisfyRule() : base("requirement-without-satisfy", ValidationSeverity.Warning,
+            "No satisfy link refers to a requirement, so no part is known to satisfy it and it cannot be checked on the design.")
+        {
+        }
 
         /// <summary>
         /// Checks that a satisfy link refers to a requirement.

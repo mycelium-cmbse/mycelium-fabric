@@ -9,7 +9,6 @@
 
 namespace Mycelium.Fabric.Mcp.Validation.Rules
 {
-    using System;
     using System.Linq;
 
     using SysML2.NET.Core.POCO.Core.Types;
@@ -21,22 +20,17 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
     /// The base class of the rules that check the requirements of the model. They check the requirements stated in the model,
     /// not the satisfy links, which are requirements too, nor the requirements declared inside a definition.
     /// </summary>
-    public abstract class RequirementRule : IValidationRule
+    public abstract class RequirementRule : BaseRule
     {
         /// <summary>
-        /// Gets the name of the rule.
+        /// Initializes a new instance of the <see cref="RequirementRule"/> class.
         /// </summary>
-        public abstract string Name { get; }
-
-        /// <summary>
-        /// Gets the <see cref="ValidationSeverity"/> of the issues found by the rule.
-        /// </summary>
-        public abstract ValidationSeverity Severity { get; }
-
-        /// <summary>
-        /// Gets the description of what the rule checks.
-        /// </summary>
-        public abstract string Description { get; }
+        /// <param name="name">The name of the rule, in kebab case.</param>
+        /// <param name="severity">The <see cref="ValidationSeverity"/> of the issues found by the rule.</param>
+        /// <param name="description">The description of what the rule checks, in one sentence.</param>
+        protected RequirementRule(string name, ValidationSeverity severity, string description) : base(name, severity, description)
+        {
+        }
 
         /// <summary>
         /// Checks an element when it is a requirement stated in the model.
@@ -44,14 +38,8 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
         /// <param name="element">The <see cref="IElement"/> to check.</param>
         /// <param name="context">The <see cref="ValidationContext"/> of the model.</param>
         /// <returns>The problem of the requirement, or <c>null</c> when the element is not a requirement or has no problem.</returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="element"/> or <paramref name="context"/> is <c>null</c>.
-        /// </exception>
-        public string FindProblem(IElement element, ValidationContext context)
+        protected sealed override string FindProblemCore(IElement element, ValidationContext context)
         {
-            ArgumentNullException.ThrowIfNull(element);
-            ArgumentNullException.ThrowIfNull(context);
-
             return element is IRequirementUsage requirement and not ISatisfyRequirementUsage && requirement.owner is not IDefinition
                 ? this.FindRequirementProblem(requirement, context)
                 : null;
