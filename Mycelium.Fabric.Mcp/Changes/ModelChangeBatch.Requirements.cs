@@ -248,7 +248,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.");
             }
@@ -421,15 +421,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when the feature must be created but a member already has its name.</exception>
         private IElement GetOrCreateSubjectMember(IElement owner, string name, bool isAttribute)
         {
-            var definitions = this.GetElements(owner.OwnedRelationship)
-                .OfType<IFeatureTyping>()
-                .Select(typing => this.elementsById.GetValueOrDefault(typing.Type))
-                .Where(definition => definition != null);
-
-            var member = definitions
-                .Prepend(owner)
-                .SelectMany(this.GetOwnedMembers)
-                .OfType<IFeature>()
+            var member = this.GetFeatures(owner)
                 .FirstOrDefault(candidate => candidate.DeclaredName == name && (!isAttribute || candidate is IAttributeUsage));
 
             if (member != null)
