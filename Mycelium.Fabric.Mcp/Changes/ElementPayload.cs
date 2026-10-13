@@ -48,15 +48,45 @@ namespace Mycelium.Fabric.Mcp.Changes
         public string Definition { get; init; }
 
         /// <summary>
-        /// Gets the numeric value of the element, which must be an attribute.
+        /// Gets the value of the element, which must be an attribute.
         /// </summary>
-        [Description("Create or update, for an attribute: its numeric value, for example 38 or 1.5. An update replaces the current value.")]
-        public double? Value { get; init; }
+        [Description("Create or update, for an attribute: its value, a number (38 or 1.5), a Boolean (true) or a text ('S-band'); a text that names an enumeration value of the model ('sunSynchronous' or 'OrbitKind::sunSynchronous') references it. An update replaces the current value.")]
+        public PayloadValue? Value { get; init; }
+
+        /// <summary>
+        /// Gets the unit of the numeric value of the element.
+        /// </summary>
+        [Description("Optional, with a numeric value: its unit, as a symbol (kg, W, km/h, m/s^2, arcsec, kWh, Mbit/s) or a name (kilogram). The value is then 38 [kg], and the budgets and checks convert the units.")]
+        public string Unit { get; init; }
 
         /// <summary>
         /// Gets the documentation of the element, which is the text of a requirement.
         /// </summary>
         [Description("Create or update: the documentation of the element, for example the unit of an attribute ('Dry mass of the unit [kg].'). Required for a RequirementUsage: the text of the requirement. An update replaces the current documentation.")]
         public string Text { get; init; }
+
+        /// <summary>
+        /// Gets the identifier of the requirement in its specification, which is its short name.
+        /// </summary>
+        [Description("Create or update, for a RequirementUsage: its identifier in the specification, for example 'REQ-SYS-001'. It must differ from the identifiers of the other requirements.")]
+        public string ReqId { get; init; }
+
+        /// <summary>
+        /// Gets the constraint that makes the requirement verifiable.
+        /// </summary>
+        [Description("Create or update, for a RequirementUsage: a constraint that makes it verifiable (a required constraint, or an assumption with kind Assumption), on an attribute of its subject. It replaces the current constraints of the same kind.")]
+        public ConstraintPayload Constraint { get; init; }
+
+        /// <summary>
+        /// Gets the requirement that the created <c>SatisfyRequirementUsage</c> satisfies.
+        /// </summary>
+        [Description("Create, for a SatisfyRequirementUsage: the satisfied requirement, as an identifier (Id) or a temporary name. Without owner, the satisfy link is created next to the requirement.")]
+        public string SatisfiedRequirement { get; init; }
+
+        /// <summary>
+        /// Gets the part that satisfies the requirement of the created <c>SatisfyRequirementUsage</c>.
+        /// </summary>
+        [Description("Create, for a SatisfyRequirementUsage: the part that satisfies the requirement, for example the satellite or a subsystem, as an identifier (Id) or a temporary name.")]
+        public string SatisfyingPart { get; init; }
     }
 }

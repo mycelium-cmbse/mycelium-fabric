@@ -81,6 +81,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
                     .WithTools<ConstructionTools>()
+                    .WithTools<RequirementTools>()
                     .WithTools<ExportTools>()
                     .WithTools<ValidationTools>();
             }

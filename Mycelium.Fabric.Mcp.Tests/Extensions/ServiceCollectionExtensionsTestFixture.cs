@@ -91,7 +91,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(validatorRegistrations, Has.Count.EqualTo(1));
                 Assert.That(validatorRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(validatorRegistrations[0].ImplementationType, Is.EqualTo(typeof(ModelValidator)));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(10));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(11));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
