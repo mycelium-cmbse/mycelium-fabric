@@ -268,7 +268,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <exception cref="McpException">
         /// Thrown when the unit of the limit is not known or has a different dimension from the attribute.
         /// </exception>
-        private static TradeOffLimit ConvertLimit(TradeOffLimit limit, TradeOffConstraint constraint, int index, IReadOnlyDictionary<string, Unit> units)
+        private static TradeOffLimit ConvertLimit(TradeOffLimit limit, TradeOffConstraint constraint, int index, Dictionary<string, Unit> units)
         {
             var label = $"Constraint {index + 1}";
             var reference = units[limit.Attribute];
@@ -295,7 +295,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <exception cref="McpException">
         /// Thrown when a unit is not known, has a different dimension from the attribute, or gives a value that is too large.
         /// </exception>
-        private static Dictionary<string, double> ReadValues(TradeOffVariant variant, string choiceName, IReadOnlyDictionary<string, Unit> units)
+        private static Dictionary<string, double> ReadValues(TradeOffVariant variant, string choiceName, Dictionary<string, Unit> units)
         {
             var label = $"The variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'";
             var variantUnits = (variant.Units ?? new Dictionary<string, string>()).ToDictionary(pair => pair.Key.Trim(), pair => ParseUnit(pair.Value, $"{label} gives the unit of '{pair.Key.Trim()}', which"));
@@ -513,7 +513,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <exception cref="McpException">
         /// Thrown when a variant is invalid.
         /// </exception>
-        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, IReadOnlyDictionary<string, Unit> units)
+        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, Dictionary<string, Unit> units)
         {
             var variants = choice.Variants ?? [];
 
@@ -636,7 +636,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// Thrown when an owner of the part gives its own value for the attribute, so that the value of the part is not in the
         /// total.
         /// </exception>
-        private static double GetCurrentValue(ChosenPart part, IReadOnlyDictionary<string, double> givenValues, string attribute, string choiceName, Unit unit)
+        private static double GetCurrentValue(ChosenPart part, Dictionary<string, double> givenValues, string attribute, string choiceName, Unit unit)
         {
             if (part == null)
             {
