@@ -81,7 +81,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(exportOptionsRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(9));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(10));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
