@@ -28,25 +28,55 @@ namespace Mycelium.Fabric.Mcp.Expressions
     public sealed record InvocationTerm(string Function, IReadOnlyList<Term> Arguments) : Term
     {
         /// <summary>
+        /// The package of the SysML v2 library that declares the functions on real numbers.
+        /// </summary>
+        private const string RealFunctions = "RealFunctions";
+
+        /// <summary>
+        /// The packages of the SysML v2 library that declare the functions on rational and real numbers.
+        /// </summary>
+        private static readonly string[] RealPackages = ["RationalFunctions", RealFunctions];
+
+        /// <summary>
+        /// The packages of the SysML v2 library that declare the functions on all numbers.
+        /// </summary>
+        private static readonly string[] NumericalPackages = ["NumericalFunctions", "IntegerFunctions", .. RealPackages];
+
+        /// <summary>
+        /// The packages of the SysML v2 library that declare the comparison functions <c>min</c> and <c>max</c>.
+        /// </summary>
+        private static readonly string[] ComparisonPackages = ["DataFunctions", "ScalarFunctions", "NaturalFunctions", .. NumericalPackages];
+
+        /// <summary>
+        /// The package of the SysML v2 library that declares the sequence functions.
+        /// </summary>
+        private static readonly string[] SequencePackages = ["SequenceFunctions"];
+
+        /// <summary>
+        /// The package of the SysML v2 library that declares the control functions.
+        /// </summary>
+        private static readonly string[] ControlPackages = ["ControlFunctions"];
+
+        /// <summary>
         /// The functions that the server evaluates, by name, with the packages of the SysML v2 library that declare them: a
         /// function of the model is one of them only when its qualified name is one of these packages and its name, so that a
         /// function of the user that has the same name, such as <c>MyFunctions::max</c>, is not taken for it.
         /// </summary>
         public static readonly IReadOnlyDictionary<string, string[]> Functions = new Dictionary<string, string[]>
         {
-            ["abs"] = ["NumericalFunctions", "IntegerFunctions", "RationalFunctions", "RealFunctions"],
-            ["sqrt"] = ["RealFunctions"],
-            ["floor"] = ["RationalFunctions", "RealFunctions"],
-            ["round"] = ["RationalFunctions", "RealFunctions"],
-            ["min"] = ["DataFunctions", "ScalarFunctions", "NumericalFunctions", "IntegerFunctions", "NaturalFunctions", "RationalFunctions", "RealFunctions"],
-            ["max"] = ["DataFunctions", "ScalarFunctions", "NumericalFunctions", "IntegerFunctions", "NaturalFunctions", "RationalFunctions", "RealFunctions"],
-            ["sum"] = ["NumericalFunctions", "IntegerFunctions", "RationalFunctions", "RealFunctions"],
-            ["product"] = ["NumericalFunctions", "IntegerFunctions", "RationalFunctions", "RealFunctions"],
-            ["size"] = ["SequenceFunctions"],
-            ["isEmpty"] = ["SequenceFunctions"],
-            ["notEmpty"] = ["SequenceFunctions"],
-            ["select"] = ["ControlFunctions"],
-            ["collect"] = ["ControlFunctions"]
+            ["abs"] = NumericalPackages,
+            ["sqrt"] = [RealFunctions],
+            ["floor"] = RealPackages,
+            ["round"] = RealPackages,
+            ["min"] = ComparisonPackages,
+            ["max"] = ComparisonPackages,
+            ["sum"] = NumericalPackages,
+            ["product"] = NumericalPackages,
+            ["size"] = SequencePackages,
+            ["isEmpty"] = SequencePackages,
+            ["notEmpty"] = SequencePackages,
+            ["select"] = ControlPackages,
+            ["collect"] = ControlPackages
         };
 
         /// <summary>
