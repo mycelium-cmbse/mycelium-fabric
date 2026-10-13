@@ -11,6 +11,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 {
     using System.Globalization;
 
+    using Mycelium.Fabric.Mcp.Values;
+
     /// <summary>
     /// A checked <see cref="TradeOffConstraint"/> of a <see cref="TradeOffProblem"/>: the total of an attribute compared with a
     /// number or with the total of another attribute, with a margin that always makes the constraint harder to meet.
@@ -20,7 +22,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// <param name="Limit">The limit, or <c>null</c> when the limit is the total of <paramref name="LimitAttribute"/>.</param>
     /// <param name="LimitAttribute">The name of the attribute whose total is the limit, or <c>null</c> for a number.</param>
     /// <param name="Margin">The margin in percent, 0 for none.</param>
-    public sealed record TradeOffLimit(string Attribute, TradeOffOperator Operator, double? Limit, string LimitAttribute, double Margin)
+    /// <param name="Unit">The unit of the totals and of the limit, or <c>null</c> when the attribute has none.</param>
+    public sealed record TradeOffLimit(string Attribute, TradeOffOperator Operator, double? Limit, string LimitAttribute, double Margin, Unit Unit = null)
     {
         /// <summary>
         /// Gets a value indicating whether the total must stay under the limit, rather than over it.
@@ -36,7 +39,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             get
             {
                 var factor = this.Margin > 0 ? $" * {(1 + this.Margin / 100).ToString("0.####", CultureInfo.InvariantCulture)}" : string.Empty;
-                var limit = this.LimitAttribute ?? this.Limit?.ToString("0.###", CultureInfo.InvariantCulture);
+                var unit = this.Unit == null ? string.Empty : $" {this.Unit.Symbol}";
+                var limit = this.LimitAttribute ?? this.Limit?.ToString("0.###", CultureInfo.InvariantCulture) + unit;
 
                 var symbol = this.Operator switch
                 {

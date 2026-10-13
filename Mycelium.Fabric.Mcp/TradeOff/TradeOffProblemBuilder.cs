@@ -18,6 +18,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tools;
+    using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Parts;
@@ -100,8 +102,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 throw new McpException($"No part under '{root.DeclaredName}' and no variant has a value for '{unknownAttribute}'. Use get_attribute_values to get the attribute names.");
             }
 
-            var decisions = choices.Select((choice, index) => ReadDecision(choice, names[index], parts[index], attributes)).ToList();
-            var fixedTotals = attributes.ToDictionary(attribute => attribute, attribute => GetFixedTotal(root, attribute, parts));
+            var units = ReadUnits(root, attributes, choices, request.Constraints ?? [], limits);
+
+            limits = limits.Select((limit, index) => ConvertLimit(limit, request.Constraints[index], index, units)).ToList();
+
+            var decisions = choices.Select((choice, index) => ReadDecision(choice, names[index], parts[index], attributes, units)).ToList();
+            var fixedTotals = attributes.ToDictionary(attribute => attribute, attribute => GetFixedTotal(root, attribute, parts, units[attribute]));
             var dependencies = (request.Rules ?? []).Select((rule, index) => ReadDependency(rule, index, decisions)).ToList();
             int? compareDecisionIndex = null;
 
@@ -114,7 +120,197 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     : throw new McpException($"compareBy names '{request.CompareBy}', which is not a choice. Give the name of a choice: {string.Join(", ", names)}.");
             }
 
-            return new TradeOffProblem(decisions, fixedTotals, objectives, limits, dependencies, request.Count, compareDecisionIndex);
+            return new TradeOffProblem(decisions, fixedTotals, objectives, limits, dependencies, request.Count, compareDecisionIndex, units);
+        }
+
+        /// <summary>
+        /// Finds the unit in which each attribute is expressed: the unit of the first part under the root that has one, as
+        /// <c>sum_attribute</c> does, otherwise the unit given by a variant or a constraint. A limit attribute is expressed in
+        /// the unit of the attribute that it limits, so that both totals compare in the same unit.
+        /// </summary>
+        /// <param name="root">The element under which the totals are computed.</param>
+        /// <param name="attributes">The names of the attributes of the problem.</param>
+        /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
+        /// <param name="constraints">The <see cref="TradeOffConstraint"/>s of the request.</param>
+        /// <param name="limits">The checked <see cref="TradeOffLimit"/>s, in the order of the constraints.</param>
+        /// <returns>The unit of each attribute by name, <c>null</c> for an attribute without unit.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when a unit is unknown or has an offset, or when two attributes that are compared have units of different
+        /// dimensions or that cannot be put in the same unit.
+        /// </exception>
+        private static Dictionary<string, Unit> ReadUnits(IElement root, IReadOnlyList<string> attributes, IReadOnlyList<TradeOffChoice> choices,
+            IReadOnlyList<TradeOffConstraint> constraints, IReadOnlyList<TradeOffLimit> limits)
+        {
+            var units = attributes.ToDictionary(attribute => attribute, attribute => FindUnit(root, attribute, choices, constraints));
+
+            foreach (var limit in limits.Where(limit => limit.LimitAttribute != null))
+            {
+                var unit = units[limit.Attribute];
+                var limitUnit = units[limit.LimitAttribute];
+
+                if (unit == null || limitUnit == null)
+                {
+                    continue;
+                }
+
+                if (!unit.IsCompatibleWith(limitUnit))
+                {
+                    throw new McpException($"'{limit.Attribute}' is in {unit.Symbol} and '{limit.LimitAttribute}' is in {limitUnit.Symbol}: they have different dimensions and cannot be compared.");
+                }
+
+                units[limit.LimitAttribute] = unit;
+            }
+
+            var mismatch = limits.FirstOrDefault(limit => limit.LimitAttribute != null && units[limit.Attribute] != null && units[limit.LimitAttribute] != null
+                && units[limit.Attribute] != units[limit.LimitAttribute]);
+
+            return mismatch == null
+                ? units
+                : throw new McpException($"'{mismatch.LimitAttribute}' limits '{mismatch.Attribute}' and another constraint, which need it in two different units: "
+                    + "give the constraints other attributes, or the same unit.");
+        }
+
+        /// <summary>
+        /// Finds the unit of an attribute.
+        /// </summary>
+        /// <param name="root">The element under which the totals are computed.</param>
+        /// <param name="attribute">The name of the attribute.</param>
+        /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
+        /// <param name="constraints">The <see cref="TradeOffConstraint"/>s of the request.</param>
+        /// <returns>The unit of the attribute, or <c>null</c> when nothing gives one.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when a unit is unknown or has an offset.
+        /// </exception>
+        private static Unit FindUnit(IElement root, string attribute, IReadOnlyList<TradeOffChoice> choices, IReadOnlyList<TradeOffConstraint> constraints)
+        {
+            var unit = root.CollectContributions(attribute).Select(contribution => contribution.Unit).FirstOrDefault(contributionUnit => contributionUnit != null)
+                ?? choices.SelectMany(choice => choice.Variants ?? [])
+                    .Select(variant => variant?.Units?.FirstOrDefault(pair => pair.Key?.Trim() == attribute).Value)
+                    .Select(text => ParseUnit(text, $"The unit of '{attribute}' in a variant"))
+                    .FirstOrDefault(variantUnit => variantUnit != null)
+                ?? constraints.Where(constraint => constraint?.Attribute?.Trim() == attribute)
+                    .Select(constraint => ParseUnit(constraint.Unit, $"The unit of the limit of '{attribute}'"))
+                    .FirstOrDefault(constraintUnit => constraintUnit != null);
+
+            return unit is { Offset: not 0 }
+                ? throw new McpException($"The unit {unit.Symbol} of '{attribute}' has an offset: its values cannot be added up. Use an absolute unit such as kelvin.")
+                : unit;
+        }
+
+        /// <summary>
+        /// Finds a unit from its symbol or its name.
+        /// </summary>
+        /// <param name="text">The symbol or name of the unit, or <c>null</c> or empty for none.</param>
+        /// <param name="label">What the unit belongs to, for the messages.</param>
+        /// <returns>The unit, or <c>null</c> when <paramref name="text"/> is empty.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when the unit is not known.
+        /// </exception>
+        private static Unit ParseUnit(string text, string label)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            return UnitCatalog.TryParse(text, out var unit)
+                ? unit
+                : throw new McpException($"{label} is '{text}', which the server does not know: give a symbol (kg, g, W, km/h) or a name (kilogram).");
+        }
+
+        /// <summary>
+        /// Converts a value to the unit of its attribute.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <param name="unit">The unit of the value, or <c>null</c> when it is given in the unit of the attribute.</param>
+        /// <param name="reference">The unit of the attribute, or <c>null</c> when it has none.</param>
+        /// <param name="label">What the value belongs to, for the messages.</param>
+        /// <param name="attribute">The name of the attribute.</param>
+        /// <returns>The value in the unit of the attribute.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when the unit of the value and the unit of the attribute have different dimensions.
+        /// </exception>
+        private static double ConvertValue(double value, Unit unit, Unit reference, string label, string attribute)
+        {
+            if (unit == null || reference == null || unit == reference)
+            {
+                return value;
+            }
+
+            return unit.IsCompatibleWith(reference)
+                ? unit.ConvertTo(value, reference)
+                : throw new McpException($"{label} is in {unit.Symbol}, which cannot be converted to {reference.Symbol}, the unit of '{attribute}': give it in {reference.Symbol} or in a unit of the same dimension.");
+        }
+
+        /// <summary>
+        /// Adds contributions, each converted to the unit of the attribute.
+        /// </summary>
+        /// <param name="contributions">The <see cref="Contribution"/>s to add.</param>
+        /// <param name="reference">The unit of the attribute, or <c>null</c> when it has none.</param>
+        /// <param name="attribute">The name of the attribute.</param>
+        /// <returns>The total in the unit of the attribute.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when two contributions have units of different dimensions.
+        /// </exception>
+        private static double SumContributions(IEnumerable<Contribution> contributions, Unit reference, string attribute)
+        {
+            return contributions.Sum(contribution => ConvertValue(contribution.Value, contribution.Unit, reference, $"The '{attribute}' of '{contribution.QualifiedName}'", attribute));
+        }
+
+        /// <summary>
+        /// Converts the limit of a constraint to the unit of its attribute and gives the constraint this unit.
+        /// </summary>
+        /// <param name="limit">The checked <see cref="TradeOffLimit"/>.</param>
+        /// <param name="constraint">The <see cref="TradeOffConstraint"/> that it comes from.</param>
+        /// <param name="index">The index of the constraint in the request.</param>
+        /// <param name="units">The unit of each attribute.</param>
+        /// <returns>The limit, in the unit of its attribute.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when the unit of the limit is not known or has a different dimension from the attribute.
+        /// </exception>
+        private static TradeOffLimit ConvertLimit(TradeOffLimit limit, TradeOffConstraint constraint, int index, IReadOnlyDictionary<string, Unit> units)
+        {
+            var label = $"Constraint {index + 1}";
+            var reference = units[limit.Attribute];
+
+            if (limit.Limit is not { } value)
+            {
+                return limit with { Unit = reference };
+            }
+
+            var converted = ConvertValue(value, ParseUnit(constraint.Unit, $"The unit of the limit of {label}"), reference, $"The limit of {label}", limit.Attribute);
+
+            return IsAllowedValue(converted)
+                ? limit with { Limit = converted, Unit = reference }
+                : throw new McpException($"{label} has a limit that is not a number between -{TradeOffScale.MaximumValue} and {TradeOffScale.MaximumValue} in {reference?.Symbol ?? "the unit of the attribute"}.");
+        }
+
+        /// <summary>
+        /// Reads the values of a variant, converted to the unit of their attribute and by trimmed attribute name.
+        /// </summary>
+        /// <param name="variant">The <see cref="TradeOffVariant"/> to read.</param>
+        /// <param name="choiceName">The name of the choice.</param>
+        /// <param name="units">The unit of each attribute of the problem.</param>
+        /// <returns>The values of the variant, in the unit of their attribute.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when a unit is not known, has a different dimension from the attribute, or gives a value that is too large.
+        /// </exception>
+        private static Dictionary<string, double> ReadValues(TradeOffVariant variant, string choiceName, IReadOnlyDictionary<string, Unit> units)
+        {
+            var label = $"The variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'";
+            var variantUnits = (variant.Units ?? new Dictionary<string, string>()).ToDictionary(pair => pair.Key.Trim(), pair => ParseUnit(pair.Value, $"{label} gives the unit of '{pair.Key.Trim()}', which"));
+
+            return (variant.Values ?? new Dictionary<string, double>()).ToDictionary(pair => pair.Key.Trim(), pair =>
+            {
+                var attribute = pair.Key.Trim();
+                var converted = units.TryGetValue(attribute, out var reference)
+                    ? ConvertValue(pair.Value, variantUnits.GetValueOrDefault(attribute), reference, $"The '{attribute}' of the variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'", attribute)
+                    : pair.Value;
+
+                return IsAllowedValue(converted)
+                    ? converted
+                    : throw new McpException($"{label} has a '{attribute}' that is not a number between -{TradeOffScale.MaximumValue} and {TradeOffScale.MaximumValue} in {reference?.Symbol ?? "the unit of the attribute"}.");
+            });
         }
 
         /// <summary>
@@ -169,6 +365,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             if ((constraint.Limit == null) == (limitAttribute == null))
             {
                 throw new McpException($"{label} needs either a limit (a number) or a limitAttribute, not both.");
+            }
+
+            if (limitAttribute != null && !string.IsNullOrWhiteSpace(constraint.Unit))
+            {
+                throw new McpException($"{label} gives a unit with a limitAttribute: a unit goes with a numeric limit, and the totals of both attributes are compared in the unit of the attribute.");
             }
 
             if (constraint.Limit is { } limit && !IsAllowedValue(limit))
@@ -307,11 +508,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="name">The name of the choice.</param>
         /// <param name="part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
         /// <param name="attributes">The attributes of the problem.</param>
+        /// <param name="units">The unit of each attribute of the problem.</param>
         /// <returns>The <see cref="TradeOffDecision"/> of the choice.</returns>
         /// <exception cref="McpException">
         /// Thrown when a variant is invalid.
         /// </exception>
-        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes)
+        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, IReadOnlyDictionary<string, Unit> units)
         {
             var variants = choice.Variants ?? [];
 
@@ -333,14 +535,15 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             var givenCurrent = variants.FirstOrDefault(variant => variant.Name.Trim() == TradeOffVariant.CurrentName);
-            var currentValues = attributes.ToDictionary(attribute => attribute, attribute => GetCurrentValue(part, givenCurrent, attribute, name));
+            var givenValues = givenCurrent == null ? [] : ReadValues(givenCurrent, name, units);
+            var currentValues = attributes.ToDictionary(attribute => attribute, attribute => GetCurrentValue(part, givenValues, attribute, name, units[attribute]));
 
             List<TradeOffOption> options = part == null
                 ? [new TradeOffOption(TradeOffVariant.NoneName, 0, true, attributes.ToDictionary(attribute => attribute, _ => 0d))]
                 : [new TradeOffOption(TradeOffVariant.CurrentName, 1, true, currentValues)];
 
             var others = variants.Where(variant => variant.Name.Trim() is not (TradeOffVariant.CurrentName or TradeOffVariant.NoneName));
-            options.AddRange(others.SelectMany(variant => ExpandVariant(variant, currentValues, attributes)));
+            options.AddRange(others.SelectMany(variant => ExpandVariant(variant, ReadValues(variant, name, units), currentValues, attributes)));
 
             if (part != null && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
             {
@@ -374,9 +577,16 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             var label = $"The variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'";
             var values = variant.Values ?? new Dictionary<string, double>();
 
-            if (values.Any(value => string.IsNullOrWhiteSpace(value.Key) || !IsAllowedValue(value.Value)))
+            if (values.Any(value => string.IsNullOrWhiteSpace(value.Key) || !double.IsFinite(value.Value)))
             {
-                throw new McpException($"{label} has a value without attribute name, or a value that is not a number between -{TradeOffScale.MaximumValue} and {TradeOffScale.MaximumValue}.");
+                throw new McpException($"{label} has a value without attribute name, or a value that is not a number.");
+            }
+
+            var unitWithoutValue = (variant.Units ?? new Dictionary<string, string>()).Keys.FirstOrDefault(attribute => !values.Keys.Any(key => key.Trim() == attribute?.Trim()));
+
+            if (unitWithoutValue != null)
+            {
+                throw new McpException($"{label} gives the unit of '{unitWithoutValue}' but no value for it.");
             }
 
             if (values.Keys.Select(attribute => attribute.Trim()).Distinct().Count() != values.Count)
@@ -417,15 +627,16 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// value, or the sum over its sub-parts), completed by the given <c>current</c> variant, and 0 for equipment to add.
         /// </summary>
         /// <param name="part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
-        /// <param name="givenCurrent">The <c>current</c> variant given by the AI assistant, or <c>null</c>.</param>
+        /// <param name="givenValues">The values of the <c>current</c> variant given by the AI assistant, in the unit of their attribute.</param>
         /// <param name="attribute">The name of the attribute.</param>
         /// <param name="choiceName">The name of the choice.</param>
-        /// <returns>The current value of the attribute.</returns>
+        /// <param name="unit">The unit of the attribute, or <c>null</c> when it has none.</param>
+        /// <returns>The current value of the attribute, in its unit.</returns>
         /// <exception cref="McpException">
         /// Thrown when an owner of the part gives its own value for the attribute, so that the value of the part is not in the
         /// total.
         /// </exception>
-        private static double GetCurrentValue(ChosenPart part, TradeOffVariant givenCurrent, string attribute, string choiceName)
+        private static double GetCurrentValue(ChosenPart part, IReadOnlyDictionary<string, double> givenValues, string attribute, string choiceName, Unit unit)
         {
             if (part == null)
             {
@@ -440,22 +651,20 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     + "which replaces the values of its parts in the total. Make the choice on it instead.");
             }
 
-            var givenValue = givenCurrent?.Values?.FirstOrDefault(value => value.Key.Trim() == attribute);
-
-            return givenValue is { Key: not null } ? givenValue.Value.Value : part.Part.CollectContributions(attribute).Sum(contribution => contribution.Value);
+            return givenValues.TryGetValue(attribute, out var givenValue) ? givenValue : SumContributions(part.Part.CollectContributions(attribute), unit, attribute);
         }
 
         /// <summary>
         /// Expands a variant into one option per number of units.
         /// </summary>
         /// <param name="variant">The <see cref="TradeOffVariant"/> to expand.</param>
+        /// <param name="values">The values of the variant, in the unit of their attribute.</param>
         /// <param name="currentValues">The current value of each attribute for one unit, used when the variant does not give it.</param>
         /// <param name="attributes">The attributes of the problem.</param>
         /// <returns>The <see cref="TradeOffOption"/>s of the variant.</returns>
-        private static IEnumerable<TradeOffOption> ExpandVariant(TradeOffVariant variant, Dictionary<string, double> currentValues, IReadOnlyList<string> attributes)
+        private static IEnumerable<TradeOffOption> ExpandVariant(TradeOffVariant variant, Dictionary<string, double> values, Dictionary<string, double> currentValues,
+            IReadOnlyList<string> attributes)
         {
-            var values = (variant.Values ?? new Dictionary<string, double>()).ToDictionary(value => value.Key.Trim(), value => value.Value);
-
             return Enumerable.Range(variant.MinQuantity, variant.MaxQuantity - variant.MinQuantity + 1)
                 .Select(quantity => new TradeOffOption(variant.Name.Trim(), quantity, false,
                     attributes.ToDictionary(attribute => attribute, attribute => values.GetValueOrDefault(attribute, currentValues[attribute]) * quantity)));
@@ -468,11 +677,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="root">The element under which the totals are computed.</param>
         /// <param name="attribute">The name of the attribute.</param>
         /// <param name="parts">The chosen part of each choice, <c>null</c> for equipment to add.</param>
-        /// <returns>The fixed part of the total.</returns>
-        private static double GetFixedTotal(IElement root, string attribute, IReadOnlyList<ChosenPart> parts)
+        /// <param name="unit">The unit of the attribute, or <c>null</c> when it has none.</param>
+        /// <returns>The fixed part of the total, in the unit of the attribute.</returns>
+        private static double GetFixedTotal(IElement root, string attribute, IReadOnlyList<ChosenPart> parts, Unit unit)
         {
-            var total = root.CollectContributions(attribute).Sum(contribution => contribution.Value);
-            var chosenTotal = parts.Where(part => part != null).SelectMany(part => part.Part.CollectContributions(attribute)).Sum(contribution => contribution.Value);
+            var total = SumContributions(root.CollectContributions(attribute), unit, attribute);
+            var chosenTotal = SumContributions(parts.Where(part => part != null).SelectMany(part => part.Part.CollectContributions(attribute)), unit, attribute);
 
             return total - chosenTotal;
         }

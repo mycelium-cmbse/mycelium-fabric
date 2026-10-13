@@ -134,6 +134,52 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         }
 
         [Test]
+        public void VerifySolveTradeOffWithUnits()
+        {
+            var unitProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            unitProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+            var massMemoryId = unitProvider.Elements.Single(element => element.DeclaredName == "massMemory").Id;
+            var payloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");
+
+            unitProvider.ApplyChanges(
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "dataVolume", Value = 2, Unit = "GB" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = massMemoryId.ToString(), Name = "dataVolume", Value = 512, Unit = "MB" } }
+            ]);
+
+            TradeOffChoice[] memory =
+            [
+                new TradeOffChoice
+                {
+                    PartId = massMemoryId,
+                    Variants =
+                    [
+                        new TradeOffVariant { Name = "small", Values = new Dictionary<string, double> { ["dataVolume"] = 256 }, Units = new Dictionary<string, string> { ["dataVolume"] = "MB" } },
+                        new TradeOffVariant { Name = "medium", Values = new Dictionary<string, double> { ["dataVolume"] = 0.0004 }, Units = new Dictionary<string, string> { ["dataVolume"] = "TB" } }
+                    ]
+                }
+            ];
+
+            TradeOffObjective[] lowestVolume = [new TradeOffObjective { Attribute = "dataVolume" }];
+            TradeOffConstraint[] atLeast = [new TradeOffConstraint { Attribute = "dataVolume", Operator = ">=", Limit = 2400, Unit = "MB" }];
+
+            var result = new TradeOffTools(unitProvider, new CpSatTradeOffSolver()).SolveTradeOff(payloadSubsystemId, memory, lowestVolume, atLeast);
+            var best = result.Combinations.Single();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(result.Current.Totals.Single().Total, Is.EqualTo(2.512));
+                Assert.That(result.Current.Totals.Single().Unit.Symbol, Is.EqualTo("GB"));
+                Assert.That(best.Choices.Single().Variant, Is.EqualTo("medium"));
+                Assert.That(best.Totals.Single().Total, Is.EqualTo(2.4));
+                Assert.That(best.Totals.Single().Difference, Is.EqualTo(-0.112));
+                Assert.That(best.Totals.Single().Unit.Symbol, Is.EqualTo("GB"));
+                Assert.That(best.Constraints.Single().Constraint, Is.EqualTo("dataVolume >= 2.4 GB"));
+            }
+        }
+
+        [Test]
         public void VerifySolveTradeOffWithTheSolver()
         {
             var tools = new TradeOffTools(this.modelProvider, new CpSatTradeOffSolver());

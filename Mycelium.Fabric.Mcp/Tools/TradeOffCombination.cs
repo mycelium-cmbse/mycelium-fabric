@@ -26,11 +26,6 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Choices">The <see cref="ChosenVariant"/> of each choice, in the order of the request.</param>
     /// <param name="Totals">The <see cref="AttributeTotal"/> of each attribute of the objectives and constraints.</param>
     /// <param name="Constraints">The <see cref="ConstraintCheck"/> of each constraint, in the order of the request.</param>
-    public sealed record TradeOffCombination(
-        string Alternative,
-        int Rank,
-        int ChangeCount,
-        IReadOnlyList<ChosenVariant> Choices,
-        IReadOnlyList<AttributeTotal> Totals,
+    public sealed record TradeOffCombination(string Alternative, int Rank, int ChangeCount, IReadOnlyList<ChosenVariant> Choices, IReadOnlyList<AttributeTotal> Totals,
         IReadOnlyList<ConstraintCheck> Constraints);
 }

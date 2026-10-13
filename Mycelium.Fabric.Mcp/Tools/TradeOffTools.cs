@@ -76,7 +76,8 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "'current' (an existing part as it is) or 'none' (equipment not added) is added by the server, 'none' on an existing part removes it, "
             + "and a variant may be taken several times (minQuantity, maxQuantity). "
             + "A choice often leads to others: write them as rules (a thermal engine requires a fuel tank) and as constraints between totals "
-            + "(power <= powerOutput, so that the solar panels feed the equipment). Totals are sums under the root, as sum_attribute computes them. "
+            + "(power <= powerOutput, so that the solar panels feed the equipment). Totals are sums under the root, as sum_attribute computes them, "
+            + "in the unit of the first part that has one; a value or a limit may be given in another unit of the same dimension (units, unit: 500 g, 2 kg), the server converts it. "
             + "Objectives are optimized in their order of priority, then the fewest changes. To compare alternatives (thermal against electric), "
             + "give compareBy: each variant of this choice then gets its own best combination, with all its consequences. "
             + "Nothing is modified: present the combinations, let the user choose, then use apply_changes.")]
@@ -139,7 +140,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             var totals = problem.GetAttributes()
                 .Select(attribute => (attribute, units: problem.GetTotalUnits(attribute, selection), currentUnits: problem.GetTotalUnits(attribute, currentSelection)))
-                .Select(total => new AttributeTotal(total.attribute, TradeOffScale.ToValue(total.units), TradeOffScale.ToValue(total.units - total.currentUnits)))
+                .Select(total => new AttributeTotal(total.attribute, TradeOffScale.ToValue(total.units), TradeOffScale.ToValue(total.units - total.currentUnits), problem.GetUnit(total.attribute)))
                 .ToList();
 
             var constraints = problem.Limits

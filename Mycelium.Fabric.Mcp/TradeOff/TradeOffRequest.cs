@@ -25,12 +25,6 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// <param name="CompareBy">
     /// The name of the choice whose variants are compared, each with its own best combinations, or <c>null</c>.
     /// </param>
-    public sealed record TradeOffRequest(
-        Guid RootId,
-        IReadOnlyList<TradeOffChoice> Choices,
-        IReadOnlyList<TradeOffObjective> Objectives,
-        IReadOnlyList<TradeOffConstraint> Constraints,
-        IReadOnlyList<TradeOffRule> Rules,
-        int Count,
-        string CompareBy);
+    public sealed record TradeOffRequest(Guid RootId, IReadOnlyList<TradeOffChoice> Choices, IReadOnlyList<TradeOffObjective> Objectives, IReadOnlyList<TradeOffConstraint> Constraints,
+        IReadOnlyList<TradeOffRule> Rules, int Count, string CompareBy);
 }

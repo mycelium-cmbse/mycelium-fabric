@@ -39,9 +39,17 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <summary>
         /// Gets the values of the attributes of one unit of the variant, by attribute name.
         /// </summary>
-        [Description("The values of the attributes for one unit, by attribute name, for example { \"mass\": 30, \"power\": 60 }. "
-            + "For an existing part, an attribute that is not given keeps the current value of the part; for equipment to add, it is 0.")]
+        [Description("The values of the attributes for one unit, by attribute name, for example { \"mass\": 30, \"power\": 60 }, in the unit of the attribute in the model "
+            + "unless units gives another one. For an existing part, an attribute that is not given keeps the current value of the part; for equipment to add, it is 0.")]
         public IReadOnlyDictionary<string, double> Values { get; init; }
+
+        /// <summary>
+        /// Gets the units of the values of the variant, by attribute name.
+        /// </summary>
+        [Description("Optional: the unit of a value, by attribute name, as a symbol (kg, g, W) or a name (kilogram), for example { \"mass\": \"g\" } for { \"mass\": 500 }. "
+            + "The server converts it to the unit of the attribute under the root, so that grams and kilograms can be mixed. "
+            + "An attribute without unit here is in the unit of the attribute in the model.")]
+        public IReadOnlyDictionary<string, string> Units { get; init; }
 
         /// <summary>
         /// Gets the smallest number of units of the variant that may be taken.

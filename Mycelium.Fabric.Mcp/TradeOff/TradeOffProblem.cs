@@ -13,6 +13,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     using System.Collections.Generic;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Values;
+
     /// <summary>
     /// A trade-off problem read from the model by the <see cref="TradeOffProblemBuilder"/>, that an
     /// <see cref="ITradeOffSolver"/> solves without knowing SysML: the decisions and their options, the part of each total that
@@ -30,15 +32,24 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// The index of the decision whose variants are compared, each with its own best combinations, or <c>null</c> to rank all
     /// the combinations together.
     /// </param>
-    public sealed record TradeOffProblem(
-        IReadOnlyList<TradeOffDecision> Decisions,
-        IReadOnlyDictionary<string, double> FixedTotals,
-        IReadOnlyList<TradeOffObjective> Objectives,
-        IReadOnlyList<TradeOffLimit> Limits,
-        IReadOnlyList<TradeOffDependency> Dependencies,
-        int Count,
-        int? CompareDecisionIndex)
+    /// <param name="AttributeUnits">
+    /// The unit in which the values and the totals of each attribute are expressed, by attribute name, or <c>null</c> when no
+    /// attribute has a unit.
+    /// </param>
+    public sealed record TradeOffProblem(IReadOnlyList<TradeOffDecision> Decisions, IReadOnlyDictionary<string, double> FixedTotals, IReadOnlyList<TradeOffObjective> Objectives,
+        IReadOnlyList<TradeOffLimit> Limits, IReadOnlyList<TradeOffDependency> Dependencies, int Count, int? CompareDecisionIndex,
+        IReadOnlyDictionary<string, Unit> AttributeUnits = null)
     {
+        /// <summary>
+        /// Gets the unit in which the totals and the values of an attribute are expressed.
+        /// </summary>
+        /// <param name="attribute">The name of the attribute.</param>
+        /// <returns>The unit of the attribute, or <c>null</c> when it has none.</returns>
+        public Unit GetUnit(string attribute)
+        {
+            return this.AttributeUnits?.GetValueOrDefault(attribute);
+        }
+
         /// <summary>
         /// Gets the alternatives to search: each variant of the compared decision that may be taken, or a single
         /// <c>null</c> alternative when no decision is compared.

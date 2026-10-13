@@ -236,6 +236,63 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         }
 
         [Test]
+        public void VerifyBuildWithUnits()
+        {
+            var unitProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            unitProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+            var massMemoryId = unitProvider.Elements.Single(element => element.DeclaredName == "massMemory").Id;
+
+            var applied = unitProvider.ApplyChanges(
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "dataVolume", Value = 2, Unit = "GB" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = massMemoryId.ToString(), Name = "dataVolume", Value = 512, Unit = "MB" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "heat", Value = 5, Unit = "W" } }
+            ]);
+
+            TradeOffRequest Request(TradeOffVariant variant, IReadOnlyList<TradeOffConstraint> constraints = null) =>
+                new(PayloadSubsystemId, [Choice(massMemoryId, variant)], [new TradeOffObjective { Attribute = "dataVolume" }], constraints, null, 1, null);
+
+            TradeOffVariant VolumeVariant(string name, double value, string unit) =>
+                new() { Name = name, Values = new Dictionary<string, double> { ["dataVolume"] = value }, Units = unit == null ? null : new Dictionary<string, string> { ["dataVolume"] = unit } };
+
+            var problem = TradeOffProblemBuilder.Build(unitProvider, Request(VolumeVariant("small", 256, " MB "), [Constraint("dataVolume", "<=", 2500, null, null) with { Unit = "megabyte" }]));
+            var options = problem.Decisions[0].Options;
+            var inTerabytes = TradeOffProblemBuilder.Build(unitProvider, Request(VolumeVariant("big", 0.0004, "TB")));
+            var withoutUnit = TradeOffProblemBuilder.Build(unitProvider, Request(VolumeVariant("big", 3, null)));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(applied.Applied, Is.True);
+                Assert.That(problem.GetUnit("dataVolume").Symbol, Is.EqualTo("GB"));
+                Assert.That(problem.FixedTotals["dataVolume"], Is.EqualTo(2).Within(1e-9));
+                Assert.That(options[0].Values["dataVolume"], Is.EqualTo(0.512).Within(1e-9));
+                Assert.That(options[1].Values["dataVolume"], Is.EqualTo(0.256).Within(1e-9));
+                Assert.That(problem.Limits[0].Limit, Is.EqualTo(2.5).Within(1e-9));
+                Assert.That(problem.Limits[0].Unit.Symbol, Is.EqualTo("GB"));
+                Assert.That(problem.Limits[0].Description, Is.EqualTo("dataVolume <= 2.5 GB"));
+                Assert.That(inTerabytes.Decisions[0].Options[1].Values["dataVolume"], Is.EqualTo(0.4).Within(1e-9));
+                Assert.That(withoutUnit.Decisions[0].Options[1].Values["dataVolume"], Is.EqualTo(3));
+                Assert.That(TradeOffProblemBuilder.Build(this.modelProvider, new TradeOffRequest(SatelliteId, [Choice(CameraId, Variant("light", ("mass", 30)))],
+                    [new TradeOffObjective { Attribute = "mass" }], null, null, 1, null)).GetUnit("mass"), Is.Null);
+            }
+
+            void AssertRejected(TradeOffRequest request, string message) =>
+                Assert.That(() => TradeOffProblemBuilder.Build(unitProvider, request), Throws.TypeOf<McpException>().With.Message.Contains(message));
+
+            using (Assert.EnterMultipleScope())
+            {
+                AssertRejected(Request(VolumeVariant("big", 1, "kg")), "in kg, which cannot be converted to GB, the unit of 'dataVolume'");
+                AssertRejected(Request(VolumeVariant("big", 1, "parsec")), "'parsec', which the server does not know");
+                AssertRejected(Request(VolumeVariant("big", 1e12, "TB")), "not a number between");
+                AssertRejected(Request(VolumeVariant("big", 1, "GB") with { Units = new Dictionary<string, string> { ["heat"] = "W" } }), "gives the unit of 'heat' but no value for it");
+                AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", 1, null, null) with { Unit = "kg" }]), "The limit of Constraint 1 is in kg");
+                AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", 1, null, null) with { Unit = "parsec" }]), "'parsec', which the server does not know");
+                AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", null, "heat", null) with { Unit = "GB" }]), "gives a unit with a limitAttribute");
+                AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", null, "heat", null)]), "they have different dimensions and cannot be compared");
+            }
+        }
+
+        [Test]
         public void VerifyBuildWhenAnOwnerHidesThePart()
         {
             var root = new PartUsage { Id = Guid.NewGuid(), DeclaredName = "root" };

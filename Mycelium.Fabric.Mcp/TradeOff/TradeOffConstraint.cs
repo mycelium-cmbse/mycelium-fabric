@@ -32,8 +32,15 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <summary>
         /// Gets the limit of the constraint.
         /// </summary>
-        [Description("The limit, in the unit of the attribute, for example 150 for 150 kg. Give either limit or limitAttribute.")]
+        [Description("The limit, in the unit of the attribute unless unit is given, for example 150 for 150 kg. Give either limit or limitAttribute.")]
         public double? Limit { get; init; }
+
+        /// <summary>
+        /// Gets the unit of the limit.
+        /// </summary>
+        [Description("Optional, with a numeric limit: its unit, as a symbol (kg, g, W) or a name (kilogram). The limit is then 150 [kg], "
+            + "and the server converts it to the unit of the attribute under the root.")]
+        public string Unit { get; init; }
 
         /// <summary>
         /// Gets the attribute whose total is the limit, instead of a number.
