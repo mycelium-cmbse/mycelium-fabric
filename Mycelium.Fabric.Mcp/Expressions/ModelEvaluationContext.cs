@@ -93,7 +93,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
             if (IsEnumerationValue(feature))
             {
-                return new EnumValue(feature.DeclaredName);
+                return new EnumValue(feature.DeclaredName, feature.qualifiedName);
             }
 
             if (TermReader.GetValueExpression(feature) is { } valueExpression)
@@ -121,16 +121,28 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <summary>
         /// Gets the value of a feature of a part, from its name: a sub-part, the value of an attribute that is not a plain
         /// number (a Boolean, a text, an enumeration value, an expression), or else the sum of the values of the attribute
-        /// over the part and its sub-parts.
+        /// over the part and its sub-parts. A feature redefined by another feature of the part, such as the mass of its
+        /// definition, gives way to it; when several features still have the name, the navigation is refused.
         /// </summary>
         /// <param name="part">The part.</param>
         /// <param name="featureName">The name of the feature.</param>
-        /// <returns>The value, or an error that tells why the feature has none.</returns>
+        /// <returns>The value, or an error that tells why the feature has none or which features have the name.</returns>
         public ErrorOr<ModelValue> Navigate(PartValue part, string featureName)
         {
             ArgumentNullException.ThrowIfNull(part);
 
-            var member = (part.Feature.feature ?? []).FirstOrDefault(candidate => candidate.DeclaredName == featureName);
+            var candidates = (part.Feature.feature ?? []).Where(candidate => candidate.DeclaredName == featureName).ToList();
+
+            var members = candidates
+                .Where(candidate => !candidates.Exists(other => (other.ownedRedefinition ?? []).Any(redefinition => redefinition.RedefinedFeature?.Id == candidate.Id)))
+                .ToList();
+
+            if (members.Count > 1)
+            {
+                return Error.Validation(description: $"'{part}' has several features named '{featureName}': {string.Join(", ", members.Select(member => member.qualifiedName))}.");
+            }
+
+            var member = members.FirstOrDefault();
 
             if (member is not null and not IAttributeUsage)
             {

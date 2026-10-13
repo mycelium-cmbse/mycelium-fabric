@@ -133,8 +133,9 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates a reference to a unit, as <c>kg</c> in <c>38 [kg]</c>: a <c>FeatureReferenceExpression</c> whose membership
-        /// names the unit. It designates the unit of the model that has this short name, or else the unit of the SI library,
-        /// which the model does not contain, by a stable identifier.
+        /// names the unit. It designates the unit that has this short name in a unit package of the library (<c>SI</c>) when
+        /// the model contains it, or else the unit of the SI library by a stable identifier. An element of the user that has
+        /// the same short name elsewhere is not a unit.
         /// </summary>
         /// <param name="unit">The unit.</param>
         /// <returns>The new expression.</returns>
@@ -142,7 +143,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var unitElement = this.elementsById.Values
                 .OfType<IAttributeUsage>()
-                .FirstOrDefault(candidate => candidate.DeclaredShortName == unit.Symbol && !this.IsMarkedForDeletion(candidate));
+                .Where(candidate => candidate.DeclaredShortName == unit.Symbol && !this.IsMarkedForDeletion(candidate))
+                .FirstOrDefault(candidate => UnitCatalog.LibraryPackages.Contains(this.GetQualifiedName(this.GetOwner(candidate))));
 
             var reference = this.Add(new FeatureReferenceExpression());
             var unitId = unitElement?.Id ?? CreateUnitId(unit.Symbol);
@@ -154,31 +156,29 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Finds the enumeration value that a text names, such as <c>sunSynchronous</c> or <c>OrbitKind::sunSynchronous</c>.
+        /// Finds the enumeration value that a text names: its qualified name, or its end, such as <c>sunSynchronous</c> or
+        /// <c>OrbitKind::sunSynchronous</c>.
         /// </summary>
         /// <param name="text">The text.</param>
         /// <returns>The enumeration value, or <c>null</c> when the text names none.</returns>
         /// <exception cref="InvalidChangeException">Thrown when the text names several enumeration values.</exception>
         private IElement FindEnumerationValue(string text)
         {
-            var names = text.Split(QualifiedNameSeparator);
-            var valueName = names[^1];
-            var definitionName = names.Length > 1 ? names[^2] : null;
-
             var enumerationValues = this.elementsById.Values
                 .OfType<IEnumerationUsage>()
-                .Where(candidate => candidate.DeclaredName == valueName && !this.IsMarkedForDeletion(candidate))
-                .Where(candidate => this.GetOwner(candidate) is IEnumerationDefinition definition && (definitionName == null || definition.DeclaredName == definitionName))
+                .Where(candidate => this.GetOwner(candidate) is IEnumerationDefinition && !this.IsMarkedForDeletion(candidate))
+                .Select(candidate => (Element: (IElement)candidate, QualifiedName: this.GetQualifiedName(candidate)))
+                .Where(candidate => candidate.QualifiedName == text || (candidate.QualifiedName?.EndsWith($"{QualifiedNameSeparator}{text}", StringComparison.Ordinal) ?? false))
                 .ToList();
 
             if (enumerationValues.Count > 1)
             {
-                var qualifiedNames = enumerationValues.Select(candidate => $"'{this.GetOwner(candidate).DeclaredName}{QualifiedNameSeparator}{valueName}'");
+                var qualifiedNames = enumerationValues.Select(candidate => $"'{candidate.QualifiedName}'");
 
                 throw new InvalidChangeException($"'{text}' names several enumeration values: write {string.Join(" or ", qualifiedNames)}.");
             }
 
-            return enumerationValues.FirstOrDefault();
+            return enumerationValues.FirstOrDefault().Element;
         }
     }
 }

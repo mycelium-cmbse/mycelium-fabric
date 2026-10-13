@@ -78,6 +78,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(this.Boolean(Operation("==", Enum("polar"), Enum("polar"))), Is.EqualTo((true, "polar == polar")));
                 Assert.That(this.Boolean(Operation("==", Enum("polar"), Text("polar"))), Is.EqualTo((true, "polar == \"polar\"")));
                 Assert.That(this.Boolean(Operation("==", Text("polar"), Enum("sunSynchronous"))), Is.EqualTo((false, "\"polar\" != sunSynchronous")));
+                Assert.That(this.Boolean(Operation("==", Enum("polar"), Enum("polar", "PointingKind"))), Is.EqualTo((false, "polar != polar")));
+                Assert.That(this.Boolean(Operation("==", Text("OrbitKind::polar"), Enum("polar"))), Is.EqualTo((true, "\"OrbitKind::polar\" == polar")));
+                Assert.That(this.Boolean(Operation("==", Enum("polar"), Text("PointingKind::polar"))), Is.EqualTo((false, "polar != \"PointingKind::polar\"")));
                 Assert.That(this.Boolean(Operation("==", Part(camera), Part(camera))), Is.EqualTo((true, "camera == camera")));
                 Assert.That(this.Boolean(Operation("==", Null(), Null())), Is.EqualTo((true, "null == null")));
                 Assert.That(this.Boolean(Operation("!=", Number(1), Null())), Is.EqualTo((true, "1 != null")));
@@ -212,10 +215,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// Creates a literal enumeration value.
         /// </summary>
         /// <param name="name">The name of the enumeration value.</param>
+        /// <param name="definitionName">The name of its enumeration definition.</param>
         /// <returns>The new <see cref="LiteralTerm"/>.</returns>
-        private static LiteralTerm Enum(string name)
+        private static LiteralTerm Enum(string name, string definitionName = "OrbitKind")
         {
-            return new LiteralTerm(new EnumValue(name));
+            return new LiteralTerm(new EnumValue(name, $"Mission::{definitionName}::{name}"));
         }
 
         /// <summary>

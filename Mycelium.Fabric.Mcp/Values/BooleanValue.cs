@@ -15,7 +15,9 @@ namespace Mycelium.Fabric.Mcp.Values
     /// <param name="Value">The Boolean.</param>
     public sealed record BooleanValue(bool Value) : ModelValue
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of the kind of value, used in the messages: <c>a Boolean</c>.
+        /// </summary>
         public override string KindName => "a Boolean";
 
         /// <summary>

@@ -18,7 +18,9 @@ namespace Mycelium.Fabric.Mcp.Values
     /// <param name="Items">The values of the sequence.</param>
     public sealed record SequenceValue(IReadOnlyList<ModelValue> Items) : ModelValue
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of the kind of value, used in the messages: <c>a sequence</c>.
+        /// </summary>
         public override string KindName => "a sequence";
 
         /// <summary>

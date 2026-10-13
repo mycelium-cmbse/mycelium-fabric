@@ -17,7 +17,10 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
     using Mycelium.Fabric.Mcp.Values;
 
+    using SysML2.NET.Core.Core.Types;
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Core.POCO.Core.Types;
+    using SysML2.NET.Core.POCO.Kernel.Behaviors;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.FeatureValues;
     using SysML2.NET.Core.POCO.Kernel.Functions;
@@ -52,9 +55,12 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 ILiteralInfinity => new LiteralTerm(new NumberValue(double.PositiveInfinity)),
                 INullExpression => new LiteralTerm(SequenceValue.Empty),
                 IFeatureChainExpression chain => ReadChain(chain),
+                ISelectExpression select => ReadAll(GetArguments(select)).Then(Term (arguments) => new InvocationTerm("select", arguments)),
+                ICollectExpression collect => ReadAll(GetArguments(collect)).Then(Term (arguments) => new InvocationTerm("collect", arguments)),
                 IOperatorExpression { Operator: QuantityOperator } quantity => ReadQuantity(quantity),
                 IOperatorExpression operation => ReadAll(GetArguments(operation)).Then(Term (operands) => new OperationTerm(operation.Operator, operands)),
                 IInvocationExpression invocation => ReadInvocation(invocation),
+                IFeatureReferenceExpression reference when GetBody(reference) is { } body => ReadBody(body),
                 IFeatureReferenceExpression reference => ReadReference(reference),
                 _ => Error.Validation(description: $"The expression '{expression.GetType().Name}' is not supported.")
             };
@@ -97,6 +103,29 @@ namespace Mycelium.Fabric.Mcp.Expressions
             }
 
             return terms;
+        }
+
+        /// <summary>
+        /// Reads the body of a <c>select</c> or a <c>collect</c>, such as <c>{in p; p.mass &gt; 10}</c>: its parameter and the
+        /// expression of its result.
+        /// </summary>
+        /// <param name="body">The expression that the body declares.</param>
+        /// <returns>The <see cref="BodyTerm"/>, or an error when the body has no parameter or no expression.</returns>
+        private static ErrorOr<Term> ReadBody(IExpression body)
+        {
+            var parameter = (body.OwnedRelationship ?? [])
+                .OfType<IFeatureMembership>()
+                .Select(membership => membership.ownedMemberFeature)
+                .FirstOrDefault(feature => feature.Direction == FeatureDirectionKind.In);
+
+            var result = (body.OwnedRelationship ?? []).OfType<IResultExpressionMembership>().FirstOrDefault()?.ownedResultExpression;
+
+            if (parameter == null || result == null)
+            {
+                return Error.Validation(description: "The body of select or collect needs a parameter and an expression, as in {in p; p.mass > 10}.");
+            }
+
+            return Read(result).Then(Term (term) => new BodyTerm(parameter, term));
         }
 
         /// <summary>
@@ -169,9 +198,14 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <returns>The <see cref="Unit"/>, or an error when the unit is not known.</returns>
         private static ErrorOr<Unit> ReadUnit(IElement expression)
         {
+            if (expression is IFeatureReferenceExpression { referent: { } unitFeature } && !UnitCatalog.LibraryPackages.Contains(unitFeature.owningNamespace?.qualifiedName))
+            {
+                return Error.Validation(description: $"'{unitFeature.qualifiedName}' is not a unit of the SysML v2 library ({string.Join(", ", UnitCatalog.LibraryPackages)}).");
+            }
+
             if (expression is IFeatureReferenceExpression reference)
             {
-                var name = reference.referent is { } unitFeature ? unitFeature.DeclaredShortName ?? unitFeature.DeclaredName : GetMemberShortName(reference) ?? GetMemberName(reference);
+                var name = reference.referent is { } libraryUnit ? libraryUnit.DeclaredShortName ?? libraryUnit.DeclaredName : GetMemberShortName(reference) ?? GetMemberName(reference);
 
                 return UnitCatalog.TryParse(name, out var unit) ? unit : Error.Validation(description: $"The unit '{name}' is not known.");
             }
@@ -197,17 +231,27 @@ namespace Mycelium.Fabric.Mcp.Expressions
         }
 
         /// <summary>
-        /// Reads a call of a library function, such as <c>max(a, b)</c>.
+        /// Reads a call of a library function, such as <c>max(a, b)</c> or <c>(a, b)-&gt;select {in p; p.mass &gt; 10}</c>. The
+        /// function is recognized by its qualified name, such as <c>RealFunctions::max</c>, so that a function of the user
+        /// that has the same name is not taken for it.
         /// </summary>
         /// <param name="invocation">The invocation expression.</param>
-        /// <returns>The <see cref="InvocationTerm"/>, or an error when the function is not in the model or an argument cannot be read.</returns>
+        /// <returns>The <see cref="InvocationTerm"/>, or an error when the function is not in the model, is not a function of the library that the server evaluates, or an argument cannot be read.</returns>
         private static ErrorOr<Term> ReadInvocation(IInvocationExpression invocation)
         {
-            var functionName = invocation.function?.DeclaredName ?? invocation.type?.FirstOrDefault()?.DeclaredName;
+            var function = invocation.function ?? invocation.type?.FirstOrDefault();
+
+            if (function == null)
+            {
+                return Error.Validation(description: "The function that the expression calls is not in the model.");
+            }
+
+            var functionName = InvocationTerm.GetFunctionName(function.qualifiedName);
 
             if (functionName == null)
             {
-                return Error.Validation(description: "The function that the expression calls is not in the model.");
+                return Error.Validation(description: $"The function '{function.qualifiedName}' is not a function of the SysML v2 library that the server evaluates. "
+                    + $"Supported functions: {string.Join(", ", InvocationTerm.Functions.Keys)}.");
             }
 
             return ReadAll(GetArguments(invocation)).Then(Term (arguments) => new InvocationTerm(functionName, arguments));
@@ -242,6 +286,22 @@ namespace Mycelium.Fabric.Mcp.Expressions
             var features = target.chainingFeature is { Count: > 0 } chainingFeatures ? chainingFeatures : [target];
 
             return [.. features.Select(feature => feature.DeclaredName ?? feature.DeclaredShortName)];
+        }
+
+        /// <summary>
+        /// Gets the body that a feature reference expression declares, as the argument <c>{in p; p.mass &gt; 10}</c> of a
+        /// <c>select</c>: an expression that it owns through a feature membership that is not a parameter.
+        /// </summary>
+        /// <param name="reference">The feature reference expression.</param>
+        /// <returns>The expression of the body, or <c>null</c> for a reference to a feature.</returns>
+        private static IExpression GetBody(IFeatureReferenceExpression reference)
+        {
+            return (reference.OwnedRelationship ?? [])
+                .OfType<IFeatureMembership>()
+                .Where(membership => membership is not IParameterMembership)
+                .Select(membership => membership.ownedMemberFeature)
+                .OfType<IExpression>()
+                .FirstOrDefault();
         }
 
         /// <summary>

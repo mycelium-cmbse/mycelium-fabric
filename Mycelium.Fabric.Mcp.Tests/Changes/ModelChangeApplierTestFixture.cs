@@ -39,6 +39,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
     using DtoFeatureTyping = SysML2.NET.Core.DTO.Core.Features.FeatureTyping;
+    using DtoMembership = SysML2.NET.Core.DTO.Root.Namespaces.Membership;
     using DtoRelationship = SysML2.NET.Core.DTO.Root.Elements.IRelationship;
     using DtoSatisfyRequirementUsage = SysML2.NET.Core.DTO.Systems.Requirements.ISatisfyRequirementUsage;
 
@@ -534,7 +535,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithConstraintsAndValuesOfEveryForm_BuildsTheExpressions()
         {
             var dtos = ReadSatelliteDtos();
-            new ConstraintDtoBuilder(dtos).Enumeration(RequirementsPackageId, "OrbitKind", "sunSynchronous", "polar");
+            var builder = new ConstraintDtoBuilder(dtos);
+            builder.Enumeration(RequirementsPackageId, "OrbitKind", "sunSynchronous", "polar");
+
+            // An enumeration without name, whose value has no qualified name, and a kilogram of the user, which are not taken
+            // for the enumeration value and the unit.
+            builder.Enumeration(RequirementsPackageId, null, "sunSynchronous");
+            builder.Unit("Units", "kilogram", "kg");
+            var kilogram = builder.Unit("SI", "kilogram", "kg");
 
             var result = this.applier.Apply(dtos,
             [
@@ -574,9 +582,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(camera["isRedundant"].GetConstantValue(), Is.EqualTo(new BooleanValue(true)));
                 Assert.That(camera["band"].GetConstantValue(), Is.EqualTo(new TextValue("S-band")));
                 Assert.That(camera["heat"].GetConstantValue().ToString(), Is.EqualTo("5 [W]"));
-                Assert.That(orbit.GetConstantValue(), Is.EqualTo(new EnumValue("polar")));
+                Assert.That(orbit.GetConstantValue(), Is.EqualTo(new EnumValue("polar", "EOSat1::Requirements::OrbitKind::polar")));
                 Assert.That(massBudget.subjectParameter.ownedFeature.Select(feature => feature.DeclaredName), Is.EqualTo(["payloadSubsystem", "orbit"]));
                 Assert.That(massBudget.requiredConstraint.Single().GetTerm().Value.ToString(), Is.EqualTo("subj.payloadSubsystem.camera.mass <= 40 [kg]"));
+                Assert.That(model.OfType<DtoMembership>().Where(membership => membership.MemberShortName == "kg").Select(membership => membership.MemberElement), Is.EqualTo([kilogram.Id]));
                 Assert.That(massBudget.assumedConstraint.Single().GetTerm().Value.ToString(), Is.EqualTo("subj.orbit != OrbitKind::polar"));
                 Assert.That(Constraint(EclipseEnergyId), Is.EqualTo("subj.fuelLevel >= subj.fuelTankCapacity * 1.1"));
                 Assert.That(Constraint(PayloadPowerId), Is.EqualTo("subj.payloadSubsystem.camera.isRedundant == true"));
@@ -630,7 +639,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 1 (create): The unit 'kg' only applies to a numeric value.",
                 "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, or a name such as kilogram.",
                 "Change 3 (create): The value is empty: give a number, a Boolean or a text.",
-                "Change 4 (create): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
+                "Change 4 (create): 'nominal' names several enumeration values: write 'EOSat1::Requirements::ModeA::nominal' or 'EOSat1::Requirements::ModeB::nominal'.",
                 "Change 5 (update): The unit 'kg' only applies to a numeric value.",
                 "Change 6 (update): Give either a limit or a limitAttribute, not both.",
                 "Change 7 (update): The path 'mass..limit' has an empty name: write it as 'mass' or 'camera.mass'.",
@@ -641,7 +650,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 12 (update): The kind of the constraint must be Requirement or Assumption.",
                 "Change 13 (update): A margin in percent only applies to a positive limit: include the margin in the limit instead.",
                 "Change 14 (update): A margin in percent does not apply to a unit with an offset, such as °C: include the margin in the limit instead.",
-                "Change 15 (update): 'nominal' names several enumeration values: write 'ModeA::nominal' or 'ModeB::nominal'.",
+                "Change 15 (update): 'nominal' names several enumeration values: write 'EOSat1::Requirements::ModeA::nominal' or 'EOSat1::Requirements::ModeB::nominal'.",
                 "Change 16 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text."
             ];
 

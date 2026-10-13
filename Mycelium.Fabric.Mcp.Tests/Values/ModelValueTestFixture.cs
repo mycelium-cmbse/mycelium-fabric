@@ -34,10 +34,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
                 Assert.That(new BooleanValue(true).ToString(), Is.EqualTo("true"));
                 Assert.That(new BooleanValue(false).ToString(), Is.EqualTo("false"));
                 Assert.That(new TextValue("S-band").ToString(), Is.EqualTo("\"S-band\""));
-                Assert.That(new EnumValue("sunSynchronous").ToString(), Is.EqualTo("sunSynchronous"));
+                Assert.That(new EnumValue("sunSynchronous", "Mission::OrbitKind::sunSynchronous").ToString(), Is.EqualTo("sunSynchronous"));
                 Assert.That(new PartValue(part).ToString(), Is.EqualTo("camera"));
                 Assert.That(new SequenceValue([new NumberValue(1), new BooleanValue(true)]).ToString(), Is.EqualTo("(1, true)"));
                 Assert.That(SequenceValue.Empty.ToString(), Is.EqualTo("null"));
+            }
+        }
+
+        [Test]
+        public void VerifyIsNamedBy()
+        {
+            var polar = new EnumValue("polar", "Mission::OrbitKind::polar");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(polar.IsNamedBy("polar"), Is.True);
+                Assert.That(polar.IsNamedBy("OrbitKind::polar"), Is.True);
+                Assert.That(polar.IsNamedBy("Mission::OrbitKind::polar"), Is.True);
+                Assert.That(polar.IsNamedBy("PointingKind::polar"), Is.False);
+                Assert.That(polar.IsNamedBy("lar"), Is.False);
+                Assert.That(new EnumValue("polar", null).IsNamedBy("OrbitKind::polar"), Is.False);
             }
         }
 
@@ -48,7 +64,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
             {
                 Assert.That(new BooleanValue(true).KindName, Is.EqualTo("a Boolean"));
                 Assert.That(new TextValue("S-band").KindName, Is.EqualTo("a text"));
-                Assert.That(new EnumValue("polar").KindName, Is.EqualTo("an enumeration value"));
+                Assert.That(new EnumValue("polar", "Mission::OrbitKind::polar").KindName, Is.EqualTo("an enumeration value"));
                 Assert.That(new PartValue(new PartUsage()).KindName, Is.EqualTo("a part"));
                 Assert.That(SequenceValue.Empty.KindName, Is.EqualTo("a sequence"));
             }

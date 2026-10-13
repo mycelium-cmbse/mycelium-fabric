@@ -861,6 +861,33 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
+        /// Gets the qualified name of an element of the working copy, as SysML2.NET computes it on the POCOs: the names of its
+        /// owners and its own, without the root namespace of the model, which has no name.
+        /// </summary>
+        /// <param name="element">The element, or <c>null</c>.</param>
+        /// <returns>The qualified name, for example <c>EOSat1::OrbitKind::polar</c>, or <c>null</c> when the element or one of its owners has no name.</returns>
+        private string GetQualifiedName(IElement element)
+        {
+            var names = new List<string>();
+
+            for (var current = element; current != null; current = this.GetOwner(current))
+            {
+                var name = current.DeclaredName ?? current.DeclaredShortName;
+
+                if (name != null)
+                {
+                    names.Insert(0, name);
+                }
+                else if (this.GetOwner(current) != null)
+                {
+                    return null;
+                }
+            }
+
+            return names.Count == 0 ? null : string.Join(QualifiedNameSeparator, names);
+        }
+
+        /// <summary>
         /// Tells whether an element is marked for deletion, itself or through one of its owners.
         /// </summary>
         /// <param name="element">The element to check.</param>

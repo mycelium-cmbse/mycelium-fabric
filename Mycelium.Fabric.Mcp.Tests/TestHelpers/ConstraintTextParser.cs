@@ -14,20 +14,22 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
     using System.Globalization;
     using System.Linq;
 
+    using SysML2.NET.Core.DTO.Kernel.Expressions;
     using SysML2.NET.Core.DTO.Root.Elements;
 
     /// <summary>
     /// Builds, with a <see cref="ConstraintDtoBuilder"/>, the DTOs of an expression written in the SysML v2 textual notation,
     /// such as <c>subj.mass * 1.2 &lt;= 150 [kg] and not subj.isRedundant</c>, so that the tests read like the models they
-    /// check. A name is resolved by a function given by the test; a name that it does not resolve, a unit and the target of
-    /// a feature chain are referenced by their name only, as when they are not in the model.
+    /// check. A name is resolved as the parameter of a body (<c>p</c> in <c>{in p; p.mass &gt; 10}</c>), or else by a function
+    /// given by the test; a name that it does not resolve, a unit and the target of a feature chain are referenced by their
+    /// name only, as when they are not in the model.
     /// </summary>
     internal sealed class ConstraintTextParser
     {
         /// <summary>
         /// The operators of two characters or more, longest first.
         /// </summary>
-        private static readonly string[] LongOperators = ["===", "!==", "**", "==", "!=", "<=", ">=", "??", "::"];
+        private static readonly string[] LongOperators = ["===", "!==", "**", "==", "!=", "<=", ">=", "??", "::", "->", ".?"];
 
         /// <summary>
         /// The builder of the DTOs.
@@ -38,6 +40,11 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         /// Gives the <c>Id</c> of the feature that a name designates, or <c>null</c>.
         /// </summary>
         private readonly Func<string, Guid?> resolve;
+
+        /// <summary>
+        /// The parameters of the bodies being parsed, innermost first, which a name designates before the features of the model.
+        /// </summary>
+        private readonly Stack<(string Name, Guid Id)> parameters = [];
 
         /// <summary>
         /// The tokens of the parsed text.
@@ -243,8 +250,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         }
 
         /// <summary>
-        /// Parses a primary expression followed by feature chain steps (<c>.mass</c>), units (<c>[kg]</c>) and indexes
-        /// (<c>#(1)</c>).
+        /// Parses a primary expression followed by feature chain steps (<c>.mass</c>), units (<c>[kg]</c>), indexes
+        /// (<c>#(1)</c>), calls with a body (<c>-&gt;select {in p; ...}</c>), selections (<c>.?{in p; ...}</c>) and collections
+        /// (<c>.{in p; ...}</c>).
         /// </summary>
         /// <returns>The DTO of the expression.</returns>
         private IElement ParsePostfix()
@@ -255,10 +263,26 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
             {
                 var token = this.Peek();
 
-                if (token == ".")
+                if (token == "." && this.tokens[this.position + 1] == "{")
+                {
+                    this.position++;
+                    expression = this.builder.Iteration(false, expression, this.ParseBody());
+                }
+                else if (token == ".")
                 {
                     this.position++;
                     expression = this.builder.NamedChain(expression, this.tokens[this.position++]);
+                }
+                else if (token == ".?")
+                {
+                    this.position++;
+                    expression = this.builder.Iteration(true, expression, this.ParseBody());
+                }
+                else if (token == "->")
+                {
+                    var functionName = this.tokens[this.position + 1];
+                    this.position += 2;
+                    expression = this.builder.Invocation(functionName, expression, this.ParseBody());
                 }
                 else if (token != null && token.StartsWith('['))
                 {
@@ -278,6 +302,24 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
                     return expression;
                 }
             }
+        }
+
+        /// <summary>
+        /// Parses a body, such as <c>{in p; p.mass &gt; 10}</c>, whose expression can reference its parameter.
+        /// </summary>
+        /// <returns>The DTO of the body.</returns>
+        private FeatureReferenceExpression ParseBody()
+        {
+            this.Expect("{");
+            this.Expect("in");
+            var parameter = this.builder.BodyParameter(this.tokens[this.position++]);
+            this.Expect(";");
+            this.parameters.Push((parameter.DeclaredName, parameter.Id));
+            var result = this.ParseConditional();
+            this.parameters.Pop();
+            this.Expect("}");
+
+            return this.builder.Body(parameter, result);
         }
 
         /// <summary>
@@ -344,7 +386,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
 
             if (this.Peek() != "(")
             {
-                return this.resolve(name) is { } id ? this.builder.Reference(id) : this.builder.NamedReference(name);
+                var id = this.parameters.Any(parameter => parameter.Name == name) ? this.parameters.First(parameter => parameter.Name == name).Id : this.resolve(name);
+
+                return id == null ? this.builder.NamedReference(name) : this.builder.Reference(id.Value);
             }
 
             this.position++;

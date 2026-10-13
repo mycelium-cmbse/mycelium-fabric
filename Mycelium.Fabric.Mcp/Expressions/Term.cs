@@ -16,7 +16,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
     /// <summary>
     /// An expression of the model, read by the <see cref="TermReader"/> in a form that the server can evaluate and write:
     /// a <see cref="LiteralTerm"/>, a <see cref="ReferenceTerm"/>, a <see cref="NavigationTerm"/>, a <see cref="QuantityTerm"/>,
-    /// an <see cref="OperationTerm"/> or an <see cref="InvocationTerm"/>.
+    /// an <see cref="OperationTerm"/>, an <see cref="InvocationTerm"/> or the <see cref="BodyTerm"/> of a <c>select</c>.
     /// </summary>
     public abstract record Term
     {

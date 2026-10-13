@@ -40,7 +40,10 @@ namespace Mycelium.Fabric.Mcp.Expressions
             ["<"] = "<", ["<="] = "<=", [">"] = ">", [">="] = ">=", ["=="] = "==", ["==="] = "==", ["!="] = "!=", ["!=="] = "!="
         };
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets how tightly the operator binds its operands, as in the SysML v2 textual notation, from <c>,</c> (the lowest)
+        /// to <c>#</c> (the highest); a unary operator binds more tightly than any binary arithmetic operator.
+        /// </summary>
         public override int Precedence => this.Operator switch
         {
             "," => 0,
@@ -342,9 +345,9 @@ namespace Mycelium.Fabric.Mcp.Expressions
             {
                 (BooleanValue leftBoolean, BooleanValue rightBoolean) => leftBoolean.Value == rightBoolean.Value,
                 (TextValue leftText, TextValue rightText) => leftText.Text == rightText.Text,
-                (EnumValue leftEnum, EnumValue rightEnum) => leftEnum.Name == rightEnum.Name,
-                (EnumValue leftEnum, TextValue rightText) => leftEnum.Name == rightText.Text,
-                (TextValue leftText, EnumValue rightEnum) => leftText.Text == rightEnum.Name,
+                (EnumValue leftEnum, EnumValue rightEnum) => leftEnum.QualifiedName == rightEnum.QualifiedName,
+                (EnumValue leftEnum, TextValue rightText) => leftEnum.IsNamedBy(rightText.Text),
+                (TextValue leftText, EnumValue rightEnum) => rightEnum.IsNamedBy(leftText.Text),
                 (PartValue leftPart, PartValue rightPart) => leftPart.Feature.Id == rightPart.Feature.Id,
                 (SequenceValue { Items.Count: 0 }, SequenceValue { Items.Count: 0 }) => true,
                 (SequenceValue { Items.Count: 0 }, _) or (_, SequenceValue { Items.Count: 0 }) => false,

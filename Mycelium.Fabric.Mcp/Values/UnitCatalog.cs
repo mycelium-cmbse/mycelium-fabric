@@ -23,6 +23,13 @@ namespace Mycelium.Fabric.Mcp.Values
     public static class UnitCatalog
     {
         /// <summary>
+        /// The qualified names of the packages of the SysML v2 library that declare units: a unit of the model is read only
+        /// when it is declared in one of them, so that an element of the user that has the short name <c>kg</c> is not taken
+        /// for the kilogram.
+        /// </summary>
+        public static readonly IReadOnlyList<string> LibraryPackages = ["SI", "USCustomaryUnits"];
+
+        /// <summary>
         /// The SI prefixes, longest first so that <c>da</c> is tried before <c>d</c>.
         /// </summary>
         private static readonly (string Symbol, string Name, double Factor)[] Prefixes =

@@ -34,7 +34,9 @@ namespace Mycelium.Fabric.Mcp.Values
         /// </summary>
         private const double RelativeTolerance = 1e-9;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of the kind of value, used in the messages: <c>a number</c>.
+        /// </summary>
         public override string KindName => "a number";
 
         /// <summary>

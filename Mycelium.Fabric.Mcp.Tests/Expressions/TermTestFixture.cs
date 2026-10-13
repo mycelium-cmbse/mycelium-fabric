@@ -18,11 +18,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
     using Mycelium.Fabric.Mcp.Expressions;
     using Mycelium.Fabric.Mcp.Values;
 
+    using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Parts;
 
     /// <summary>
     /// Suite of tests for the small terms: <see cref="LiteralTerm"/>, <see cref="ReferenceTerm"/>, <see cref="NavigationTerm"/>,
-    /// <see cref="QuantityTerm"/> and <see cref="InvocationTerm"/>, whose evaluation reads the model through a mocked
+    /// <see cref="QuantityTerm"/>, <see cref="InvocationTerm"/> and <see cref="BodyTerm"/>, whose evaluation reads the model through a mocked
     /// <see cref="IEvaluationContext"/>.
     /// </summary>
     [TestFixture]
@@ -31,7 +32,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         /// <summary>
         /// The satellite part that the subject stands for.
         /// </summary>
-        private readonly PartUsage satellite = new() { DeclaredName = "eosat1" };
+        private readonly PartUsage satellite = new() { Id = Guid.NewGuid(), DeclaredName = "eosat1" };
+
+        /// <summary>
+        /// The camera part, a second item of the sequences.
+        /// </summary>
+        private readonly PartUsage camera = new() { Id = Guid.NewGuid(), DeclaredName = "camera" };
+
+        /// <summary>
+        /// The parameter <c>p</c> of the bodies.
+        /// </summary>
+        private readonly ReferenceUsage parameter = new() { Id = Guid.NewGuid(), DeclaredName = "p" };
 
         /// <summary>
         /// The context of the evaluations.
@@ -43,6 +54,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         {
             this.context = new Mock<IEvaluationContext>();
             this.context.Setup(context => context.GetValue(this.satellite)).Returns(new PartValue(this.satellite));
+            this.context.Setup(context => context.GetValue(this.camera)).Returns(new PartValue(this.camera));
+            this.context.Setup(context => context.Navigate(new PartValue(this.camera), "mass")).Returns(new NumberValue(38, Unit("kg")));
             this.context.Setup(context => context.Navigate(new PartValue(this.satellite), "mass")).Returns(new NumberValue(125.8, Unit("kg")));
             this.context.Setup(context => context.Navigate(new PartValue(this.satellite), "temperature")).Returns((ErrorOr<ModelValue>)Error.Validation(description: "no temperature"));
         }
@@ -117,15 +130,19 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             var mass = new NavigationTerm(new ReferenceTerm("subj", this.satellite), "mass");
             var temperature = new NavigationTerm(new ReferenceTerm("subj", this.satellite), "temperature");
             var numbers = new OperationTerm(",", [Number(-2.5), Number(4), Number(1)]);
+            var parts = new OperationTerm(",", [new ReferenceTerm("eosat1", this.satellite), new ReferenceTerm("camera", this.camera)]);
+            var item = new ReferenceTerm("p", this.parameter);
+            var partMass = new NavigationTerm(item, "mass");
+            var isHeavy = new BodyTerm(this.parameter, new OperationTerm(">", [partMass, new QuantityTerm(Number(100), Unit("kg"))]));
+            var isPositive = new BodyTerm(this.parameter, new OperationTerm(">", [item, Number(0)]));
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(() => Call("abs", Number(1)).Evaluate(null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(InvocationTerm.Functions, Has.Count.EqualTo(12));
+                Assert.That(InvocationTerm.Functions, Has.Count.EqualTo(13));
                 Assert.That(this.Value(Call("abs", Number(-2.5))), Is.EqualTo("2.5"));
                 Assert.That(this.Value(Call("sqrt", Number(16))), Is.EqualTo("4"));
                 Assert.That(this.Value(Call("floor", Number(2.7))), Is.EqualTo("2"));
-                Assert.That(this.Value(Call("ceil", Number(2.1))), Is.EqualTo("3"));
                 Assert.That(this.Value(Call("round", Number(2.5))), Is.EqualTo("3"));
                 Assert.That(this.Value(Call("min", numbers)), Is.EqualTo("-2.5"));
                 Assert.That(this.Value(Call("max", mass, new QuantityTerm(Number(100), Unit("kg")))), Is.EqualTo("125.8 [kg]"));
@@ -146,6 +163,57 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(this.ErrorOf(Call("sqrt", mass)), Is.EqualTo("sqrt does not apply to 125.8 [kg]."));
                 Assert.That(this.ErrorOf(Call("max", mass, new QuantityTerm(Number(1), Unit("W")))), Is.EqualTo("1 [W] cannot be converted to kg."));
                 Assert.That(Call("max", mass, numbers).ToString(), Is.EqualTo("max(subj.mass, -2.5, 4, 1)"));
+
+                // select and collect, whose second argument is a body.
+                Assert.That(this.Value(Call("select", parts, isHeavy)), Is.EqualTo("eosat1"));
+                Assert.That(this.Value(Call("select", numbers, isPositive)), Is.EqualTo("(4, 1)"));
+                Assert.That(this.Value(Call("select", Number(-1), isPositive)), Is.EqualTo("null"));
+                Assert.That(this.Value(Call("collect", parts, new BodyTerm(this.parameter, partMass))), Is.EqualTo("(125.8 [kg], 38 [kg])"));
+                Assert.That(this.Value(Call("collect", numbers, new BodyTerm(this.parameter, new OperationTerm(",", [item, item])))), Is.EqualTo("(-2.5, -2.5, 4, 4, 1, 1)"));
+                Assert.That(this.Value(Call("sum", Call("collect", parts, new BodyTerm(this.parameter, partMass)))), Is.EqualTo("163.8 [kg]"));
+                Assert.That(this.Value(Call("size", Call("select", parts, isHeavy))), Is.EqualTo("1"));
+
+                // Errors: no body, a sequence or a body that cannot be evaluated, a body of select that is not a Boolean.
+                Assert.That(this.ErrorOf(Call("select", parts)), Is.EqualTo("The function 'select' needs a sequence and a body, as in (a, b)->select {in p; p.mass > 10}."));
+                Assert.That(this.ErrorOf(Call("collect", parts, Number(1))), Is.EqualTo("The function 'collect' needs a sequence and a body, as in (a, b)->collect {in p; p.mass > 10}."));
+                Assert.That(this.ErrorOf(Call("collect", temperature, isPositive)), Is.EqualTo("no temperature"));
+                Assert.That(this.ErrorOf(Call("collect", parts, new BodyTerm(this.parameter, new NavigationTerm(item, "temperature")))), Is.EqualTo("no temperature"));
+                Assert.That(this.ErrorOf(Call("select", numbers, new BodyTerm(this.parameter, item))), Is.EqualTo("'{in p; p}' gives a number (-2.5) for -2.5, not a Boolean."));
+                Assert.That(this.ErrorOf(Call("max", isPositive)), Is.EqualTo("The body '{in p; p > 0}' has a value only as the second argument of select or collect."));
+
+                Assert.That(Call("select", parts, isHeavy).ToString(), Is.EqualTo("(eosat1, camera)->select {in p; p.mass > 100 [kg]}"));
+                Assert.That(Call("collect", item, new BodyTerm(this.parameter, partMass)).ToString(), Is.EqualTo("p->collect {in p; p.mass}"));
+            }
+        }
+
+        [Test]
+        public void VerifyGetFunctionName()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(InvocationTerm.GetFunctionName("RealFunctions::max"), Is.EqualTo("max"));
+                Assert.That(InvocationTerm.GetFunctionName("SequenceFunctions::size"), Is.EqualTo("size"));
+                Assert.That(InvocationTerm.GetFunctionName("ControlFunctions::select"), Is.EqualTo("select"));
+                Assert.That(InvocationTerm.GetFunctionName("MyFunctions::max"), Is.Null);
+                Assert.That(InvocationTerm.GetFunctionName("SequenceFunctions::max"), Is.Null);
+                Assert.That(InvocationTerm.GetFunctionName("RealFunctions::ceil"), Is.Null);
+                Assert.That(InvocationTerm.GetFunctionName("max"), Is.Null);
+                Assert.That(InvocationTerm.GetFunctionName(null), Is.Null);
+            }
+        }
+
+        [Test]
+        public void VerifyBodyTerm()
+        {
+            var body = new BodyTerm(this.parameter, new NavigationTerm(new ReferenceTerm("p", this.parameter), "mass"));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => body.Apply(null, new PartValue(this.camera)), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(body.Apply(this.context.Object, new PartValue(this.camera)).Value.ToString(), Is.EqualTo("38 [kg]"));
+                Assert.That(body.Evaluate(this.context.Object).FirstError.Description, Is.EqualTo("The body '{in p; p.mass}' has a value only as the second argument of select or collect."));
+                Assert.That(body.ToString(), Is.EqualTo("{in p; p.mass}"));
+                Assert.That(body.Precedence, Is.EqualTo(Term.HighestPrecedence));
             }
         }
 

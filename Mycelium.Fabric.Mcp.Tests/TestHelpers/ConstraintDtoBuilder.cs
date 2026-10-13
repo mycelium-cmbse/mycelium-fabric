@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
     using SysML2.NET.Core.DTO.Kernel.Expressions;
     using SysML2.NET.Core.DTO.Kernel.FeatureValues;
     using SysML2.NET.Core.DTO.Kernel.Functions;
+    using SysML2.NET.Core.DTO.Kernel.Packages;
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
     using SysML2.NET.Core.DTO.Systems.Attributes;
@@ -44,9 +45,14 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         private readonly List<IElement> dtos;
 
         /// <summary>
-        /// The functions created for the calls, by name.
+        /// The functions created for the calls, by qualified name.
         /// </summary>
         private readonly Dictionary<string, Function> functionsByName = [];
+
+        /// <summary>
+        /// The packages of the library created for the functions and the units, by name.
+        /// </summary>
+        private readonly Dictionary<string, Package> packagesByName = [];
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ConstraintDtoBuilder"/> class.
@@ -100,6 +106,17 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
             }
 
             return attribute;
+        }
+
+        /// <summary>
+        /// Makes a feature redefine another one, as <c>attribute :&gt;&gt; focalLength</c> does in a part typed by a definition
+        /// that has this attribute.
+        /// </summary>
+        /// <param name="redefiningFeatureId">The <c>Id</c> of the redefining feature.</param>
+        /// <param name="redefinedFeatureId">The <c>Id</c> of the redefined feature.</param>
+        public void Redefinition(Guid redefiningFeatureId, Guid redefinedFeatureId)
+        {
+            this.AddOwnedRelationship(this.Get(redefiningFeatureId), new Redefinition { RedefiningFeature = redefiningFeatureId, RedefinedFeature = redefinedFeatureId });
         }
 
         /// <summary>
@@ -236,8 +253,44 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         }
 
         /// <summary>
+        /// Gets a package at the top of a model, under a root namespace without name, as a package of the SysML v2 library is
+        /// declared: its qualified name is its name, for example <c>SI</c>. The package is created once.
+        /// </summary>
+        /// <param name="name">The name of the package, for example <c>SI</c> or <c>RealFunctions</c>.</param>
+        /// <returns>The package.</returns>
+        public Package LibraryPackage(string name)
+        {
+            if (!this.packagesByName.TryGetValue(name, out var package))
+            {
+                package = this.Add(new Package { DeclaredName = name });
+                this.AddOwnedRelationship(this.Add(new Namespace()), new OwningMembership(), package);
+                this.packagesByName[name] = package;
+            }
+
+            return package;
+        }
+
+        /// <summary>
+        /// Adds a unit to a package at the top of a model, as <c>attribute &lt;kg&gt; kilogram;</c> declares it in the <c>SI</c>
+        /// package of the library.
+        /// </summary>
+        /// <param name="packageName">The name of the package, for example <c>SI</c>.</param>
+        /// <param name="name">The name of the unit, for example <c>kilogram</c>.</param>
+        /// <param name="shortName">The short name of the unit, for example <c>kg</c>.</param>
+        /// <returns>The new attribute.</returns>
+        public AttributeUsage Unit(string packageName, string name, string shortName)
+        {
+            var unit = this.Add(new AttributeUsage { DeclaredName = name, DeclaredShortName = shortName });
+            this.AddOwnedRelationship(this.LibraryPackage(packageName), new OwningMembership(), unit);
+
+            return unit;
+        }
+
+        /// <summary>
         /// Creates a call of a function, such as <c>max(a, b)</c>: an <see cref="InvocationExpression"/> typed by a function of
-        /// that name, created once.
+        /// that name, created once in a package of the library (<c>NumericalFunctions</c>, <c>RealFunctions</c>,
+        /// <c>SequenceFunctions</c> or <c>ControlFunctions</c>), or in the package that a qualified name gives, such as
+        /// <c>MyFunctions::max</c>.
         /// </summary>
         /// <param name="functionName">The name of the function, or <c>null</c> for a call of a function that is not in the model.</param>
         /// <param name="arguments">The arguments.</param>
@@ -248,10 +301,24 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
 
             if (functionName != null)
             {
-                if (!this.functionsByName.TryGetValue(functionName, out var function))
+                var separator = functionName.LastIndexOf("::", StringComparison.Ordinal);
+                var name = separator < 0 ? functionName : functionName[(separator + 2)..];
+
+                var packageName = separator >= 0 ? functionName[..separator] : name switch
                 {
-                    function = this.Add(new Function { DeclaredName = functionName });
-                    this.functionsByName[functionName] = function;
+                    "sqrt" or "floor" or "round" => "RealFunctions",
+                    "size" or "isEmpty" or "notEmpty" => "SequenceFunctions",
+                    "select" or "collect" => "ControlFunctions",
+                    _ => "NumericalFunctions"
+                };
+
+                var qualifiedName = $"{packageName}::{name}";
+
+                if (!this.functionsByName.TryGetValue(qualifiedName, out var function))
+                {
+                    function = this.Add(new Function { DeclaredName = name });
+                    this.AddOwnedRelationship(this.LibraryPackage(packageName), new OwningMembership(), function);
+                    this.functionsByName[qualifiedName] = function;
                 }
 
                 this.AddOwnedRelationship(invocation, new FeatureTyping { Type = function.Id, TypedFeature = invocation.Id });
@@ -263,6 +330,61 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
             }
 
             return invocation;
+        }
+
+        /// <summary>
+        /// Creates the parameter of a body, such as <c>p</c> in <c>{in p; p.mass &gt; 10}</c>, before the body is built, so
+        /// that its expression can reference it.
+        /// </summary>
+        /// <param name="name">The name of the parameter.</param>
+        /// <returns>The new <see cref="ReferenceUsage"/>.</returns>
+        public ReferenceUsage BodyParameter(string name)
+        {
+            return this.Add(new ReferenceUsage { DeclaredName = name, Direction = FeatureDirectionKind.In });
+        }
+
+        /// <summary>
+        /// Creates the body of a <c>select</c> or a <c>collect</c>, such as <c>{in p; p.mass &gt; 10}</c>, as the official
+        /// parser does: a <see cref="FeatureReferenceExpression"/> that owns, through a feature membership, an expression
+        /// whose parameter is owned through a feature membership and whose result is its result expression.
+        /// </summary>
+        /// <param name="parameter">The parameter, or <c>null</c> for a body without parameter.</param>
+        /// <param name="result">The expression of the body, or <c>null</c> for a body without expression.</param>
+        /// <returns>The new <see cref="FeatureReferenceExpression"/>.</returns>
+        public FeatureReferenceExpression Body(ReferenceUsage parameter, IElement result)
+        {
+            var reference = this.Add(new FeatureReferenceExpression());
+            var body = this.Add(new Expression());
+            this.AddOwnedRelationship(reference, new FeatureMembership(), body);
+
+            if (parameter != null)
+            {
+                this.AddOwnedRelationship(body, new FeatureMembership(), parameter);
+            }
+
+            if (result != null)
+            {
+                this.AddOwnedRelationship(body, new ResultExpressionMembership(), result);
+            }
+
+            return reference;
+        }
+
+        /// <summary>
+        /// Creates <c>sequence.?{in p; ...}</c> (a <see cref="SelectExpression"/>) or <c>sequence.{in p; ...}</c> (a
+        /// <see cref="CollectExpression"/>).
+        /// </summary>
+        /// <param name="isSelect">Whether the expression is a select, or else a collect.</param>
+        /// <param name="sequence">The expression of the sequence.</param>
+        /// <param name="body">The body.</param>
+        /// <returns>The new expression.</returns>
+        public IElement Iteration(bool isSelect, IElement sequence, IElement body)
+        {
+            IElement iteration = isSelect ? this.Add(new SelectExpression { Operator = "select" }) : this.Add(new CollectExpression { Operator = "collect" });
+            this.AddArgument(iteration, sequence);
+            this.AddArgument(iteration, body);
+
+            return iteration;
         }
 
         /// <summary>

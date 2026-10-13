@@ -38,7 +38,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
             ArgumentNullException.ThrowIfNull(feature);
 
             return ModelEvaluationContext.IsEnumerationValue(feature)
-                ? new EnumValue(feature.DeclaredName)
+                ? new EnumValue(feature.DeclaredName, feature.qualifiedName)
                 : Error.Validation(description: $"'{feature.DeclaredName}' is not a constant.");
         }
 

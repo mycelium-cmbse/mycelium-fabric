@@ -15,7 +15,9 @@ namespace Mycelium.Fabric.Mcp.Values
     /// <param name="Text">The text.</param>
     public sealed record TextValue(string Text) : ModelValue
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of the kind of value, used in the messages: <c>a text</c>.
+        /// </summary>
         public override string KindName => "a text";
 
         /// <summary>

@@ -18,7 +18,9 @@ namespace Mycelium.Fabric.Mcp.Values
     /// <param name="Feature">The feature of the model.</param>
     public sealed record PartValue(IFeature Feature) : ModelValue
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of the kind of value, used in the messages: <c>a part</c>.
+        /// </summary>
         public override string KindName => "a part";
 
         /// <summary>

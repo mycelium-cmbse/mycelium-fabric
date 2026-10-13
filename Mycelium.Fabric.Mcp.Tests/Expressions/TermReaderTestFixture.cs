@@ -37,15 +37,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             var camera = builder.Attribute(package.Id, "camera");
             var mass = builder.Attribute(package.Id, "mass");
             var unnamed = builder.Attribute(package.Id, null);
-            var kilogram = builder.Attribute(package.Id, "kilogram");
-            kilogram.DeclaredShortName = "kg";
+            var kilogram = builder.Unit("SI", "kilogram", "kg");
+            var userKilogram = builder.Unit("Units", "kilogram", "kg");
             var parser = new ConstraintTextParser(builder, name => name == "subj" ? subject.Id : null);
 
             // Expressions written in the textual notation, read and written back the same way.
             string[] texts =
             [
                 "true", "150", "1.5", "\"S-band\"", "null", "subj", "subj.camera.mass", "150 [kg]", "9.81 [m/s^2]", "-20 [°C]", "max(subj.mass, 100)",
-                "subj.mass * 1.2 <= 150 [kg] and not subj.isRedundant", "if subj.isRedundant ? 1 else 2", "(1, 2, 3)#(2)"
+                "subj.mass * 1.2 <= 150 [kg] and not subj.isRedundant", "if subj.isRedundant ? 1 else 2", "(1, 2, 3)#(2)", "(1, 2, 3)->select {in p; p > 1}",
+                "sum(subj->collect {in p; p.mass})"
             ];
 
             var textExpressions = texts.ToDictionary(text => text, parser.Parse);
@@ -58,6 +59,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 ["unit of the model"] = builder.Quantity(builder.Integer(150), builder.Reference(kilogram.Id)),
                 ["quotient of units"] = builder.Quantity(builder.Integer(10), builder.Operation("/", builder.NamedReference("km"), builder.NamedReference("h"))),
                 ["power of a unit"] = builder.Quantity(builder.Integer(10), builder.Operation("^", builder.NamedReference("m"), builder.Integer(2))),
+                ["select expression"] = parser.Parse("subj.?{in p; p.mass > 10}"),
+                ["collect expression"] = parser.Parse("subj.{in p; p.mass}"),
 
                 // Expressions that cannot be read.
                 ["unknown unit"] = builder.Quantity(builder.Integer(3), builder.NamedReference("furlong")),
@@ -71,6 +74,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 ["chain whose source cannot be read"] = builder.NamedChain(builder.NamedReference("vehicle"), "mass"),
                 ["call of a function that is not in the model"] = builder.Invocation(null, builder.Integer(1)),
                 ["call with an argument that cannot be read"] = builder.Invocation("max", builder.NamedReference("x")),
+                ["call of a function of the user"] = builder.Invocation("MyFunctions::max", builder.Integer(1)),
+                ["unit of the user"] = builder.Quantity(builder.Integer(150), builder.Reference(userKilogram.Id)),
+                ["body without parameter"] = builder.Invocation("select", builder.Integer(1), builder.Body(null, builder.Boolean(true))),
+                ["body without expression"] = builder.Invocation("select", builder.Integer(1), builder.Body(builder.BodyParameter("p"), null)),
+                ["body whose expression cannot be read"] = builder.Invocation("collect", builder.Integer(1), builder.Body(builder.BodyParameter("p"), builder.NamedReference("x"))),
                 ["operation with an operand without value"] = builder.Operation("+", builder.Integer(1), null),
                 ["unresolved reference without name"] = builder.Reference(Guid.NewGuid())
             };
@@ -90,6 +98,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(Read(readExpressions["unit of the model"]), Is.EqualTo("150 [kg]"));
                 Assert.That(Read(readExpressions["quotient of units"]), Is.EqualTo("10 [km/h]"));
                 Assert.That(Read(readExpressions["power of a unit"]), Is.EqualTo("10 [m^2]"));
+                Assert.That(Read(readExpressions["select expression"]), Is.EqualTo("subj->select {in p; p.mass > 10}"));
+                Assert.That(Read(readExpressions["collect expression"]), Is.EqualTo("subj->collect {in p; p.mass}"));
 
                 Assert.That(Read(readExpressions["unknown unit"]), Is.EqualTo("error: The unit 'furlong' is not known."));
                 Assert.That(Read(readExpressions["unknown unit in a product"]), Is.EqualTo("error: The unit 'furlong' is not known."));
@@ -102,6 +112,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(Read(readExpressions["chain whose source cannot be read"]), Is.EqualTo("error: The reference to 'vehicle' does not resolve to an element of the model."));
                 Assert.That(Read(readExpressions["call of a function that is not in the model"]), Is.EqualTo("error: The function that the expression calls is not in the model."));
                 Assert.That(Read(readExpressions["call with an argument that cannot be read"]), Is.EqualTo("error: The reference to 'x' does not resolve to an element of the model."));
+                Assert.That(Read(readExpressions["call of a function of the user"]),
+                    Is.EqualTo("error: The function 'MyFunctions::max' is not a function of the SysML v2 library that the server evaluates. Supported functions: abs, sqrt, floor, round, min, max, sum, product, size, isEmpty, notEmpty, select, collect."));
+                Assert.That(Read(readExpressions["unit of the user"]), Is.EqualTo("error: 'Units::kilogram' is not a unit of the SysML v2 library (SI, USCustomaryUnits)."));
+                Assert.That(Read(readExpressions["body without parameter"]), Is.EqualTo("error: The body of select or collect needs a parameter and an expression, as in {in p; p.mass > 10}."));
+                Assert.That(Read(readExpressions["body without expression"]), Is.EqualTo("error: The body of select or collect needs a parameter and an expression, as in {in p; p.mass > 10}."));
+                Assert.That(Read(readExpressions["body whose expression cannot be read"]), Is.EqualTo("error: The reference to 'x' does not resolve to an element of the model."));
                 Assert.That(Read(readExpressions["operation with an operand without value"]), Is.EqualTo("error: An operand of the expression has no value."));
                 Assert.That(Read(readExpressions["unresolved reference without name"]), Is.EqualTo("error: The reference to 'an element' does not resolve to an element of the model."));
                 Assert.That(TermReader.Read(new Package()).FirstError.Description, Is.EqualTo("The expression 'Package' is not supported."));

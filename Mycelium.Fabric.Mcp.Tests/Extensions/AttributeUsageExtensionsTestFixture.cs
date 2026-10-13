@@ -72,7 +72,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(this.attributes["compound"].GetConstantValue().ToString(), Is.EqualTo("7.5 [km/s]"));
                 Assert.That(this.attributes["boolean"].GetConstantValue(), Is.EqualTo(new BooleanValue(true)));
                 Assert.That(this.attributes["text"].GetConstantValue(), Is.EqualTo(new TextValue("S-band")));
-                Assert.That(this.attributes["enumeration"].GetConstantValue(), Is.EqualTo(new EnumValue("polar")));
+                Assert.That(this.attributes["enumeration"].GetConstantValue(), Is.EqualTo(new EnumValue("polar", "OrbitKind::polar")));
 
                 // No value, a value that reads another value, a value whose unit is not known.
                 Assert.That(this.attributes["noValue"].GetConstantValue(), Is.Null);

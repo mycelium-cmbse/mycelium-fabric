@@ -102,6 +102,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             builder.Attribute(CameraId, "heat", parser.Parse("5 [W]"));
             builder.Attribute(CameraId, "margin", parser.Parse("subj"));
 
+            // A feature of the camera that redefines the one of its definition, and one that has the name of a feature of its definition.
+            var opticalCamera = dtos.Single(dto => dto.DeclaredName == "OpticalCamera");
+            var definitionFocalLength = builder.Attribute(opticalCamera.Id, "focalLength", parser.Parse("\"short\""));
+            builder.Redefinition(builder.Attribute(CameraId, "focalLength", parser.Parse("\"long\"")).Id, definitionFocalLength.Id);
+            builder.Attribute(opticalCamera.Id, "aperture", parser.Parse("\"f/2\""));
+            builder.Attribute(CameraId, "aperture", parser.Parse("\"f/4\""));
+
             var storage = dtos.Single(dto => dto.DeclaredName == "massMemory" && IsOwnedBy(dtos, dto.Id, PayloadSubsystemId));
             builder.Attribute(storage.Id, "dataVolume", parser.Parse("512 [MB]"));
             builder.Attribute(storage.Id, "heat", parser.Parse("2 [kg]"));
@@ -146,8 +153,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(context.Navigate(payload, "camera").Value, Is.EqualTo(camera));
                 Assert.That(context.Navigate(payload, "mass").Value, Is.EqualTo(new NumberValue(39.5)));
                 Assert.That(context.Navigate(camera, "isRedundant").Value, Is.EqualTo(new BooleanValue(true)));
-                Assert.That(context.Navigate(camera, "orbit").Value, Is.EqualTo(new EnumValue("sunSynchronous")));
+                Assert.That(context.Navigate(camera, "orbit").Value, Is.EqualTo(new EnumValue("sunSynchronous", "EOSat1::Requirements::OrbitKind::sunSynchronous")));
                 Assert.That(context.Navigate(camera, "margin").Value, Is.EqualTo(satellite));
+                Assert.That(context.Navigate(camera, "focalLength").Value, Is.EqualTo(new TextValue("long")));
+                Assert.That(context.Navigate(camera, "aperture").FirstError.Description, Is.EqualTo("'EOSat1::Architecture::eosat1::payloadSubsystem::camera' has several features named 'aperture': "
+                    + "EOSat1::Architecture::eosat1::payloadSubsystem::camera::aperture, EOSat1::Components::OpticalCamera::aperture."));
                 Assert.That(context.Navigate(payload, "dataVolume").Value.ToString(), Is.EqualTo("2.512 [GB]"));
                 Assert.That(context.Navigate(payload, "heat").FirstError.Description, Is.EqualTo("Cannot add 5 [W] and 2 [kg]: their units have different dimensions."));
                 Assert.That(context.Navigate(satellite, "temperature").FirstError.Description,
@@ -181,7 +191,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(() => context.GetValue(null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(context.GetValue(this.Feature("sunSynchronous")).Value, Is.EqualTo(new EnumValue("sunSynchronous")));
+                Assert.That(context.GetValue(this.Feature("sunSynchronous")).Value, Is.EqualTo(new EnumValue("sunSynchronous", "EOSat1::Requirements::OrbitKind::sunSynchronous")));
                 Assert.That(context.GetValue(this.Feature("massLimit")).FirstError.Description, Is.EqualTo("'massLimit' is not a constant."));
                 Assert.That(context.Navigate(new PartValue((IFeature)this.elements[CameraId]), "mass").FirstError.Description, Is.EqualTo("'mass' is not a constant."));
             }

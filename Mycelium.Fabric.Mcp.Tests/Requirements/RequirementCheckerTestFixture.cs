@@ -282,7 +282,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 (null, "subj.altitude <= 150 [kg]", RequirementStatus.NotEvaluated, "Cannot compare 600 [km] and 150 [kg]: their units have different dimensions."),
                 (null, "subj.mass", RequirementStatus.NotEvaluated, "The constraint gives a number (125.8), not a Boolean."),
                 (null, "subj.payloadSubsystem.camera", RequirementStatus.NotEvaluated, "The constraint gives a part (EOSat1::Architecture::eosat1::payloadSubsystem::camera), not a Boolean."),
-                (null, "vehicle.mass <= 1", RequirementStatus.NotEvaluated, "The constraint cannot be read: The reference to 'vehicle' does not resolve to an element of the model.")
+                (null, "vehicle.mass <= 1", RequirementStatus.NotEvaluated, "The constraint cannot be read: The reference to 'vehicle' does not resolve to an element of the model."),
+                (null, "sum((subj.payloadSubsystem.camera, subj.payloadSubsystem.massMemory)->collect {in p; p.mass}) <= 40", RequirementStatus.Satisfied, "39.5 <= 40"),
+                (null, "size((subj.payloadSubsystem.camera, subj.payloadSubsystem.massMemory)->select {in p; p.mass > 10}) == 1", RequirementStatus.Satisfied, "1 == 1")
             ];
 
             var model = ModelDtoHelper.ReadSatelliteDtos();
