@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Microsoft.Extensions.Options;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Prompts;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.TradeOff;
@@ -35,9 +36,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the MCP server, its tools, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/> unless the
-            /// host has registered its own, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>, an
-            /// <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a <see cref="JsonModelExporter"/>
+            /// Registers the MCP server, its tools and prompts, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/>
+            /// unless the host has registered its own, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
+            /// an <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a <see cref="JsonModelExporter"/>
             /// that writes the model to the export folder of the <see cref="ModelExportOptions"/>, read from the configuration of
             /// the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this assembly.
             /// </summary>
@@ -86,7 +87,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<RequirementTools>()
                     .WithTools<ExportTools>()
                     .WithTools<TradeOffTools>()
-                    .WithTools<ValidationTools>();
+                    .WithTools<ValidationTools>()
+                    // A static class cannot be a type argument: the prompts are registered by their type.
+                    .WithPrompts([typeof(GenerationPrompts)]);
             }
 
             /// <summary>

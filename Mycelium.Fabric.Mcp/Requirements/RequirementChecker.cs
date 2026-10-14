@@ -34,12 +34,12 @@ namespace Mycelium.Fabric.Mcp.Requirements
         /// <summary>
         /// The explanation of a requirement that has no required constraint.
         /// </summary>
-        private const string NoConstraintExplanation = "The requirement has no required constraint: add one with the SetConstraint change of apply_changes.";
+        private const string NoConstraintExplanation = "The requirement has no required constraint: add one with apply_changes (constraint of the RequirementUsage).";
 
         /// <summary>
         /// The explanation of a requirement that no part satisfies.
         /// </summary>
-        private const string NoSatisfyingPartExplanation = "No part satisfies the requirement: add one with the Satisfy change of apply_changes.";
+        private const string NoSatisfyingPartExplanation = "No part satisfies the requirement: add one with apply_changes (SatisfyRequirementUsage).";
 
         /// <summary>
         /// How a constraint whose expression cannot be read is written in a check.

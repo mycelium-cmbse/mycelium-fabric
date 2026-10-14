@@ -69,6 +69,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var ruleRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IValidationRule)).ToList();
             var validatorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelValidator)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
+            var promptRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerPrompt)).ToList();
 
             using (Assert.EnterMultipleScope())
             {
@@ -97,6 +98,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(validatorRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(validatorRegistrations[0].ImplementationType, Is.EqualTo(typeof(ModelValidator)));
                 Assert.That(toolRegistrations, Has.Count.EqualTo(12));
+                Assert.That(promptRegistrations, Has.Count.EqualTo(1));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");

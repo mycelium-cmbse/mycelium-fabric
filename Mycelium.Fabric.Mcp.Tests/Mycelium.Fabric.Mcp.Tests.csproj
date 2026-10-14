@@ -40,6 +40,7 @@
 
     <ItemGroup>
         <None Update="Data\*.json" CopyToOutputDirectory="Always" />
+        <None Update="Data\*.md" CopyToOutputDirectory="Always" />
     </ItemGroup>
 
     <ItemGroup>
