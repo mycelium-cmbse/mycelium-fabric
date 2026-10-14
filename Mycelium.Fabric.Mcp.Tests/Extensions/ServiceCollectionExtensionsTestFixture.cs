@@ -23,6 +23,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Documents;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.TradeOff;
@@ -58,6 +59,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             }
 
             var serverBuilder = services.AddFabricMcpServer(this.satelliteModelPath);
+            Type[] documentParserTypes = [typeof(MarkdownDocumentParser), typeof(WordDocumentParser), typeof(ExcelDocumentParser)];
+            IDocumentParser[] documentParsers = [new MarkdownDocumentParser(), new WordDocumentParser(), new ExcelDocumentParser()];
+            string[] supportedExtensions = [".docx", ".markdown", ".md", ".txt", ".xlsx"];
 
             var serializerRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(ISerializer)).ToList();
             var deSerializerRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDeSerializer)).ToList();
@@ -68,6 +72,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var solverRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(ITradeOffSolver)).ToList();
             var ruleRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IValidationRule)).ToList();
             var validatorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelValidator)).ToList();
+            var documentOptionsRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConfigureOptions<DocumentReaderOptions>)).ToList();
+            var documentParserRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDocumentParser)).ToList();
+            var documentReaderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDocumentReader)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
             var promptRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerPrompt)).ToList();
 
@@ -97,27 +104,42 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(validatorRegistrations, Has.Count.EqualTo(1));
                 Assert.That(validatorRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(validatorRegistrations[0].ImplementationType, Is.EqualTo(typeof(ModelValidator)));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(12));
-                Assert.That(promptRegistrations, Has.Count.EqualTo(1));
+                Assert.That(documentOptionsRegistrations, Has.Count.EqualTo(1));
+                Assert.That(documentParserRegistrations.Select(descriptor => descriptor.ImplementationType), Is.EqualTo(documentParserTypes));
+                Assert.That(documentParserRegistrations.Select(descriptor => descriptor.Lifetime), Has.All.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(documentReaderRegistrations, Has.Count.EqualTo(1));
+                Assert.That(documentReaderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(13));
+                Assert.That(promptRegistrations, Has.Count.EqualTo(2));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
             var absoluteExportDirectory = Path.Combine(Path.GetTempPath(), "mycelium-exports");
+            var absoluteDocumentDirectory = Path.Combine(Path.GetTempPath(), "mycelium-documents");
 
             var serviceProvider = new Mock<IServiceProvider>();
             serviceProvider.Setup(provider => provider.GetService(typeof(IModelChangeApplier))).Returns(new Mock<IModelChangeApplier>().Object);
             serviceProvider.Setup(provider => provider.GetService(typeof(IDeSerializer))).Returns(new DeSerializer());
             serviceProvider.Setup(provider => provider.GetService(typeof(ISerializer))).Returns(new Mock<ISerializer>().Object);
+            serviceProvider.Setup(provider => provider.GetService(typeof(IEnumerable<IDocumentParser>))).Returns(documentParsers);
 
             serviceProvider.SetupSequence(provider => provider.GetService(typeof(IOptions<ModelExportOptions>)))
                 .Returns(Options.Create(new ModelExportOptions()))
                 .Returns(Options.Create(new ModelExportOptions { ExportDirectory = "Exports" }))
                 .Returns(Options.Create(new ModelExportOptions { ExportDirectory = absoluteExportDirectory }));
 
+            serviceProvider.SetupSequence(provider => provider.GetService(typeof(IOptions<DocumentReaderOptions>)))
+                .Returns(Options.Create(new DocumentReaderOptions()))
+                .Returns(Options.Create(new DocumentReaderOptions { DocumentDirectory = "Specifications" }))
+                .Returns(Options.Create(new DocumentReaderOptions { DocumentDirectory = absoluteDocumentDirectory }));
+
             var modelProvider = modelProviderRegistrations[0].ImplementationFactory(serviceProvider.Object);
             var defaultExporter = exporterRegistrations[0].ImplementationFactory(serviceProvider.Object);
             var relativeExporter = (JsonModelExporter)exporterRegistrations[0].ImplementationFactory(serviceProvider.Object);
             var absoluteExporter = (JsonModelExporter)exporterRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var defaultReader = documentReaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var relativeReader = (DocumentReader)documentReaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var absoluteReader = (DocumentReader)documentReaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
 
             using (Assert.EnterMultipleScope())
             {
@@ -127,14 +149,25 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(((JsonModelExporter)defaultExporter).ExportDirectory.LocalPath, Is.EqualTo(Path.Combine(dataDirectory, "exports")));
                 Assert.That(relativeExporter.ExportDirectory.LocalPath, Is.EqualTo(Path.Combine(dataDirectory, "Exports")));
                 Assert.That(absoluteExporter.ExportDirectory.LocalPath, Is.EqualTo(absoluteExportDirectory));
+                Assert.That(defaultReader, Is.InstanceOf<DocumentReader>());
+                Assert.That(((DocumentReader)defaultReader).DocumentDirectory.LocalPath, Is.EqualTo(Path.Combine(dataDirectory, "documents")));
+                Assert.That(relativeReader.DocumentDirectory.LocalPath, Is.EqualTo(Path.Combine(dataDirectory, "Specifications")));
+                Assert.That(absoluteReader.DocumentDirectory.LocalPath, Is.EqualTo(absoluteDocumentDirectory));
+                Assert.That(absoluteReader.SupportedExtensions, Is.EqualTo(supportedExtensions));
+
+                serviceProvider.Verify(provider => provider.GetService(typeof(IModelChangeApplier)), Times.Once);
+                serviceProvider.Verify(provider => provider.GetService(typeof(IDeSerializer)), Times.Once);
+                serviceProvider.Verify(provider => provider.GetService(typeof(ISerializer)), Times.Exactly(3));
+                serviceProvider.Verify(provider => provider.GetService(typeof(IOptions<DocumentReaderOptions>)), Times.Exactly(3));
+                serviceProvider.Verify(provider => provider.GetService(typeof(IEnumerable<IDocumentParser>)), Times.Exactly(3));
             }
 
-            serviceProvider.Verify(provider => provider.GetService(typeof(IModelChangeApplier)), Times.Once);
-            serviceProvider.Verify(provider => provider.GetService(typeof(IDeSerializer)), Times.Once);
-            serviceProvider.Verify(provider => provider.GetService(typeof(ISerializer)), Times.Exactly(3));
-
             var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string> { ["FabricMcp:ExportDirectory"] = absoluteExportDirectory })
+                .AddInMemoryCollection(new Dictionary<string, string>
+                {
+                    ["FabricMcp:ExportDirectory"] = absoluteExportDirectory,
+                    ["FabricMcp:DocumentDirectory"] = absoluteDocumentDirectory
+                })
                 .Build();
 
             serviceProvider.Setup(provider => provider.GetService(typeof(IConfiguration))).Returns(configuration);
@@ -142,7 +175,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var exportOptions = new ModelExportOptions();
             ((IConfigureOptions<ModelExportOptions>)exportOptionsRegistrations[0].ImplementationFactory(serviceProvider.Object)).Configure(exportOptions);
 
-            Assert.That(exportOptions.ExportDirectory, Is.EqualTo(absoluteExportDirectory));
+            var documentOptions = new DocumentReaderOptions();
+            ((IConfigureOptions<DocumentReaderOptions>)documentOptionsRegistrations[0].ImplementationFactory(serviceProvider.Object)).Configure(documentOptions);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(exportOptions.ExportDirectory, Is.EqualTo(absoluteExportDirectory));
+                Assert.That(documentOptions.DocumentDirectory, Is.EqualTo(absoluteDocumentDirectory));
+            }
         }
 
         [Test]
