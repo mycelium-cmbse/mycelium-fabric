@@ -59,18 +59,16 @@ namespace Mycelium.Fabric.Mcp.Services
                 throw new ArgumentException("The document directory must be an absolute file URI.", nameof(documentDirectory));
             }
 
-            this.parsersByExtension = new Dictionary<string, IDocumentParser>(StringComparer.OrdinalIgnoreCase);
+            var parsersAndExtensions = parsers.SelectMany(parser => parser.Extensions, (parser, extension) => (Parser: parser, Extension: extension)).ToList();
 
-            foreach (var parser in parsers)
+            var sharedExtension = parsersAndExtensions.GroupBy(pair => pair.Extension, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
+
+            if (sharedExtension != null)
             {
-                foreach (var extension in parser.Extensions)
-                {
-                    if (!this.parsersByExtension.TryAdd(extension, parser))
-                    {
-                        throw new ArgumentException($"Two parsers read the '{extension}' files.", nameof(parsers));
-                    }
-                }
+                throw new ArgumentException($"Two parsers read the '{sharedExtension.Key}' files.", nameof(parsers));
             }
+
+            this.parsersByExtension = parsersAndExtensions.ToDictionary(pair => pair.Extension, pair => pair.Parser, StringComparer.OrdinalIgnoreCase);
 
             this.DocumentDirectory = documentDirectory;
         }
