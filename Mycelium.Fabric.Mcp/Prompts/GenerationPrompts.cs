@@ -1,0 +1,133 @@
+// ------------------------------------------------------------------------------------------------
+//  <copyright file="GenerationPrompts.cs" company="Starion Group S.A.">
+//
+//    Copyright 2026 Starion Group S.A.
+//    SPDX-License-Identifier: Apache-2.0
+//
+//  </copyright>
+//  ------------------------------------------------------------------------------------------------
+
+namespace Mycelium.Fabric.Mcp.Prompts
+{
+    using System.ComponentModel;
+
+    using ModelContextProtocol;
+    using ModelContextProtocol.Server;
+
+    /// <summary>
+    /// The MCP prompts that guide an AI assistant through the generation of a SysML v2 model. A prompt is a message template
+    /// that the user chooses in the client: the server calls no language model, it returns the message that the client sends.
+    /// </summary>
+    [McpServerPromptType]
+    public static class GenerationPrompts
+    {
+        /// <summary>
+        /// The procedure that the assistant follows to build a model from a specification with the tools of the server.
+        /// </summary>
+        private const string Procedure = """
+            Build a SysML v2 model from the specification at the end of this message, with the tools of this server.
+            You never write SysML: you describe changes to apply_changes, and the server builds and checks the elements.
+            Work in two phases, and never call apply_changes before the user has approved your plan.
+
+            Phase 1, in your first answer:
+            1. Read the model with get_model_overview. If it already has elements, explore it with list_children and follow
+               its way of modelling: package layout, part definitions, names.
+            2. Read the whole specification, every section, not only the technical system. Each element that it names is
+               modelled, with the name it has in the specification: the purpose (program, mission, goals, stakeholders and
+               their needs, capabilities), the context (environments, facilities, external systems), the behaviour (phases,
+               operations, functions), the logical components, the technical system (breakdown into subsystems and units,
+               every numeric property, ports), the analyses and calculations, and every requirement.
+            3. Propose a plan that follows the modelling rules below: one package per part of the specification, with the
+               kinds of elements it holds and how many, the attributes and values of the technical system, and for each
+               requirement with a limit its constraint (attribute, operator, limit, margin) and the parts that satisfy it.
+               Summarise long lists by their count instead of naming every element.
+            4. Ask only the questions whose answer changes the model. For any other gap, make a reasonable choice and state
+               it as a question with the answer you chose. End your answer by asking the user to approve or correct the
+               plan, and stop there.
+
+            Phase 2, once the user has approved the plan:
+            5. Build with apply_changes, one batch per package or subsystem, until every section of the specification is
+               built. Refer to the elements created in the same batch by their temporary names. If a batch is refused,
+               correct every reported problem and send it again.
+            6. Check with check_requirements. Report every requirement that is not satisfied, and never change a value to
+               make it pass without the user's approval.
+            7. Go through the sections of the specification once more and add what is missing.
+            8. Summarise: what was built per section, the choices you made, the status of each requirement, the textual
+               requirements, the relations written in documentation only, and the open questions.
+
+            Modelling the specification (the metaclass to give in the payload type):
+            - Program, mission, stakeholders, external systems, environments and facilities: a PartDefinition for each kind,
+              and a PartUsage for each one that the specification names, typed by its kind; the context that contains them
+              is a part too. The concerns of a stakeholder go in its documentation.
+            - A named realisation of the system, such as a serial number or a person, is a PartUsage with that name
+              (SA-506, Neil Armstrong), in the part it realises or in the context.
+            - Goals and stakeholder needs: a RequirementUsage each, with its text and, when the specification gives one, its
+              identifier as reqId (SHN-N001). Capabilities: a PartDefinition each, with its description.
+            - Phases: a StateUsage per phase, in the order of the specification, inside a StateDefinition of the mission.
+              Operations: an ActionUsage inside the StateUsage of each phase that performs it, in the order of the
+              specification. Functions: an ActionDefinition for the top-level function, and an ActionUsage per function,
+              inside the function that it decomposes.
+            - Logical components: a PartDefinition each, and a PartUsage in a logical architecture part.
+            - Analyses: an AnalysisCaseDefinition each; calculations: a CalculationDefinition each; with their description.
+            - A relation that apply_changes cannot create yet, such as a refinement, a function performed by a component, a
+              requirement satisfied by an action or by an interface, or a specialisation, goes in the documentation of its
+              source element ('Refines: HLR-R001.', 'Performs: ExecuteTLIBurn.'), so that it is not lost.
+
+            Modelling rules:
+            - One part per unit: four wheels are four parts. Put the numeric values on the units or on their part
+              definitions, never on a subsystem or on the system when its units carry the same quantity: sum_attribute
+              computes the totals, and a value on a part hides the values of its sub-parts.
+            - Every numeric property that the specification gives to a unit or to a vehicle becomes an attribute with its
+              value, whatever the quantity (a pressure, a duration, a payload capacity), not only mass and power.
+            - Use the same attribute name for the same quantity everywhere (mass, power), and give every numeric value the
+              unit of the specification (value 38 with unit kg): the budgets and the checks convert the units.
+            - Make every requirement verifiable: a RequirementUsage with its text, its reqId and a constraint on the
+              attribute it limits (with the margin the specification states, if any), and one SatisfyRequirementUsage per
+              part it applies to. check_requirements adds up the attribute over each satisfying part, as sum_attribute
+              does: for a quantity that adds up (mass, power), the satisfying part is the one that contains the units; for
+              a quantity that does not (an accuracy, a data rate), it is each unit concerned, with one
+              SatisfyRequirementUsage per unit.
+            - Every requirement of the specification is a RequirementUsage with its reqId, including the stakeholder needs
+              and the requirements that stay textual.
+            - Constrain a requirement whenever its text gives a limit: a number with its unit, a count (no injury:
+              injuryCount <= 0), or an outcome that is achieved or avoided, as a Boolean (flagPlanted == true,
+              contaminationReleased == false). Take the operator from the wording: 'at least' is '>=', 'at most' and 'not
+              exceed' are '<=', 'less than' and 'below' are '<'. When the text gives several limits, constrain the first
+              one and name the others in the summary. Only a requirement without any limit stays textual.
+            """;
+
+        /// <summary>
+        /// Gets the message that asks the assistant to build a model from a specification.
+        /// </summary>
+        /// <param name="specification">The textual specification of the system: its description and its requirements.</param>
+        /// <returns>
+        /// The procedure to follow, the specification between <c>specification</c> tags, then a reminder of the first phase.
+        /// </returns>
+        /// <exception cref="McpException">
+        /// Thrown when <paramref name="specification"/> is <c>null</c>, empty or only white space.
+        /// </exception>
+        [McpServerPrompt(Name = "generate_model_from_spec", Title = "Generate a model from a specification")]
+        [Description("Builds a SysML v2 model from a textual specification (system description and requirements) with the tools of this server: "
+            + "questions to the user, a plan that the user approves, batches of apply_changes, then check_requirements.")]
+        [return: Description("The message to send to the assistant: the procedure, the specification between specification tags, then a reminder of the first phase.")]
+        public static string GenerateModelFromSpec([Description("The specification: the system, its units with their mass and power, and its requirements.")] string specification)
+        {
+            if (string.IsNullOrWhiteSpace(specification))
+            {
+                throw new McpException("The specification is empty.");
+            }
+
+            // The tags separate the specification from the procedure: the assistant reads it as data, not as instructions.
+            // The reminder comes last because a long specification pushes the procedure far from the end of the message.
+            return $"""
+                {Procedure}
+
+                <specification>
+                {specification.Trim()}
+                </specification>
+
+                Start with phase 1: your first answer ends with the plan and your questions, without calling apply_changes.
+                """;
+        }
+    }
+}
