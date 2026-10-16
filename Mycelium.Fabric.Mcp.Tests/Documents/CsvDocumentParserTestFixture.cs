@@ -69,15 +69,22 @@ namespace Mycelium.Fabric.Mcp.Tests.Documents
             using var tabs = Open("ID\tText\nX\t1,5\rY\t\"\"\n", Encoding.UTF8);
             string[] tabLines = ["| ID | Text |", "| X | 1,5 |", "| Y |"];
 
+            // Text after a closing double quote and double quotes inside a cell without double quotes are kept.
+            using var strayQuotes = Open("ID,Text\nX,\"a\"b\nY,c\"d\"e", Encoding.UTF8);
+            string[] strayQuoteLines = ["| ID | Text |", "| X | ab |", "| Y | c\"d\"e |"];
+
             using var empty = Open(string.Empty, Encoding.UTF8);
             using var unclosed = Open("ID,Text\nX,\"open\nstill open", Encoding.UTF8);
+            using var reopened = Open("ID,Text\nX,\"a\"\"b\"c\"\nY,2\nZ,3\n", Encoding.UTF8);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(this.parser.Parse(semicolons)[0].Lines, Is.EqualTo(semicolonLines));
                 Assert.That(this.parser.Parse(tabs)[0].Lines, Is.EqualTo(tabLines));
+                Assert.That(this.parser.Parse(strayQuotes)[0].Lines, Is.EqualTo(strayQuoteLines));
                 Assert.That(this.parser.Parse(empty), Is.Empty);
                 Assert.That(() => this.parser.Parse(unclosed), Throws.TypeOf<InvalidDataException>().With.Message.EqualTo("The quoted cell that starts on line 2 is not closed."));
+                Assert.That(() => this.parser.Parse(reopened), Throws.TypeOf<InvalidDataException>().With.Message.EqualTo("The quoted cell that starts on line 2 is not closed."));
             }
         }
 
