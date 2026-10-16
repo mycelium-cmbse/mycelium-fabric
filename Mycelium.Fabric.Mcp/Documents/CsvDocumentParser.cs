@@ -111,14 +111,16 @@ namespace Mycelium.Fabric.Mcp.Documents
             var cells = new List<string>();
             var cell = new StringBuilder();
             var line = 1;
+            var index = 0;
 
-            for (var index = 0; index < text.Length; index++)
+            while (index < text.Length)
             {
                 var character = text[index];
+                var next = index + 1;
 
                 if (character == '"' && cell.Length == 0)
                 {
-                    index = ReadQuotedCell(text, index, cell, ref line);
+                    next = ReadQuotedCell(text, index, cell, ref line) + 1;
                 }
                 else if (character == delimiter)
                 {
@@ -128,9 +130,9 @@ namespace Mycelium.Fabric.Mcp.Documents
                 else if (character is '\r' or '\n')
                 {
                     // A record ends at CRLF, LF or CR.
-                    if (character == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
+                    if (character == '\r' && next < text.Length && text[next] == '\n')
                     {
-                        index++;
+                        next++;
                     }
 
                     line++;
@@ -143,6 +145,8 @@ namespace Mycelium.Fabric.Mcp.Documents
                 {
                     cell.Append(character);
                 }
+
+                index = next;
             }
 
             if (cell.Length > 0 || cells.Count > 0)
@@ -167,17 +171,20 @@ namespace Mycelium.Fabric.Mcp.Documents
         {
             var startLine = line;
 
-            for (var index = start + 1; index < text.Length; index++)
+            var index = start + 1;
+
+            while (index < text.Length)
             {
                 if (text[index] != '"')
                 {
                     line += text[index] == '\n' ? 1 : 0;
                     cell.Append(text[index]);
+                    index++;
                 }
                 else if (index + 1 < text.Length && text[index + 1] == '"')
                 {
                     cell.Append('"');
-                    index++;
+                    index += 2;
                 }
                 else
                 {
