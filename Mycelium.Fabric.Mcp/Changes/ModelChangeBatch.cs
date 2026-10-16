@@ -22,9 +22,11 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Root.Annotations;
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
+    using SysML2.NET.Core.DTO.Systems.Allocations;
     using SysML2.NET.Core.DTO.Systems.Attributes;
     using SysML2.NET.Core.DTO.Systems.Connections;
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.DTO.Systems.Flows;
     using SysML2.NET.Core.DTO.Systems.Interfaces;
     using SysML2.NET.Core.DTO.Systems.Occurrences;
     using SysML2.NET.Core.DTO.Systems.Ports;
@@ -68,11 +70,17 @@ namespace Mycelium.Fabric.Mcp.Changes
         private const string DefinitionRole = "definition";
 
         /// <summary>
-        /// The connection definitions and connectors that a change can create, although they are relationships: the server
-        /// relates them to the features of their ends, which are created in a definition, or built from paths for a connector.
+        /// The interfaces of the connection definitions and connectors that a change can create, although they are
+        /// relationships: the server relates them to the features of their ends, which are created in a definition, or built
+        /// from paths for a connector. Interface definitions and usages are connection definitions and usages.
         /// </summary>
-        private static readonly System.Type[] ConnectionMetaclasses =
-            [typeof(ConnectionDefinition), typeof(InterfaceDefinition), typeof(ConnectionUsage), typeof(InterfaceUsage), typeof(BindingConnectorAsUsage)];
+        private static readonly System.Type[] ConnectionMetaclasses = [typeof(IConnectionDefinition), typeof(IConnectionUsage), typeof(IBindingConnectorAsUsage)];
+
+        /// <summary>
+        /// The interfaces of the connection definitions and usages that a change cannot create yet, because the server does
+        /// not build their ends: allocations and flows.
+        /// </summary>
+        private static readonly System.Type[] UnsupportedConnectionMetaclasses = [typeof(IAllocationDefinition), typeof(IAllocationUsage), typeof(IFlowUsage)];
 
         /// <summary>
         /// The metaclasses that a change can create, indexed by their name: the concrete DTO classes of SysML2.NET that are
@@ -228,7 +236,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             var isPackageDefinitionOrUsage = typeof(IPackage).IsAssignableFrom(type) || typeof(IDefinition).IsAssignableFrom(type) || typeof(IUsage).IsAssignableFrom(type);
 
             return (isPackageDefinitionOrUsage && !typeof(IRelationship).IsAssignableFrom(type) && !typeof(IConjugatedPortDefinition).IsAssignableFrom(type))
-                || ConnectionMetaclasses.Contains(type);
+                || (ConnectionMetaclasses.Any(metaclass => metaclass.IsAssignableFrom(type)) && !UnsupportedConnectionMetaclasses.Any(metaclass => metaclass.IsAssignableFrom(type)));
         }
 
         /// <summary>

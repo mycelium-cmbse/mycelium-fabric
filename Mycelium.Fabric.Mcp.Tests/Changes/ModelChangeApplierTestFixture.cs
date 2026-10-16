@@ -810,7 +810,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "commandIn", Definition = conjugatedPortDefinitionId } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString(), Ends = validEnds } },
                 new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Ends = ["camera", " "] } },
-                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Definition = opticalCamera, Ends = ["camera", "massMemory"] } }
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Definition = opticalCamera, Ends = ["camera", "massMemory"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "AllocationUsage", Owner = eosat1, Ends = validEnds } }
             ]);
 
             var problems = result.Errors.Select(error => error.Description).ToList();
@@ -839,7 +840,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 21 (create): A conjugated port definition cannot be given as a definition: give its port definition with conjugated true.",
                 "Change 22 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.",
                 "Change 23 (create): An end of the connector is empty.",
-                "Change 24 (create): The definition must be a connection definition, not the PartDefinition 'OpticalCamera'."
+                "Change 24 (create): The definition must be a connection definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 25 (create): 'AllocationUsage' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server."
             ];
 
             using (Assert.EnterMultipleScope())
