@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Microsoft.Extensions.Options;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Documents;
     using Mycelium.Fabric.Mcp.Prompts;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
@@ -38,9 +39,11 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <summary>
             /// Registers the MCP server, its tools and prompts, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/>
             /// unless the host has registered its own, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
-            /// an <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a <see cref="JsonModelExporter"/>
-            /// that writes the model to the export folder of the <see cref="ModelExportOptions"/>, read from the configuration of
-            /// the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this assembly.
+            /// an <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a
+            /// <see cref="JsonModelExporter"/> that writes the model to the export folder of the <see cref="ModelExportOptions"/>,
+            /// a <see cref="DocumentReader"/> that reads the document folder of the <see cref="DocumentReaderOptions"/>, both read
+            /// from the configuration of the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of
+            /// this assembly.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -79,6 +82,18 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 services.AddImplementations<IValidationRule>(typeof(IValidationRule).Assembly, ServiceLifetime.Singleton);
                 services.AddSingleton<IModelValidator, ModelValidator>();
 
+                services.AddOptions<DocumentReaderOptions>().BindConfiguration(DocumentReaderOptions.SectionName);
+                services.TryAddEnumerable(ServiceDescriptor.Singleton<IDocumentParser, MarkdownDocumentParser>());
+                services.TryAddEnumerable(ServiceDescriptor.Singleton<IDocumentParser, CsvDocumentParser>());
+
+                services.AddSingleton<IDocumentReader>(serviceProvider =>
+                {
+                    var documentOptions = serviceProvider.GetRequiredService<IOptions<DocumentReaderOptions>>().Value;
+                    var documentDirectory = Path.GetFullPath(documentOptions.DocumentDirectory ?? "documents", Path.GetDirectoryName(modelPath.LocalPath));
+
+                    return new DocumentReader(new Uri(documentDirectory), serviceProvider.GetServices<IDocumentParser>());
+                });
+
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
@@ -88,8 +103,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<ExportTools>()
                     .WithTools<TradeOffTools>()
                     .WithTools<ValidationTools>()
+                    .WithTools<DocumentTools>()
                     // A static class cannot be a type argument: the prompts are registered by their type.
-                    .WithPrompts([typeof(GenerationPrompts)]);
+                    .WithPrompts([typeof(GenerationPrompts), typeof(RequirementPrompts)]);
             }
 
             /// <summary>

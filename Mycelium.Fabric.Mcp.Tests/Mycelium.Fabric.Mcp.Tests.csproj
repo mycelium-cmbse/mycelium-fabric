@@ -41,6 +41,7 @@
     <ItemGroup>
         <None Update="Data\*.json" CopyToOutputDirectory="Always" />
         <None Update="Data\*.md" CopyToOutputDirectory="Always" />
+        <None Update="Data\*.csv" CopyToOutputDirectory="Always" />
     </ItemGroup>
 
     <ItemGroup>

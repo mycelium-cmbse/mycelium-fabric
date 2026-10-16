@@ -1,0 +1,10 @@
+ID,Requirement,Priority,Limit,Margin
+REQ-SYS-001,"The satellite launch mass, computed as the total dry mass of all units plus a 20% system margin, shall not exceed 150 kg.",H,150,20%
+REQ-SYS-002,The payload (optical camera and mass memory) shall consume less than 70 W in imaging mode.,H,70,
+REQ-SYS-003,"The AOCS shall provide an attitude knowledge accuracy better than 10 arcsec, using at least two star trackers for redundancy.",H,10,
+REQ-PAY-001,The camera shall have a ground sampling distance of at most 5 m from an altitude of 600 km.,H,5,
+REQ-PAY-002,"The camera mass shall not exceed 40 kg, as allocated by REQ-SYS-001.",M,40,
+REQ-PAY-003,"The mass memory shall store at least 512 Gbit of images.
+Capacity | end of life.",H,,
+,,,,
+REQ-PAY-004,"The images shall be downlinked within a ""responsive"" time (target TBD).",L,,
