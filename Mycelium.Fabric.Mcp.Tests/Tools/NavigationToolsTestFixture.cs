@@ -195,6 +195,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(imageLink.Type, Is.EqualTo("InterfaceUsage : DataInterface"));
                 Assert.That(imageLink.Ends, Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
                 Assert.That(imageLink.Connections, Is.Null);
+                Assert.That(imageLink.Specializes, Is.Null);
+                Assert.That(imageLink.Performed, Is.Null);
+            }
+
+            // Once related, the camera lists what it specializes, its perform gives the performed action, and the action lists
+            // its succession and its allocation among its connectors.
+            var relatedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            relatedModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+            var relatedElements = relatedModelProvider.ApplyChanges(RelationshipChangesHelper.CreateChanges()).CreatedElements;
+
+            tools = new NavigationTools(relatedModelProvider);
+            var relatedCamera = tools.GetElementDetails(CameraId);
+            var perform = tools.GetElementDetails(relatedElements.Single(createdElement => createdElement.Type == "PerformActionUsage").Id);
+            var acquireImage = tools.GetElementDetails(relatedElements.Single(createdElement => createdElement.QualifiedName == "EOSat1::Architecture::eosat1::acquireImage").Id);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(relatedCamera.Specializes, Is.EqualTo(["EOSat1::Architecture::eosat1::payloadSubsystem::sensor"]));
+                Assert.That(relatedCamera.Performed, Is.Null);
+                Assert.That(perform.Performed, Is.EqualTo("EOSat1::Architecture::eosat1::acquireImage"));
+                Assert.That(acquireImage.Connections.Select(connection => connection.Type), Is.EquivalentTo(["SuccessionAsUsage", "AllocationUsage"]));
             }
         }
 

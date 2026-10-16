@@ -20,8 +20,10 @@ namespace Mycelium.Fabric.Mcp.Tools
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
+    using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Kernel.Connectors;
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Systems.Actions;
 
     /// <summary>
     /// The MCP tools that let an AI assistant discover and navigate the SysML v2 model.
@@ -148,7 +150,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </exception>
         [McpServerTool(Name = "get_element_details", ReadOnly = true)]
         [Description("Gives the details of an element from its identifier: type, name, short name, qualified name, owner, number of children, documentation, "
-            + "the ends of a connector, and the connectors (connections, interfaces, bindings) that connect the element or one of its ports.")]
+            + "the ends of a connector, the connectors (connections, interfaces, bindings, allocations, successions) that connect the element or one of its ports, "
+            + "the elements it specializes (:>) and, for a PerformActionUsage, the performed action.")]
         [return: Description("The details of the element, including the identifier of its owner to navigate up the model.")]
         public ElementDetails GetElementDetails([Description("The identifier (Id, a GUID) of the element, as returned by the other tools.")] Guid elementId)
         {
@@ -160,9 +163,12 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .Select(connector => new ConnectionSummary(connector.Id, connector.DeclaredName, connector.DescribeType(), connector.owner?.qualifiedName, connector.GetEndPaths()))
                 .ToList();
 
+            var specializes = (element as IType)?.GetSpecializedElements().Select(general => general.qualifiedName).ToList();
+
             return new ElementDetails(element.Id, element.DeclaredName, element.DeclaredShortName, element.DescribeType(), element.qualifiedName,
                 element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, element.GetDocumentationBodies(),
-                (element as IConnector)?.GetEndPaths(), connections.Count == 0 ? null : connections);
+                (element as IConnector)?.GetEndPaths(), connections.Count == 0 ? null : connections, specializes is { Count: > 0 } ? specializes : null,
+                (element as IPerformActionUsage)?.performedAction?.qualifiedName);
         }
 
         /// <summary>

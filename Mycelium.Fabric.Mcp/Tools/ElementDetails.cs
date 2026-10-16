@@ -26,6 +26,8 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Documentation">The documentation of the element, or <c>null</c> when it has none.</param>
     /// <param name="Ends">The path of each end of the element when it is a connector, from its owner, or <c>null</c>.</param>
     /// <param name="Connections">The connectors that connect the element or one of its features, or <c>null</c> when there are none.</param>
+    /// <param name="Specializes">The qualified names of the elements that the element specializes (<c>:></c>), or <c>null</c> when there are none.</param>
+    /// <param name="Performed">The qualified name of the action that the element performs when it is a <c>PerformActionUsage</c>, or <c>null</c>.</param>
     public sealed record ElementDetails(Guid Id, string Name, string ShortName, string Type, string QualifiedName, Guid? OwnerId, string OwnerName, int ChildCount,
-        string Documentation, IReadOnlyList<string> Ends, IReadOnlyList<ConnectionSummary> Connections);
+        string Documentation, IReadOnlyList<string> Ends, IReadOnlyList<ConnectionSummary> Connections, IReadOnlyList<string> Specializes, string Performed);
 }

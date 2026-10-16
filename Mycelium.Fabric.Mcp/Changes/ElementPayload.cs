@@ -90,14 +90,26 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the part that satisfies the requirement of the created <c>SatisfyRequirementUsage</c>.
         /// </summary>
-        [Description("Create, for a SatisfyRequirementUsage: the part that satisfies the requirement, for example the satellite or a subsystem, as an identifier (Id) or a temporary name.")]
+        [Description("Create, for a SatisfyRequirementUsage: the usage that satisfies the requirement, as an identifier (Id) or a temporary name. Usually a part (the satellite, a subsystem), but also an action (a function) or an interface.")]
         public string SatisfyingPart { get; init; }
 
         /// <summary>
         /// Gets the two ends of the created connector, as paths of names from its owner.
         /// </summary>
-        [Description("Create, for a ConnectionUsage, an InterfaceUsage or a BindingConnectorAsUsage: its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. The ends of an interface are ports. They cannot be updated: delete the connector and create it again.")]
+        [Description("Create, for a ConnectionUsage, an InterfaceUsage, a BindingConnectorAsUsage, an AllocationUsage (from the allocated element to its target) or a SuccessionAsUsage (from the action that comes first to the one that follows): its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. The ends of an interface are ports. They cannot be updated: delete the connector and create it again.")]
         public IReadOnlyList<string> Ends { get; init; }
+
+        /// <summary>
+        /// Gets the element that the created or updated definition or usage specializes.
+        /// </summary>
+        [Description("Create or update, for a definition or a usage: the element it specializes (:>), as an identifier (Id) or a temporary name. A definition specializes a definition of the same kind or of a more general kind (a part definition can specialize an item definition), a usage a usage likewise. An update replaces the current specialization.")]
+        public string Specializes { get; init; }
+
+        /// <summary>
+        /// Gets the action that the created <c>PerformActionUsage</c> performs.
+        /// </summary>
+        [Description("Create, for a PerformActionUsage: the action usage that its owner performs, as an identifier (Id) or a temporary name. The owner (a part, a part definition or an action) is required; the name is optional.")]
+        public string Performed { get; init; }
 
         /// <summary>
         /// Gets the direction of the element, which must be a feature.

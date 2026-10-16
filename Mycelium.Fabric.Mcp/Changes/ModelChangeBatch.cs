@@ -22,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Root.Annotations;
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
+    using SysML2.NET.Core.DTO.Systems.Actions;
     using SysML2.NET.Core.DTO.Systems.Allocations;
     using SysML2.NET.Core.DTO.Systems.Attributes;
     using SysML2.NET.Core.DTO.Systems.Connections;
@@ -72,15 +73,16 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// The interfaces of the connection definitions and connectors that a change can create, although they are
         /// relationships: the server relates them to the features of their ends, which are created in a definition, or built
-        /// from paths for a connector. Interface definitions and usages are connection definitions and usages.
+        /// from paths for a connector. Interface definitions and usages are connection definitions and usages, and so are
+        /// allocation usages.
         /// </summary>
-        private static readonly System.Type[] ConnectionMetaclasses = [typeof(IConnectionDefinition), typeof(IConnectionUsage), typeof(IBindingConnectorAsUsage)];
+        private static readonly System.Type[] ConnectionMetaclasses = [typeof(IConnectionDefinition), typeof(IConnectionUsage), typeof(IBindingConnectorAsUsage), typeof(ISuccessionAsUsage)];
 
         /// <summary>
         /// The interfaces of the connection definitions and usages that a change cannot create yet, because the server does
-        /// not build their ends: allocations and flows.
+        /// not build their ends: allocation definitions and flows.
         /// </summary>
-        private static readonly System.Type[] UnsupportedConnectionMetaclasses = [typeof(IAllocationDefinition), typeof(IAllocationUsage), typeof(IFlowUsage)];
+        private static readonly System.Type[] UnsupportedConnectionMetaclasses = [typeof(IAllocationDefinition), typeof(IFlowUsage)];
 
         /// <summary>
         /// The metaclasses that a change can create, indexed by their name: the concrete DTO classes of SysML2.NET that are
@@ -324,6 +326,17 @@ namespace Mycelium.Fabric.Mcp.Changes
                 return;
             }
 
+            if (member is IPerformActionUsage)
+            {
+                this.CreatePerform(member, change);
+                return;
+            }
+
+            if (payload.Performed != null)
+            {
+                throw new InvalidChangeException("Only a PerformActionUsage performs an action.");
+            }
+
             if (member is IConnectorAsUsage)
             {
                 this.CreateConnector(member, change);
@@ -343,6 +356,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             var definition = payload.Definition == null ? null : this.ResolveDefinition(member, payload.Definition);
+            var general = payload.Specializes == null ? null : this.ResolveGeneral(member, payload.Specializes);
 
             CheckValue(payload.Value, payload.Unit);
 
@@ -364,6 +378,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (definition != null)
             {
                 this.AddTyping(member, definition, payload.Conjugated == true);
+            }
+
+            if (general != null)
+            {
+                this.SetSpecialization(member, general);
             }
 
             if (payload.Value != null)
@@ -393,11 +412,22 @@ namespace Mycelium.Fabric.Mcp.Changes
             CheckKind(element, IsChangeable(element), ElementRole, "an element that is not a relationship");
 
             var definition = this.CheckUpdate(element, payload);
+            var general = payload.Specializes == null ? null : this.ResolveGeneral(element, payload.Specializes);
+
+            if (general != null)
+            {
+                this.CheckNoSpecializationCycle(element, general);
+            }
 
             if (payload.Name != null)
             {
                 element.DeclaredName = payload.Name;
                 this.MarkModified(element);
+            }
+
+            if (general != null)
+            {
+                this.SetSpecialization(element, general);
             }
 
             if (definition != null)
@@ -446,10 +476,15 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             CheckValue(payload.Value, payload.Unit);
 
-            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null }
+            if (payload.Performed != null)
+            {
+                throw new InvalidChangeException("The performed action of a PerformActionUsage cannot change: delete the element and create it again.");
+            }
+
+            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
                 && string.IsNullOrWhiteSpace(payload.ReqId))
             {
-                throw new InvalidChangeException("The payload changes nothing: give the name, definition, value, text, direction, conjugated, reqId or constraint to change, or no payload to delete the element.");
+                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, text, direction, conjugated, reqId or constraint to change, or no payload to delete the element.");
             }
 
             this.CheckFeatureUpdate(element, payload);
@@ -718,6 +753,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (feature is IBindingConnectorAsUsage)
             {
                 throw new InvalidChangeException("A BindingConnectorAsUsage has no definition: it states that its two ends are the same thing.");
+            }
+
+            if (feature is ISuccessionAsUsage)
+            {
+                throw new InvalidChangeException("A SuccessionAsUsage has no definition: it only orders its two ends.");
             }
 
             var definition = this.Resolve(reference, DefinitionRole);

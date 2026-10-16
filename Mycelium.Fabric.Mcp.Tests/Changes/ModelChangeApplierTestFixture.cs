@@ -27,10 +27,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
     using SysML2.NET.Common;
     using SysML2.NET.Core.Core.Types;
+    using SysML2.NET.Core.POCO.Core.Classifiers;
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
+    using SysML2.NET.Core.POCO.Systems.Actions;
+    using SysML2.NET.Core.POCO.Systems.Allocations;
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Connections;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
@@ -533,7 +536,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(problems[5], Is.EqualTo("Change 6 (update): The limit of the constraint is missing: give a limit or a limitAttribute."));
                 Assert.That(problems[6], Is.EqualTo("Change 7 (update): The margin must be 0 or greater."));
                 Assert.That(problems[7], Is.EqualTo("Change 8 (update): A margin cannot be applied with '=='. Use '<=' or '>=' instead."));
-                Assert.That(problems[8], Is.EqualTo("Change 9 (create): The satisfying part must be a part, not the Package 'Requirements'."));
+                Assert.That(problems[8], Is.EqualTo("Change 9 (create): The satisfying part must be a usage, for example a part, an action or an interface, not the Package 'Requirements'."));
                 Assert.That(problems[9], Is.EqualTo("Change 10 (create): The RequirementUsage 'massBudget' is already satisfied by the PartUsage 'camera'."));
                 Assert.That(problems[10], Is.EqualTo("Change 12 (create): The satisfied requirement must be a requirement, not the PartUsage 'camera'."));
                 Assert.That(problems[11], Does.StartWith("Change 13 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part"));
@@ -811,7 +814,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString(), Ends = validEnds } },
                 new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Ends = ["camera", " "] } },
                 new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = payloadSubsystem, Definition = opticalCamera, Ends = ["camera", "massMemory"] } },
-                new ModelChange { Payload = new ElementPayload { Type = "AllocationUsage", Owner = eosat1, Ends = validEnds } }
+                new ModelChange { Payload = new ElementPayload { Type = "AllocationDefinition", Owner = eosat1, Ends = validEnds } }
             ]);
 
             var problems = result.Errors.Select(error => error.Description).ToList();
@@ -825,7 +828,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 5 (create): The definition must be an interface definition, not the PartDefinition 'OpticalCamera'.",
                 "Change 6 (create): A BindingConnectorAsUsage has no definition: it states that its two ends are the same thing.",
                 "Change 7 (create): A connector takes two ends, and optionally an owner, a name, a definition and a text.",
-                "Change 8 (create): Only a connector (ConnectionUsage, InterfaceUsage or BindingConnectorAsUsage) has ends, not the PartUsage 'lens'.",
+                "Change 8 (create): Only a connector (ConnectionUsage, InterfaceUsage, BindingConnectorAsUsage, AllocationUsage or SuccessionAsUsage) has ends, not the PartUsage 'lens'.",
                 "Change 9 (create): Only a feature, for example a port or an attribute, has a direction, not the Package 'Ports'.",
                 "Change 10 (create): Only a port can be conjugated, not the PartUsage 'lens'.",
                 "Change 11 (create): A conjugated port needs a definition: the port definition whose conjugate types it.",
@@ -841,7 +844,137 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 22 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.",
                 "Change 23 (create): An end of the connector is empty.",
                 "Change 24 (create): The definition must be a connection definition, not the PartDefinition 'OpticalCamera'.",
-                "Change 25 (create): 'AllocationUsage' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server."
+                "Change 25 (create): 'AllocationDefinition' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server."
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(problems, Is.EqualTo(expectedProblems));
+            }
+        }
+
+        [Test]
+        public void Apply_WithRelationshipsBetweenExistingElements_BuildsThemAsTheTextualNotation()
+        {
+            var dtos = ReadSatelliteDtos();
+            var result = this.applier.Apply(dtos, RelationshipChangesHelper.CreateChanges());
+
+            var elements = Assemble(CommitRequestHelper.Apply(dtos, result.Value));
+            var newElements = elements.Values.Where(element => dtos.TrueForAll(dto => dto.Id != element.Id)).ToList();
+            var named = newElements.Where(element => element.DeclaredName != null).ToDictionary(element => element.DeclaredName);
+            var opticalCamera = (IClassifier)elements[Guid.Parse(ConnectionChangesHelper.OpticalCameraId)];
+            var camera = (IFeature)elements[CameraId];
+            var acquireImage = (IActionUsage)named["acquireImage"];
+            var perform = newElements.OfType<IPerformActionUsage>().Single();
+            var succession = newElements.OfType<ISuccessionAsUsage>().Single();
+            var allocation = (IAllocationUsage)named["imagingAllocation"];
+            var satisfy = newElements.OfType<ISatisfyRequirementUsage>().Single();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(opticalCamera.ownedSubclassification.Single().Superclassifier, Is.SameAs(named["Equipment"]));
+                Assert.That(opticalCamera.GetSpecializedElements(), Is.EqualTo([named["Equipment"]]));
+                Assert.That(((IType)named["Sensor"]).GetSpecializedElements(), Is.EqualTo([named["Equipment"]]));
+                Assert.That(camera.ownedSubsetting.Single().SubsettedFeature, Is.SameAs(named["sensor"]));
+                Assert.That(camera.GetSpecializedElements(), Is.EqualTo([named["sensor"]]));
+                Assert.That(camera.GetTypeNames(), Is.EqualTo(["OpticalCamera"]));
+                Assert.That(perform.owner, Is.SameAs(camera));
+                Assert.That(perform.performedAction, Is.SameAs(acquireImage));
+                Assert.That(perform.GetDocumentationBodies(), Is.EqualTo("The camera takes the images."));
+                Assert.That(succession.GetEndPaths(), Is.EqualTo(["acquireImage", "downlinkImage"]));
+                Assert.That(succession.ownedEndFeature.All(end => end is IReferenceUsage { IsEnd: true, IsConstant: false }), Is.True);
+                Assert.That(allocation.GetEndPaths(), Is.EqualTo(["acquireImage", "payloadSubsystem.camera"]));
+                Assert.That(satisfy.satisfiedRequirement, Is.SameAs(elements[PointingAccuracyId]));
+                Assert.That(satisfy.ResolveSatisfyingFeature(), Is.SameAs(acquireImage));
+            }
+        }
+
+        [Test]
+        public void Apply_WithRelationshipUpdatesAndDeletions_ReplacesTheSpecializationUnlessStillReferenced()
+        {
+            var dtos = ReadSatelliteDtos();
+            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, RelationshipChangesHelper.CreateChanges()).Value);
+            var ids = model.Where(dto => dto.DeclaredName is "Equipment" or "Sensor" or "acquireImage").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+
+            var refusal = this.applier.Apply(model, [new ModelChange { Identity = ids["Equipment"] }, new ModelChange { Identity = ids["acquireImage"] }]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(refusal.IsError, Is.True);
+                Assert.That(refusal.Errors.Select(error => error.Description), Has.All.Contains("is still referenced by"));
+            }
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = "instrument", Payload = new ElementPayload { Type = "PartDefinition", Owner = PackageId.ToString(), Name = "Instrument" } },
+                new ModelChange { Identity = ConnectionChangesHelper.OpticalCameraId, Payload = new ElementPayload { Specializes = "instrument" } },
+                new ModelChange { Identity = ids["Equipment"], Payload = new ElementPayload { Specializes = "instrument" } }
+            ]);
+
+            var elements = Assemble(CommitRequestHelper.Apply(model, result.Value));
+            var instrument = elements.Values.Single(element => element.DeclaredName == "Instrument");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(((IType)elements[Guid.Parse(ConnectionChangesHelper.OpticalCameraId)]).GetSpecializedElements(), Is.EqualTo([instrument]));
+                Assert.That(((IType)elements[Guid.Parse(ids["Equipment"])]).GetSpecializedElements(), Is.EqualTo([instrument]));
+                Assert.That(((IType)elements[Guid.Parse(ids["Sensor"])]).GetSpecializedElements().Single().DeclaredName, Is.EqualTo("Equipment"));
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidRelationships_ReturnsEveryProblem()
+        {
+            var dtos = ReadSatelliteDtos();
+            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, RelationshipChangesHelper.CreateChanges()).Value);
+            var ids = model.Where(dto => dto.DeclaredName is "Equipment" or "Sensor" or "acquireImage" or "downlinkImage").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+            var opticalCamera = ConnectionChangesHelper.OpticalCameraId;
+            var eosat1 = Eosat1Id.ToString();
+            var camera = CameraId.ToString();
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = opticalCamera, Payload = new ElementPayload { Specializes = camera } },
+                new ModelChange { Identity = camera, Payload = new ElementPayload { Specializes = camera } },
+                new ModelChange { Identity = ids["Equipment"], Payload = new ElementPayload { Specializes = ids["Sensor"] } },
+                new ModelChange { Identity = PackageId.ToString(), Payload = new ElementPayload { Specializes = RequirementsPackageId.ToString() } },
+                new ModelChange { Identity = camera, Payload = new ElementPayload { Specializes = opticalCamera } },
+                new ModelChange { Payload = new ElementPayload { Type = "PerformActionUsage", Owner = PackageId.ToString(), Performed = ids["acquireImage"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "PerformActionUsage", Owner = camera, Performed = PayloadSubsystemId.ToString() } },
+                new ModelChange { Payload = new ElementPayload { Type = "PerformActionUsage", Owner = camera } },
+                new ModelChange { Payload = new ElementPayload { Type = "PerformActionUsage", Owner = camera, Performed = ids["acquireImage"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "PerformActionUsage", Owner = camera, Performed = ids["downlinkImage"], Definition = opticalCamera } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = eosat1, Name = "lens", Performed = ids["acquireImage"] } },
+                new ModelChange { Identity = ids["acquireImage"], Payload = new ElementPayload { Performed = ids["downlinkImage"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = eosat1, Ends = ["acquireImage", "downlinkImage"], Definition = opticalCamera } },
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = eosat1, Ends = ["acquireImage", "payloadSubsystem.camera.mass"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "AllocationUsage", Owner = eosat1, Ends = ["acquireImage"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = opticalCamera } }
+            ]);
+
+            var problems = result.Errors.Select(error => error.Description).ToList();
+
+            string[] expectedProblems =
+            [
+                "Change 1 (update): The PartDefinition 'OpticalCamera' cannot specialize the PartUsage 'camera': a definition or a usage specializes an element of the same metaclass or of a more general one, for example a PartDefinition can specialize an ItemDefinition.",
+                "Change 2 (update): The PartUsage 'camera' cannot specialize itself.",
+                "Change 3 (update): The PartDefinition 'Sensor' already specializes the PartDefinition 'Equipment': the specialization would be a cycle.",
+                "Change 4 (update): Only a definition or a usage specializes another element, not the Package 'EOSat1'.",
+                "Change 5 (update): The PartUsage 'camera' cannot specialize the PartDefinition 'OpticalCamera': a definition or a usage specializes an element of the same metaclass or of a more general one, for example a PartDefinition can specialize an ItemDefinition.",
+                "Change 6 (create): The owner must be an occurrence that performs the action, for example a part, a part definition or an action, not the Package 'EOSat1'.",
+                "Change 7 (create): The performed action must be an action usage, not the PartUsage 'payloadSubsystem'.",
+                "Change 8 (create): The performed action is missing.",
+                "Change 9 (create): The PartUsage 'camera' already performs the ActionUsage 'acquireImage'.",
+                "Change 10 (create): A PerformActionUsage takes an owner and a performed action, and optionally a name and a text.",
+                "Change 11 (create): Only a PerformActionUsage performs an action.",
+                "Change 12 (update): The performed action of a PerformActionUsage cannot change: delete the element and create it again.",
+                "Change 13 (create): A SuccessionAsUsage has no definition: it only orders its two ends.",
+                "Change 14 (create): The end 'payloadSubsystem.camera.mass' of a SuccessionAsUsage must be an action or another occurrence, for example a state, not the AttributeUsage 'mass'.",
+                "Change 15 (create): A connector connects two ends: give them as paths of names from its owner, for example ['camera.dataOut', 'obc.dataIn'].",
+                "Change 16 (create): The satisfying part must be a usage, for example a part, an action or an interface, not the PartDefinition 'OpticalCamera'."
             ];
 
             using (Assert.EnterMultipleScope())

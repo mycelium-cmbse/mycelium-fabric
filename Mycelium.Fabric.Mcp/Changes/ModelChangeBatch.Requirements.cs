@@ -248,14 +248,14 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Performed: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.");
             }
 
             var requirement = this.ResolveRequirement(payload.SatisfiedRequirement);
             var part = this.Resolve(payload.SatisfyingPart, SatisfyingPartRole);
-            CheckKind(part, part is IPartUsage, SatisfyingPartRole, "a part");
+            CheckKind(part, part is IUsage, SatisfyingPartRole, "a usage, for example a part, an action or an interface");
 
             if (this.IsSatisfiedBy(requirement, part))
             {
