@@ -21,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
+    using Mycelium.Fabric.Mcp.TradeOff;
     using Mycelium.Fabric.Mcp.Validation;
 
     using SysML2.NET.Serializer.Json;
@@ -35,10 +36,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
         {
             /// <summary>
             /// Registers the MCP server, its tools, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/> unless the
-            /// host has registered its own, the <see cref="ModelChangeApplier"/>, an <see cref="InMemoryModelProvider"/> that
-            /// loads the model from the given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the
-            /// export folder of the <see cref="ModelExportOptions"/>, read from the configuration of the host, and a
-            /// <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this assembly.
+            /// host has registered its own, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>, an
+            /// <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a <see cref="JsonModelExporter"/>
+            /// that writes the model to the export folder of the <see cref="ModelExportOptions"/>, read from the configuration of
+            /// the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this assembly.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -55,6 +56,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 services.TryAddSingleton<ISerializer, Serializer>();
                 services.TryAddSingleton<IDeSerializer, DeSerializer>();
                 services.AddSingleton<IModelChangeApplier, ModelChangeApplier>();
+                services.AddSingleton<ITradeOffSolver, CpSatTradeOffSolver>();
 
                 services.AddSingleton<IModelProvider>(serviceProvider =>
                 {
@@ -83,6 +85,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<ConstructionTools>()
                     .WithTools<RequirementTools>()
                     .WithTools<ExportTools>()
+                    .WithTools<TradeOffTools>()
                     .WithTools<ValidationTools>();
             }
 
