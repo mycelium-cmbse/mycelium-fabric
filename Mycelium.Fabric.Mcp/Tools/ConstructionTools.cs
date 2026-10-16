@@ -60,11 +60,13 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "and, if needed, a definition (for a part), a value and a unit (for an attribute: 38 with kg, true, 'S-band'), a text (required for a requirement), a reqId and a constraint (for a requirement: "
             + "an attribute or path of the subject, an operator, a limit with an optional unit or a limitAttribute, a margin, and kind Assumption for an assumption); "
             + "the identity is then an optional temporary name, that later changes of the same batch use instead of an identifier. "
-            + "A SatisfyRequirementUsage (satisfy link) takes a satisfiedRequirement and a satisfyingPart instead of a name; one per part that satisfies the requirement. "
+            + "A SatisfyRequirementUsage (satisfy link) takes a satisfiedRequirement and a satisfyingPart (a part, an action or an interface) instead of a name; one per element that satisfies the requirement. "
+            + "A definition or a usage takes specializes for :> (part def Camera :> Equipment). A PerformActionUsage takes an owner (the performer) and a performed action usage. "
             + "Ports: a PortDefinition owns the attributes or items that cross the port, with a direction (In, Out, Inout); a PortUsage takes it as definition, with conjugated true on the receiving side. "
-            + "Connectors: a ConnectionUsage, an InterfaceUsage (between two ports, definition: an InterfaceDefinition whose ends are ports created with isEnd true) or a BindingConnectorAsUsage "
+            + "Connectors: a ConnectionUsage, an InterfaceUsage (between two ports, definition: an InterfaceDefinition whose ends are ports created with isEnd true), a BindingConnectorAsUsage, "
+            + "an AllocationUsage (allocate the first end to the second) or a SuccessionAsUsage (first the first end, then the second, between actions) "
             + "takes two ends, paths of names from its owner (['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']), and an optional name. "
-            + "Update: the identity of the element and a payload with only the properties to change (name, definition, value, text, direction, conjugated, reqId or constraint). "
+            + "Update: the identity of the element and a payload with only the properties to change (name, definition, specializes, value, text, direction, conjugated, reqId or constraint). "
             + "Delete: the identity of the element and no payload; refused while another element references it, for example a port connected by an interface. Existing elements are designated by their identifier (Id).")]
         [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage; if not, the problems, each with the number of its change.")]
         public ApplyChangesResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes)

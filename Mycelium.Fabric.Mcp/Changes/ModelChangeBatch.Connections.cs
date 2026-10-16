@@ -9,6 +9,7 @@
 
 namespace Mycelium.Fabric.Mcp.Changes
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
 
@@ -16,8 +17,10 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
     using SysML2.NET.Core.DTO.Systems.Connections;
+    using SysML2.NET.Core.DTO.Systems.Allocations;
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.DTO.Systems.Interfaces;
+    using SysML2.NET.Core.DTO.Systems.Occurrences;
     using SysML2.NET.Core.DTO.Systems.Ports;
     using SysML2.NET.Core.Root.Namespaces;
 
@@ -80,7 +83,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 throw new InvalidChangeException(element is IConnectorAsUsage
                     ? "The ends of a connector cannot change: delete the connector and create it again."
-                    : $"Only a connector (ConnectionUsage, InterfaceUsage or BindingConnectorAsUsage) has ends, not the {Describe(element)}.");
+                    : $"Only a connector (ConnectionUsage, InterfaceUsage, BindingConnectorAsUsage, AllocationUsage or SuccessionAsUsage) has ends, not the {Describe(element)}.");
             }
 
             if (payload.Direction != null && element is not IFeature)
@@ -178,7 +181,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Direction: null, Conjugated: null, IsEnd: null }
+            if (payload is not { Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Performed: null }
                 || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A connector takes two ends, and optionally an owner, a name, a definition and a text.");
@@ -204,6 +207,19 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (ends[0].SequenceEqual(ends[1]))
             {
                 throw new InvalidChangeException($"The two ends are the same feature '{payload.Ends[0]}'.");
+            }
+
+            if (connector is ISuccessionAsUsage or IAllocationUsage)
+            {
+                var (expectedKind, isExpectedKind) = connector is ISuccessionAsUsage
+                    ? ("an action or another occurrence, for example a state", (Func<IElement, bool>)(feature => feature is IOccurrenceUsage))
+                    : ("a usage", feature => feature is IUsage);
+
+                for (var endIndex = 0; endIndex < ConnectorEndCount; endIndex++)
+                {
+                    var connectedFeature = ends[endIndex][^1];
+                    CheckKind(connectedFeature, isExpectedKind(connectedFeature), $"end '{payload.Ends[endIndex]}' of a {connector.GetType().Name}", expectedKind);
+                }
             }
 
             if (connector is IInterfaceUsage)
@@ -271,7 +287,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="features">The features of the path of the end, the connected feature being the last one.</param>
         private void AddEnd(IElement connector, List<IElement> features)
         {
-            var end = this.Add(new ReferenceUsage { IsEnd = true, IsConstant = connector is not IBindingConnectorAsUsage });
+            var end = this.Add(new ReferenceUsage { IsEnd = true, IsConstant = connector is not (IBindingConnectorAsUsage or ISuccessionAsUsage) });
             this.AddOwnedRelationship(connector, new EndFeatureMembership { Visibility = VisibilityKind.Public }, end);
 
             if (features.Count == 1)

@@ -63,15 +63,22 @@ namespace Mycelium.Fabric.Mcp.Prompts
               (SA-506, Neil Armstrong), in the part it realises or in the context.
             - Goals and stakeholder needs: a RequirementUsage each, with its text and, when the specification gives one, its
               identifier as reqId (SHN-N001). Capabilities: a PartDefinition each, with its description.
+            - Kinds: when the specification names the kinds of an element (kinds of stakeholders, of vehicles), each kind is
+              a PartDefinition with specializes: the general one (GovernmentAgency specializes Stakeholder).
             - Phases: a StateUsage per phase, in the order of the specification, inside a StateDefinition of the mission.
-              Operations: an ActionUsage inside the StateUsage of each phase that performs it, in the order of the
-              specification. Functions: an ActionDefinition for the top-level function, and an ActionUsage per function,
-              inside the function that it decomposes.
-            - Logical components: a PartDefinition each, and a PartUsage in a logical architecture part.
+              Operations: an ActionUsage inside the StateUsage of each phase that performs it. When the operations of a
+              phase come in sequence, a SuccessionAsUsage owned by the StateUsage links each operation to the next one
+              (ends: ['loadConsumablesAndPropellants', 'transferCrewToVehicle']). Functions: an ActionDefinition for the
+              top-level function, and an ActionUsage per function, inside the function that it decomposes; sub-functions
+              that the specification orders are linked by successions too.
+            - Logical components: a PartDefinition each, and a PartUsage in a logical architecture part. Each function that
+              a component performs is a PerformActionUsage owned by its PartDefinition, with performed: the ActionUsage of
+              the function.
             - Analyses: an AnalysisCaseDefinition each; calculations: a CalculationDefinition each; with their description.
-            - A relation that apply_changes cannot create yet, such as a refinement, a function performed by a component, a
-              requirement satisfied by an action or by an interface, or a specialisation, goes in the documentation of its
-              source element ('Refines: HLR-R001.', 'Performs: ExecuteTLIBurn.'), so that it is not lost.
+            - A requirement satisfied by an operation, a function or an interface: a SatisfyRequirementUsage whose
+              satisfyingPart is the ActionUsage or the InterfaceUsage.
+            - A relation that apply_changes cannot create yet, such as a refinement or a transition between phases, goes in
+              the documentation of its source element ('Refines: HLR-R001.'), so that it is not lost.
 
             Modelling rules:
             - One part per unit: four wheels are four parts. Put the numeric values on the units or on their part
@@ -83,7 +90,7 @@ namespace Mycelium.Fabric.Mcp.Prompts
               unit of the specification (value 38 with unit kg): the budgets and the checks convert the units.
             - Make every requirement verifiable: a RequirementUsage with its text, its reqId and a constraint on the
               attribute it limits (with the margin the specification states, if any), and one SatisfyRequirementUsage per
-              part it applies to. check_requirements adds up the attribute over each satisfying part, as sum_attribute
+              part, action or interface it applies to. check_requirements adds up the attribute over each satisfying part, as sum_attribute
               does: for a quantity that adds up (mass, power), the satisfying part is the one that contains the units; for
               a quantity that does not (an accuracy, a data rate), it is each unit concerned, with one
               SatisfyRequirementUsage per unit.
