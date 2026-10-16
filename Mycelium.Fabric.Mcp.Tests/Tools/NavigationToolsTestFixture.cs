@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
 
     using SysML2.NET.Core.POCO.Kernel.Packages;
@@ -167,7 +168,33 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(camera.OwnerName, Is.EqualTo("payloadSubsystem"));
                 Assert.That(camera.ChildCount, Is.EqualTo(0));
                 Assert.That(camera.Documentation, Is.Null);
+                Assert.That(camera.Ends, Is.Null);
+                Assert.That(camera.Connections, Is.Null);
                 Assert.That(payloadSubsystem.Documentation, Is.EqualTo("Payload: the imaging instrument and its data storage."));
+            }
+
+            // Once connected, the camera lists the interface that goes through it, the connection and the binding to its port.
+            var connectedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            connectedModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+            var createdElements = connectedModelProvider.ApplyChanges(ConnectionChangesHelper.CreateChanges()).CreatedElements;
+
+            tools = new NavigationTools(connectedModelProvider);
+            var connectedCamera = tools.GetElementDetails(CameraId);
+            var computer = tools.GetElementDetails(Guid.Parse(ConnectionChangesHelper.OnBoardComputerId));
+            var imageLink = tools.GetElementDetails(createdElements.Single(createdElement => createdElement.Type == "InterfaceUsage").Id);
+            var cameraConnection = connectedCamera.Connections.Single(connection => connection.Type == "ConnectionUsage");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(connectedCamera.Connections.Select(connection => connection.Type), Is.EquivalentTo(["InterfaceUsage : DataInterface", "ConnectionUsage", "BindingConnectorAsUsage"]));
+                Assert.That(cameraConnection.Ends, Is.EqualTo(["camera", "massMemory"]));
+                Assert.That(cameraConnection.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem"));
+                Assert.That(computer.Connections, Has.Count.EqualTo(1));
+                Assert.That(computer.Connections[0].Id, Is.EqualTo(imageLink.Id));
+                Assert.That(computer.Connections[0].Name, Is.EqualTo("imageLink"));
+                Assert.That(imageLink.Type, Is.EqualTo("InterfaceUsage : DataInterface"));
+                Assert.That(imageLink.Ends, Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
+                Assert.That(imageLink.Connections, Is.Null);
             }
         }
 
