@@ -25,6 +25,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Validation;
+    using Mycelium.Fabric.Mcp.Validation.Rules;
 
     using SysML2.NET.Serializer.Json;
 
@@ -62,6 +64,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
             var exportOptionsRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConfigureOptions<ModelExportOptions>)).ToList();
             var exporterRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelExporter)).ToList();
+            var ruleRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IValidationRule)).ToList();
+            var validatorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelValidator)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
 
             using (Assert.EnterMultipleScope())
@@ -81,7 +85,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(exportOptionsRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(10));
+                Assert.That(ruleRegistrations, Has.Count.EqualTo(8));
+                Assert.That(ruleRegistrations.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(ruleRegistrations.Select(descriptor => descriptor.ImplementationType), Is.Unique);
+                Assert.That(validatorRegistrations, Has.Count.EqualTo(1));
+                Assert.That(validatorRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(validatorRegistrations[0].ImplementationType, Is.EqualTo(typeof(ModelValidator)));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(11));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
@@ -126,6 +136,37 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             ((IConfigureOptions<ModelExportOptions>)exportOptionsRegistrations[0].ImplementationFactory(serviceProvider.Object)).Configure(exportOptions);
 
             Assert.That(exportOptions.ExportDirectory, Is.EqualTo(absoluteExportDirectory));
+        }
+
+        [Test]
+        public void VerifyAddImplementations()
+        {
+            var services = new ServiceCollection();
+            var assembly = typeof(IValidationRule).Assembly;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IServiceCollection)null).AddImplementations<IValidationRule>(assembly, ServiceLifetime.Singleton), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => services.AddImplementations<IValidationRule>(null, ServiceLifetime.Singleton), Throws.TypeOf<ArgumentNullException>());
+            }
+
+            // A second scan does not register the rules again, and an assembly without rule registers nothing.
+            var result = services.AddImplementations<IValidationRule>(assembly, ServiceLifetime.Scoped);
+            services.AddImplementations<IValidationRule>(assembly, ServiceLifetime.Scoped);
+            services.AddImplementations<IValidationRule>(typeof(string).Assembly, ServiceLifetime.Scoped);
+
+            var implementationTypes = services.Select(descriptor => descriptor.ImplementationType).ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result, Is.SameAs(services));
+                Assert.That(services, Has.Count.EqualTo(8));
+                Assert.That(services.Select(descriptor => descriptor.ServiceType), Is.All.EqualTo(typeof(IValidationRule)));
+                Assert.That(services.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Scoped));
+                Assert.That(implementationTypes, Is.Unique);
+                Assert.That(implementationTypes, Has.Member(typeof(BrokenReferenceRule)).And.Member(typeof(RequirementWithoutIdRule)));
+                Assert.That(implementationTypes, Has.No.Member(typeof(BaseRule)).And.No.Member(typeof(RequirementRule)));
+            }
         }
     }
 }

@@ -11,6 +11,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
 {
     using System;
     using System.IO;
+    using System.Linq;
+    using System.Reflection;
 
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -19,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
+    using Mycelium.Fabric.Mcp.Validation;
 
     using SysML2.NET.Serializer.Json;
 
@@ -34,7 +37,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// Registers the MCP server, its tools, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/> unless the
             /// host has registered its own, the <see cref="ModelChangeApplier"/>, an <see cref="InMemoryModelProvider"/> that
             /// loads the model from the given JSON file, and a <see cref="JsonModelExporter"/> that writes the model to the
-            /// export folder of the <see cref="ModelExportOptions"/>, read from the configuration of the host.
+            /// export folder of the <see cref="ModelExportOptions"/>, read from the configuration of the host, and a
+            /// <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this assembly.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -69,13 +73,46 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return new JsonModelExporter(serviceProvider.GetRequiredService<ISerializer>(), new Uri(exportDirectory));
                 });
 
+                services.AddImplementations<IValidationRule>(typeof(IValidationRule).Assembly, ServiceLifetime.Singleton);
+                services.AddSingleton<IModelValidator, ModelValidator>();
+
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
                     .WithTools<ConstructionTools>()
                     .WithTools<RequirementTools>()
-                    .WithTools<ExportTools>();
+                    .WithTools<ExportTools>()
+                    .WithTools<ValidationTools>();
+            }
+
+            /// <summary>
+            /// Registers, as a <typeparamref name="TService"/>, each class of an assembly that implements or inherits it, so
+            /// that a new implementation, for example a new <see cref="IValidationRule"/>, is registered without another line.
+            /// The abstract and generic classes are left out, and an implementation already registered is not added again.
+            /// </summary>
+            /// <typeparam name="TService">The type of the service, for example an interface.</typeparam>
+            /// <param name="assembly">The <see cref="Assembly"/> to scan.</param>
+            /// <param name="lifetime">The <see cref="ServiceLifetime"/> of the registrations.</param>
+            /// <returns>The <see cref="IServiceCollection"/>, to chain the registrations.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="services"/> or <paramref name="assembly"/> is <c>null</c>.
+            /// </exception>
+            public IServiceCollection AddImplementations<TService>(Assembly assembly, ServiceLifetime lifetime)
+            {
+                ArgumentNullException.ThrowIfNull(services);
+                ArgumentNullException.ThrowIfNull(assembly);
+
+                var implementationTypes = assembly.GetTypes()
+                    .Where(type => type is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false } && typeof(TService).IsAssignableFrom(type))
+                    .OrderBy(type => type.FullName, StringComparer.Ordinal);
+
+                foreach (var implementationType in implementationTypes)
+                {
+                    services.TryAddEnumerable(ServiceDescriptor.Describe(typeof(TService), implementationType, lifetime));
+                }
+
+                return services;
             }
         }
     }
