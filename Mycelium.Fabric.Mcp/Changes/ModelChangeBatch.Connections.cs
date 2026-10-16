@@ -209,9 +209,11 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException($"The two ends are the same feature '{payload.Ends[0]}'.");
             }
 
-            if (connector is ISuccessionAsUsage or IAllocationUsage)
+            var isSuccession = connector is ISuccessionAsUsage;
+
+            if (isSuccession || connector is IAllocationUsage)
             {
-                var (expectedKind, isExpectedKind) = connector is ISuccessionAsUsage
+                var (expectedKind, isExpectedKind) = isSuccession
                     ? ("an action or another occurrence, for example a state", (Func<IElement, bool>)(feature => feature is IOccurrenceUsage))
                     : ("a usage", feature => feature is IUsage);
 

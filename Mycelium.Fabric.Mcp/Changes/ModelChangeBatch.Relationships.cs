@@ -103,9 +103,9 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             while (pending.Count > 0)
             {
-                foreach (var generalId in this.GetElements(pending.Pop().OwnedRelationship).Select(GetGeneralId).Where(generalId => generalId != null))
+                foreach (var generalId in this.GetElements(pending.Pop().OwnedRelationship).Select(GetGeneralId).OfType<Guid>())
                 {
-                    if (generals.Add(generalId.Value) && this.elementsById.TryGetValue(generalId.Value, out var general))
+                    if (generals.Add(generalId) && this.elementsById.TryGetValue(generalId, out var general))
                     {
                         pending.Push(general);
                     }
