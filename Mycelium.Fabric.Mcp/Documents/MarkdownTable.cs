@@ -14,7 +14,7 @@ namespace Mycelium.Fabric.Mcp.Documents
     using System.Linq;
 
     /// <summary>
-    /// Writes the rows of the tables of Word and Excel documents as Markdown table rows, so that every format gives the same
+    /// Writes the records of CSV files as Markdown table rows, so that every format gives the same
     /// lines and that a requirement identifier in the first cell starts its line.
     /// </summary>
     public static class MarkdownTable

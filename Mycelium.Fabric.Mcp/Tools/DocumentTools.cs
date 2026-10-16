@@ -108,8 +108,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// too slow.
         /// </exception>
         [McpServerTool(Name = "read_document", ReadOnly = true, OpenWorld = false)]
-        [Description("Reads a document of the document folder (Markdown, text, Word .docx or Excel .xlsx) piece by piece, so that a long specification is never read at once. "
-            + "Without section: the outline, one entry per heading with its number, level, title and line count. With section: one page of the text of that section, without its subsections; an Excel worksheet is a section and a table row a line | cell | cell |. "
+        [Description("Reads a document of the document folder (Markdown, text or CSV) piece by piece, so that a long specification is never read at once. "
+            + "Without section: the outline, one entry per heading with its number, level, title and line count. With section: one page of the text of that section, without its subsections; a CSV file is one section and each of its records a line | cell | cell |. "
             + "With idPattern, a regular expression that matches the requirement identifiers of the document (for example REQ-[A-Z]+-\\d{3}), it also counts the identifiers found "
             + "and the ones already modelled (a requirement of the model has this reqId), and lists the missing ones. An identifier belongs to the section where it starts a line or a table row, else to the first section that mentions it. "
             + "The results are paged: when nextOffset is not null, call the tool again with this offset.")]

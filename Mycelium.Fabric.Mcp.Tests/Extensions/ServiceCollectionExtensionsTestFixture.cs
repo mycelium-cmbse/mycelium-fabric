@@ -59,9 +59,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             }
 
             var serverBuilder = services.AddFabricMcpServer(this.satelliteModelPath);
-            Type[] documentParserTypes = [typeof(MarkdownDocumentParser), typeof(WordDocumentParser), typeof(ExcelDocumentParser)];
-            IDocumentParser[] documentParsers = [new MarkdownDocumentParser(), new WordDocumentParser(), new ExcelDocumentParser()];
-            string[] supportedExtensions = [".docx", ".markdown", ".md", ".txt", ".xlsx"];
+            Type[] documentParserTypes = [typeof(MarkdownDocumentParser), typeof(CsvDocumentParser)];
+            IDocumentParser[] documentParsers = [new MarkdownDocumentParser(), new CsvDocumentParser()];
+            string[] supportedExtensions = [".csv", ".markdown", ".md", ".txt"];
 
             var serializerRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(ISerializer)).ToList();
             var deSerializerRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDeSerializer)).ToList();

@@ -32,7 +32,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
         private Mock<IDocumentParser> markdownParser;
 
-        private Mock<IDocumentParser> wordParser;
+        private Mock<IDocumentParser> csvParser;
 
         private DocumentReader reader;
 
@@ -45,11 +45,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.markdownParser.Setup(parser => parser.FormatName).Returns("Markdown or text");
             this.markdownParser.Setup(parser => parser.Extensions).Returns([".md", ".txt"]);
 
-            this.wordParser = new Mock<IDocumentParser>();
-            this.wordParser.Setup(parser => parser.FormatName).Returns("Word");
-            this.wordParser.Setup(parser => parser.Extensions).Returns([".docx"]);
+            this.csvParser = new Mock<IDocumentParser>();
+            this.csvParser.Setup(parser => parser.FormatName).Returns("CSV");
+            this.csvParser.Setup(parser => parser.Extensions).Returns([".csv"]);
 
-            this.reader = new DocumentReader(new Uri(this.documentDirectory), [this.markdownParser.Object, this.wordParser.Object]);
+            this.reader = new DocumentReader(new Uri(this.documentDirectory), [this.markdownParser.Object, this.csvParser.Object]);
         }
 
         [TearDown]
@@ -67,7 +67,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             var directory = new Uri(this.documentDirectory);
             IDocumentParser[] parsers = [this.markdownParser.Object];
             IDocumentParser[] duplicateParsers = [this.markdownParser.Object, this.markdownParser.Object];
-            string[] supportedExtensions = [".docx", ".md", ".txt"];
+            string[] supportedExtensions = [".csv", ".md", ".txt"];
 
             using (Assert.EnterMultipleScope())
             {
@@ -95,19 +95,19 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(() => this.reader.ReadAsync(".Spec.md", none), Throws.TypeOf<McpException>().With.Message.Contains("not a simple name"));
 
                 Assert.That(() => this.reader.ReadAsync("Spec.pdf", none),
-                    Throws.TypeOf<McpException>().With.Message.Contains("is not a supported document (.docx, .md, .txt): convert it"));
+                    Throws.TypeOf<McpException>().With.Message.Contains("is not a supported document (.csv, .md, .txt): convert it"));
 
                 Assert.That(() => this.reader.ReadAsync("Missing.md", none), Throws.TypeOf<McpException>().With.Message.EndsWith("The folder has no supported document."));
             }
 
             Directory.CreateDirectory(this.documentDirectory);
             await File.WriteAllTextAsync(Path.Combine(this.documentDirectory, "Spec.md"), "# Spec", none);
-            await File.WriteAllTextAsync(Path.Combine(this.documentDirectory, "Broken.DOCX"), "not a zip", none);
+            await File.WriteAllTextAsync(Path.Combine(this.documentDirectory, "Broken.CSV"), "ID,\"open", none);
             await File.WriteAllTextAsync(Path.Combine(this.documentDirectory, "Spec.pdf"), "%PDF", none);
 
             IReadOnlyList<DocumentSection> sections = [new DocumentSection(1, 1, "Spec", [])];
             this.markdownParser.Setup(parser => parser.Parse(It.Is<Stream>(content => new StreamReader(content).ReadToEnd() == "# Spec"))).Returns(sections);
-            this.wordParser.Setup(parser => parser.Parse(It.IsAny<Stream>())).Throws(new InvalidDataException("End of Central Directory record could not be found."));
+            this.csvParser.Setup(parser => parser.Parse(It.IsAny<Stream>())).Throws(new InvalidDataException("The quoted cell that starts on line 1 is not closed."));
 
             var document = await this.reader.ReadAsync("Spec.md", none);
 
@@ -119,17 +119,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(document.FileName, Is.EqualTo("Spec.md"));
                 Assert.That(document.Sections, Is.SameAs(sections));
 
-                Assert.That(() => this.reader.ReadAsync("Broken.DOCX", none),
-                    Throws.TypeOf<McpException>().With.Message.EqualTo("The file 'Broken.DOCX' cannot be read as a Word document: End of Central Directory record could not be found."));
+                Assert.That(() => this.reader.ReadAsync("Broken.CSV", none),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("The file 'Broken.CSV' cannot be read as a CSV document: The quoted cell that starts on line 1 is not closed."));
 
                 Assert.That(() => this.reader.ReadAsync("Missing.md", none),
                     Throws.TypeOf<McpException>().With.Message.Contains($"The document folder ({this.documentDirectory}) has no file named 'Missing.md'.")
-                        .And.Message.EndsWith("Its documents are: Broken.DOCX, Spec.md."));
+                        .And.Message.EndsWith("Its documents are: Broken.CSV, Spec.md."));
 
                 Assert.That(() => this.reader.ReadAsync("Spec.md", cancellation.Token), Throws.InstanceOf<OperationCanceledException>());
 
                 this.markdownParser.Verify(parser => parser.Parse(It.IsAny<Stream>()), Times.Once);
-                this.wordParser.Verify(parser => parser.Parse(It.IsAny<Stream>()), Times.Once);
+                this.csvParser.Verify(parser => parser.Parse(It.IsAny<Stream>()), Times.Once);
             }
         }
     }

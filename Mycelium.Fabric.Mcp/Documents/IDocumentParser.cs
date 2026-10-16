@@ -20,12 +20,12 @@ namespace Mycelium.Fabric.Mcp.Documents
     public interface IDocumentParser
     {
         /// <summary>
-        /// Gets the name of the format, for the messages sent to the AI assistant, for example <c>Word</c>.
+        /// Gets the name of the format, for the messages sent to the AI assistant, for example <c>CSV</c>.
         /// </summary>
         string FormatName { get; }
 
         /// <summary>
-        /// Gets the extensions of the files of this format, with their dot, for example <c>.docx</c>.
+        /// Gets the extensions of the files of this format, with their dot, for example <c>.csv</c>.
         /// </summary>
         IReadOnlyCollection<string> Extensions { get; }
 

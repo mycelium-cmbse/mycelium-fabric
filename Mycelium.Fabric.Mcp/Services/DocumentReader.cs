@@ -23,7 +23,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
     /// <summary>
     /// The <see cref="IDocumentReader"/> that reads the documents of a folder with the <see cref="IDocumentParser"/> of their
-    /// format, chosen by the extension of the file: Markdown and text, Word, Excel.
+    /// format, chosen by the extension of the file: Markdown and text, CSV.
     /// </summary>
     public partial class DocumentReader : IDocumentReader
     {

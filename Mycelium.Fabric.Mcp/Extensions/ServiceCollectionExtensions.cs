@@ -84,8 +84,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
                 services.AddOptions<DocumentReaderOptions>().BindConfiguration(DocumentReaderOptions.SectionName);
                 services.TryAddEnumerable(ServiceDescriptor.Singleton<IDocumentParser, MarkdownDocumentParser>());
-                services.TryAddEnumerable(ServiceDescriptor.Singleton<IDocumentParser, WordDocumentParser>());
-                services.TryAddEnumerable(ServiceDescriptor.Singleton<IDocumentParser, ExcelDocumentParser>());
+                services.TryAddEnumerable(ServiceDescriptor.Singleton<IDocumentParser, CsvDocumentParser>());
 
                 services.AddSingleton<IDocumentReader>(serviceProvider =>
                 {
