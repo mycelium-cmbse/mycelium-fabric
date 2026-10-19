@@ -44,6 +44,25 @@ coverage, `Verify{MethodUnderTest}` naming).
 > conversion locally — use `-p:` when reproducing a CI build by hand. The workflows keep `/p:` because
 > they run on `ubuntu-latest`.
 
+## Dependency management
+
+Follow the dependency policy in [README.md](README.md#dependency-management).
+
+- Root `Directory.Packages.props` owns versions only for `Mycelium.Fabric.ConcurrentServer` and
+  `Mycelium.Fabric.ConcurrentServer.Tests`. Keep their `PackageReference` items versionless and do not
+  use `VersionOverride`. MCP projects retain their own versions and stay outside this migration scope.
+- Maintain compatible, supported application/test dependencies through deliberate updates. There are
+  **no deliberate dependency floors**; the central file records that list. Keep dependency versions
+  separate from product versions and preserve `net10.0`, C# 14, the Worker SDK and project references.
+- Keep package asset metadata on the consuming project references, including both coverlet packages.
+  Preserve `IsPackable=false` on tests and `CentralPackageTransitivePinningEnabled=false` in scope.
+- The workflow's two existing outdated exclusions are not Fabric floors. Deprecated/vulnerable checks
+  retain indirect dependency coverage without that filter. Full reports include tests, while all three
+  issue summaries exclude `*.Tests`; outdated issue detection still includes indirect packages.
+- Shared dependency changes require the existing server checks and solution regression checks. Review
+  fresh restore results under the same SDK/settings; framework-provided packages can be pruned by
+  .NET 10. Do not infer dependency changes solely from older cached restore output.
+
 ## Architecture
 
 ### API modules: generated routes + hand-coded handlers

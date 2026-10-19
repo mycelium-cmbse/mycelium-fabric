@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project>
+
+    <!-- CPM currently applies only to the concurrent server and its tests. -->
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer' Or '$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer.Tests'">
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+        <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+    </PropertyGroup>
+
+    <!-- No deliberately floored packages. Existing dependency versions are retained. -->
+    <ItemGroup Condition="'$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer' Or '$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer.Tests'">
+        <PackageVersion Include="Carter" Version="10.0.0" />
+        <PackageVersion Include="ErrorOr" Version="2.1.1" />
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+        <PackageVersion Include="SysML2.NET.Serializer.Json" Version="0.24.1" />
+        <PackageVersion Include="SysML2.NET.Serializer.MessagePack" Version="0.24.1" />
+
+        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+        <PackageVersion Include="Moq" Version="4.20.72" />
+        <PackageVersion Include="NUnit" Version="4.6.1" />
+        <PackageVersion Include="NUnit.Console" Version="3.22.0" />
+        <PackageVersion Include="NUnit3TestAdapter" Version="6.2.0" />
+        <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+        <PackageVersion Include="coverlet.msbuild" Version="10.0.1" />
+    </ItemGroup>
+
+</Project>
