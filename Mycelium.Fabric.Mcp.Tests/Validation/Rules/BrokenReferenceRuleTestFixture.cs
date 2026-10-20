@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
     using SysML2.NET.Core.DTO.Core.Features;
     using SysML2.NET.Core.DTO.Core.Types;
     using SysML2.NET.Core.DTO.Kernel.Connectors;
+    using SysML2.NET.Core.DTO.Kernel.Expressions;
     using SysML2.NET.Core.DTO.Kernel.Packages;
     using SysML2.NET.Core.DTO.Root.Annotations;
     using SysML2.NET.Core.DTO.Root.Dependencies;
@@ -95,6 +96,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
 
             var comment = linkBuilder.AddMember(package, new Comment { Body = "The antenna." });
 
+            // The references of a feature reference expression to a unit of the SI library, which the model does not contain,
+            // by short name and by name, then a name that is not a unit, and a unit name outside a feature reference expression.
+            var massLimit = linkBuilder.AddMember(package, new FeatureReferenceExpression());
+            var kilogram = linkBuilder.AddRelationship(massLimit, new Membership { MemberElement = Guid.NewGuid(), MemberName = "kg", MemberShortName = "kg" });
+            var watt = linkBuilder.AddRelationship(massLimit, new Membership { MemberElement = Guid.NewGuid(), MemberName = "watt" });
+            var notUnit = linkBuilder.AddRelationship(massLimit, new Membership { MemberElement = Guid.NewGuid(), MemberName = "camera", MemberShortName = "cam" });
+            var removedUnit = linkBuilder.AddRelationship(package, new Membership { MemberElement = Guid.NewGuid(), MemberName = "kg", MemberShortName = "kg" });
+
             DtoRelationship[] validRelationships =
             [
                 linkBuilder.AddRelationship(package, new Membership { MemberElement = radio.Id, MemberName = "receiver" }),
@@ -125,6 +134,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
                 Assert.That(FindLinkProblem(brokenDependency.Id), Is.EqualTo("The Dependency has no supplier, which the metamodel requires: the element it refers to has been removed, or it was never loaded."));
                 Assert.That(FindLinkProblem(import.Id), Is.Null);
                 Assert.That(validRelationships.Select(relationship => FindLinkProblem(relationship.Id)), Is.All.Null);
+                Assert.That(FindLinkProblem(kilogram.Id), Is.Null);
+                Assert.That(FindLinkProblem(watt.Id), Is.Null);
+                Assert.That(FindLinkProblem(notUnit.Id), Does.StartWith("The Membership has no memberElement"));
+                Assert.That(FindLinkProblem(removedUnit.Id), Does.StartWith("The Membership has no memberElement"));
             }
         }
     }

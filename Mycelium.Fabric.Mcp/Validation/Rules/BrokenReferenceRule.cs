@@ -12,8 +12,12 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
     using System.Collections.Generic;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Expressions;
+    using Mycelium.Fabric.Mcp.Values;
+
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
+    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Root.Annotations;
     using SysML2.NET.Core.POCO.Root.Dependencies;
     using SysML2.NET.Core.POCO.Root.Elements;
@@ -55,6 +59,11 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
 
             try
             {
+                if (IsUnitReference(relationship))
+                {
+                    return null;
+                }
+
                 var missingEnd = GetRequiredEnds(relationship).FirstOrDefault(end => !end.IsSet).Name;
 
                 return missingEnd == null ? null : $"The {relationship.GetType().Name} has no {missingEnd}, which the metamodel requires: {Cause}";
@@ -63,6 +72,21 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
             {
                 return $"The {relationship.GetType().Name} refers to an element that is not in the model: {Cause}";
             }
+        }
+
+        /// <summary>
+        /// Tells whether a relationship is the reference of a feature reference expression to a unit of the SI library, which
+        /// the model does not contain: its membership has no member element, but a short name or a name that the
+        /// <see cref="UnitCatalog"/> knows. The <see cref="TermReader"/> reads the unit from that name.
+        /// </summary>
+        /// <param name="relationship">The <see cref="IRelationship"/>.</param>
+        /// <returns><c>true</c> when the relationship is a reference to a unit of the library.</returns>
+        private static bool IsUnitReference(IRelationship relationship)
+        {
+            return relationship is IMembership membership and not IOwningMembership
+                   && membership.MemberElement == null
+                   && membership.OwningRelatedElement is IFeatureReferenceExpression
+                   && UnitCatalog.TryParse(membership.MemberShortName ?? membership.MemberName, out _);
         }
 
         /// <summary>
