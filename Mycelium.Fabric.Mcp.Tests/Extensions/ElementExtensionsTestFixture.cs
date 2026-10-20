@@ -18,6 +18,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
@@ -113,6 +114,30 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(payloadMass.Select(contribution => contribution.Value), Is.EquivalentTo([38, 1.5]));
                 Assert.That(cameraMass, Has.Count.EqualTo(1));
                 Assert.That(cameraMass[0].Id, Is.EqualTo(CameraId));
+            }
+        }
+
+        [Test]
+        public void CollectContributions_OfPartsDeclaredInADefinition_CountsThemForEachTypedPart()
+        {
+            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
+
+            var result = modelProvider.ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
+            var parts = modelProvider.Elements.OfType<IPartUsage>().ToList();
+
+            var stageMass = parts.Single(part => part.DeclaredName == DefinitionPartsChangesHelper.StageName).CollectContributions("mass");
+            var launcherMass = parts.Single(part => part.DeclaredName == DefinitionPartsChangesHelper.LauncherName).CollectContributions("mass");
+            var nodeMass = parts.Single(part => part.DeclaredName == DefinitionPartsChangesHelper.NodeName).CollectContributions("mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True, string.Join(" ", result.Problems));
+                Assert.That(stageMass.Select(contribution => contribution.QualifiedName), Is.EqualTo(["Demo::Stage::engine1", "Demo::Stage::engine2"]));
+                Assert.That(stageMass.Select(contribution => contribution.Value), Is.EqualTo([2, 2]));
+                Assert.That(launcherMass, Has.Count.EqualTo(4));
+                Assert.That(launcherMass.Sum(contribution => contribution.Value), Is.EqualTo(8));
+                Assert.That(nodeMass, Is.Empty);
             }
         }
     }
