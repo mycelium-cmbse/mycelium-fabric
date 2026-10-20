@@ -99,7 +99,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <summary>
             /// Collects the contributions of the element and its sub-parts to the sum of an attribute. An element that has a
             /// numeric value for the attribute (with or without unit), owned or inherited from its types, contributes this
-            /// value and its own sub-parts are not visited, so that no value is counted twice.
+            /// value and its own sub-parts are not visited, so that no value is counted twice. The sub-parts of a type are
+            /// its part features, owned or inherited from its types: the parts declared in a part definition count for each
+            /// part that this definition types (<c>part stage : Stage</c> counts the engines of <c>Stage</c>).
             /// </summary>
             /// <param name="attributeName">The declared name of the attribute.</param>
             /// <returns>The <see cref="Contribution"/> of each contributing part, empty when no part has a value.</returns>
@@ -110,20 +112,46 @@ namespace Mycelium.Fabric.Mcp.Extensions
             {
                 ArgumentNullException.ThrowIfNull(element);
 
-                var value = element.GetAttributeUsages()
-                    .FirstOrDefault(attribute => attribute.DeclaredName == attributeName)?
-                    .GetNumericValue();
-
-                if (value != null)
-                {
-                    return [new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit)];
-                }
-
-                return (element.ownedElement ?? [])
-                    .OfType<IPartUsage>()
-                    .SelectMany(part => part.CollectContributions(attributeName))
-                    .ToList();
+                return CollectPartContributions(element, attributeName, []);
             }
+        }
+
+        /// <summary>
+        /// Collects the contributions of an element and of its sub-parts to the sum of an attribute, for
+        /// <c>CollectContributions</c>. A part that is already on the path from the element is not visited again,
+        /// so that a definition that contains a part of its own kind (<c>part def Node { part next : Node; }</c>) ends.
+        /// </summary>
+        /// <param name="element">The <see cref="IElement"/> to read.</param>
+        /// <param name="attributeName">The declared name of the attribute.</param>
+        /// <param name="path">The identifiers of the parts between the first element and this one.</param>
+        /// <returns>The <see cref="Contribution"/> of each contributing part, empty when no part has a value.</returns>
+        private static List<Contribution> CollectPartContributions(IElement element, string attributeName, HashSet<Guid> path)
+        {
+            var value = element.GetAttributeUsages()
+                .FirstOrDefault(attribute => attribute.DeclaredName == attributeName)?
+                .GetNumericValue();
+
+            if (value != null)
+            {
+                return [new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit)];
+            }
+
+            if (!path.Add(element.Id))
+            {
+                return [];
+            }
+
+            // A type, such as a part or a part definition, has its parts among its features; a package owns its parts.
+            IEnumerable<IElement> members = element is IType type ? type.feature ?? [] : element.ownedElement ?? [];
+
+            var contributions = members
+                .OfType<IPartUsage>()
+                .SelectMany(part => CollectPartContributions(part, attributeName, path))
+                .ToList();
+
+            path.Remove(element.Id);
+
+            return contributions;
         }
     }
 }

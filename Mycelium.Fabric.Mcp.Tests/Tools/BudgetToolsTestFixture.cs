@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
 
     using SysML2.NET.Core.POCO.Core.Types;
@@ -190,6 +191,34 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(impacts[0].Current.ReqId, Is.EqualTo("REQ-SYS-001"));
                 Assert.That(impacts[0].Current.Explanation, Is.EqualTo("150.96 > 150"));
                 Assert.That(impacts[0].New.Explanation, Is.EqualTo("159.36 > 150"));
+            }
+        }
+
+        [Test]
+        public void Budgets_OfPartsDeclaredInADefinition_CountThemForEachTypedPart()
+        {
+            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
+
+            var result = emptyModelProvider.ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
+            var stageId = emptyModelProvider.Elements.Single(element => element.DeclaredName == DefinitionPartsChangesHelper.StageName).Id;
+            var launcherId = emptyModelProvider.Elements.Single(element => element.DeclaredName == DefinitionPartsChangesHelper.LauncherName).Id;
+            var engineId = emptyModelProvider.Elements.OfType<PartUsage>().Single(element => element.DeclaredName == "engine1").Id;
+
+            var tools = new BudgetTools(emptyModelProvider);
+            var stageMass = tools.SumAttribute(stageId, "mass");
+
+            // Both stages of the launcher are typed by Stage: a new engine1 in Stage changes both.
+            var whatIf = tools.EvaluateWhatIf(launcherId, "mass", engineId, 3);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True, string.Join(" ", result.Problems));
+                Assert.That(stageMass.Total, Is.EqualTo(4));
+                Assert.That(stageMass.ContributorCount, Is.EqualTo(2));
+                Assert.That(stageMass.Unit.Symbol, Is.EqualTo("kg"));
+                Assert.That(whatIf.CurrentTotal, Is.EqualTo(8));
+                Assert.That(whatIf.NewTotal, Is.EqualTo(10));
             }
         }
 
