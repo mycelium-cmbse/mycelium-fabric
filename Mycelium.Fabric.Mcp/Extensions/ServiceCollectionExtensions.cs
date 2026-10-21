@@ -41,9 +41,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// unless the host has registered its own, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
             /// an <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a
             /// <see cref="JsonModelExporter"/> that writes the model to the export folder of the <see cref="ModelExportOptions"/>,
-            /// a <see cref="DocumentReader"/> that reads the document folder of the <see cref="DocumentReaderOptions"/>, both read
-            /// from the configuration of the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of
-            /// this assembly.
+            /// a <see cref="DocumentReader"/> that reads the document folder of the <see cref="DocumentReaderOptions"/>, the
+            /// <see cref="ConstructionOptions"/> that tell whether apply_changes returns the new issues of a batch, all read from
+            /// the configuration of the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this
+            /// assembly.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -70,6 +71,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 });
 
                 services.AddOptions<ModelExportOptions>().BindConfiguration(ModelExportOptions.SectionName);
+                services.AddOptions<ConstructionOptions>().BindConfiguration(ConstructionOptions.SectionName);
 
                 services.AddSingleton<IModelExporter>(serviceProvider =>
                 {

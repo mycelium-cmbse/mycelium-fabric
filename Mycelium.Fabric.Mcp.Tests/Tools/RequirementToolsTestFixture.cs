@@ -13,6 +13,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using System.IO;
     using System.Linq;
 
+    using Microsoft.Extensions.Options;
+
     using ModelContextProtocol;
 
     using Moq;
@@ -21,6 +23,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
+    using Mycelium.Fabric.Mcp.Validation;
 
     using SysML2.NET.Serializer.Json;
 
@@ -117,7 +120,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var satelliteModelProvider = CreateSatelliteModelProvider();
             var tools = new RequirementTools(satelliteModelProvider);
 
-            var batch = new ConstructionTools(satelliteModelProvider).ApplyChanges(
+            var batch = new ConstructionTools(satelliteModelProvider, new Mock<IModelValidator>().Object, Options.Create(new ConstructionOptions { ReportNewIssues = false })).ApplyChanges(
             [
                 new ModelChange { Identity = MassBudgetId, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId, SatisfyingPart = Eosat1Id } },

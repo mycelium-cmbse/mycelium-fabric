@@ -68,6 +68,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var changeApplierRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelChangeApplier)).ToList();
             var modelProviderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelProvider)).ToList();
             var exportOptionsRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConfigureOptions<ModelExportOptions>)).ToList();
+            var constructionOptionsRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConfigureOptions<ConstructionOptions>)).ToList();
             var exporterRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelExporter)).ToList();
             var solverRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(ITradeOffSolver)).ToList();
             var ruleRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IValidationRule)).ToList();
@@ -93,6 +94,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(modelProviderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(modelProviderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(exportOptionsRegistrations, Has.Count.EqualTo(1));
+                Assert.That(constructionOptionsRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations, Has.Count.EqualTo(1));
                 Assert.That(exporterRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(solverRegistrations, Has.Count.EqualTo(1));
