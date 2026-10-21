@@ -181,12 +181,15 @@ namespace Mycelium.Fabric.AppHost.Tests
             builder.CreateResourceBuilder(database).WithHealthCheck(DatabaseStartupHealthCheckName);
 
             await using var application = await builder.BuildAsync(cancellationToken);
+            using var startupCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             using var observationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var startupObservation = ObserveStartupOrderAsync(application, observationCancellation.Token);
+            var applicationStartup = Task.CompletedTask;
 
             try
             {
-                await application.StartAsync(cancellationToken);
+                // Startup includes the server's dependency wait, so release the test gates before awaiting completion.
+                applicationStartup = application.StartAsync(startupCancellation.Token);
                 await application.ResourceNotifications.WaitForResourceAsync(PostgresResourceName, KnownResourceStates.NotStarted, cancellationToken);
                 await application.ResourceNotifications.WaitForResourceAsync(ServerResourceName, KnownResourceStates.Waiting, cancellationToken);
 
@@ -199,7 +202,8 @@ namespace Mycelium.Fabric.AppHost.Tests
                     cancellationToken);
 
                 // Prove that PostgreSQL accepts connections while the database's test-only health gate remains closed.
-                var readyDatabaseConnection = await application.GetConnectionStringAsync(DatabaseResourceName, cancellationToken);
+                // Resolve the resource expression directly because the testing helper requires completed AppHost startup.
+                var readyDatabaseConnection = await database.ConnectionStringExpression.GetValueAsync(cancellationToken);
                 await ReadClusterIdentifierAsync(readyDatabaseConnection, cancellationToken);
 
                 using (var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
@@ -224,6 +228,7 @@ namespace Mycelium.Fabric.AppHost.Tests
                 }
 
                 databaseHealthReleased.SetResult();
+                await applicationStartup;
                 await startupObservation;
                 await application.ResourceNotifications.WaitForResourceHealthyAsync(DatabaseResourceName, cancellationToken);
 
@@ -277,14 +282,19 @@ namespace Mycelium.Fabric.AppHost.Tests
             }
             finally
             {
+                startupCancellation.Cancel();
                 observationCancellation.Cancel();
 
                 try
                 {
-                    await startupObservation;
+                    await Task.WhenAll(applicationStartup, startupObservation);
                 }
-                catch (OperationCanceledException) when (observationCancellation.IsCancellationRequested)
+                catch (OperationCanceledException) when (startupCancellation.IsCancellationRequested && observationCancellation.IsCancellationRequested)
                 {
+                }
+                catch (Exception exception) when (exception is not AssertionException)
+                {
+                    throw new AssertionException("Startup cleanup failed (" + exception.GetType().Name + "). " + DescribeResourceStates(application));
                 }
             }
         }
