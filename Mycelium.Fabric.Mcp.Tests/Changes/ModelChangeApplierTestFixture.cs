@@ -397,6 +397,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         }
 
         [Test]
+        public void Apply_WithADuplicateNameOrATemporaryNameOfAnotherBatch_ExplainsTheProblem()
+        {
+            var result = this.applier.Apply(ReadSatelliteDtos(),
+            [
+                new ModelChange { Identity = "optics", Payload = new ElementPayload { Type = "Package", Name = "Optics" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "optics", Name = "lens" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "optics", Name = "lens" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "pkgTech", Name = "mirror" } }
+            ]);
+
+            var problems = result.Errors.Select(error => error.Description).ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(problems, Has.Count.EqualTo(2));
+                Assert.That(problems[0], Is.EqualTo("Change 3 (create): The Package 'Optics' already has a member named 'lens', created by change 2 of this batch: give one of them another name."));
+                Assert.That(problems[1], Does.StartWith("Change 4 (create): The owner 'pkgTech'").And.Contain("only live in their own batch"));
+            }
+        }
+
+        [Test]
         public void Apply_WithRequirementProperties_MakesTheRequirementsVerifiable()
         {
             var dtos = ReadSatelliteDtos();

@@ -26,6 +26,7 @@ namespace Mycelium.Fabric.Mcp.Prompts
         /// </summary>
         private const string Procedure = """
             Build a SysML v2 model from the specification at the end of this message, with the tools of this server.
+            The specification is in this message: do not look for it with read_document.
             You never write SysML: you describe changes to apply_changes, and the server builds and checks the elements.
             Work in two phases, and never call apply_changes before the user has approved your plan.
 
@@ -48,9 +49,14 @@ namespace Mycelium.Fabric.Mcp.Prompts
             Phase 2, once the user has approved the plan:
             5. Build with apply_changes, one batch per package or subsystem, until every section of the specification is
                built. Refer to the elements created in the same batch by their temporary names. If a batch is refused,
-               correct every reported problem and send it again.
-            6. Check with check_requirements. Report every requirement that is not satisfied, and never change a value to
-               make it pass without the user's approval.
+               correct every reported problem and send it again. After each applied batch, read newIssues: correct its
+               errors in the next batch; a warning can wait when a later batch of your plan resolves it. Temporary names
+               only live in their batch: later batches use the identifiers of createdElements. So send one batch at a
+               time, never several apply_changes calls at once, and wait for its result before the next batch.
+            6. Check with validate_model (severity Warning), then with check_requirements. Correct every error, and every
+               warning that a missing element explains, then check again, until no error is left or for 3 rounds at most.
+               A requirement that is not satisfied is not an error: report it, and never change a value of the
+               specification to make it pass.
             7. Go through the sections of the specification once more and add what is missing.
             8. Summarise: what was built per section, the choices you made, the status of each requirement, the textual
                requirements, the relations written in documentation only, and the open questions.
