@@ -38,12 +38,14 @@ namespace Mycelium.Fabric.AppHost.Tests
     {
         private const string PostgresResourceName = "postgres";
         private const string DatabaseResourceName = "functionaldata";
+        private const string DatabaseStartupHealthCheckName = "functionaldata-startup-gate";
         private const string ServerResourceName = "concurrent-server";
         private const string VolumePrefix = "mycelium-fabric-apphost-tests-";
         private const string OwnerLabel = "mycelium.fabric.apphost-test";
 
         private static readonly TimeSpan EnvironmentTimeout = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan DockerCommandTimeout = TimeSpan.FromMinutes(1);
+        private static readonly TimeSpan ServerStartupObservationTimeout = TimeSpan.FromSeconds(5);
 
         [SetUp]
         public void RequireEnvironmentTestOptIn()
@@ -171,6 +173,13 @@ namespace Mycelium.Fabric.AppHost.Tests
             var postgres = builder.Resources.OfType<PostgresServerResource>().Single(resource => resource.Name == PostgresResourceName);
             builder.CreateResourceBuilder(postgres).WithExplicitStart();
 
+            var databaseHealthReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            builder.Services.AddHealthChecks().AddCheck(DatabaseStartupHealthCheckName,
+                () => databaseHealthReleased.Task.IsCompletedSuccessfully ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("Held by the environment test."));
+
+            var database = builder.Resources.OfType<PostgresDatabaseResource>().Single(resource => resource.Name == DatabaseResourceName);
+            builder.CreateResourceBuilder(database).WithHealthCheck(DatabaseStartupHealthCheckName);
+
             await using var application = await builder.BuildAsync(cancellationToken);
             using var observationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var startupObservation = ObserveStartupOrderAsync(application, observationCancellation.Token);
@@ -181,9 +190,40 @@ namespace Mycelium.Fabric.AppHost.Tests
                 await application.ResourceNotifications.WaitForResourceAsync(PostgresResourceName, KnownResourceStates.NotStarted, cancellationToken);
                 await application.ResourceNotifications.WaitForResourceAsync(ServerResourceName, KnownResourceStates.Waiting, cancellationToken);
 
-                Assert.That(GetSnapshot(application, ServerResourceName).State?.Text, Is.EqualTo(KnownResourceStates.Waiting));
-
                 await ExecuteCommandAsync(application, KnownResourceCommands.StartCommand, cancellationToken);
+                await application.ResourceNotifications.WaitForResourceHealthyAsync(PostgresResourceName, cancellationToken);
+                await application.ResourceNotifications.WaitForResourceAsync(
+                    DatabaseResourceName,
+                    resourceEvent => resourceEvent.Snapshot.HealthStatus == HealthStatus.Unhealthy
+                        && resourceEvent.Snapshot.HealthReports.Any(report => report.Name == DatabaseStartupHealthCheckName && report.Status == HealthStatus.Unhealthy),
+                    cancellationToken);
+
+                // Prove that PostgreSQL accepts connections while the database's test-only health gate remains closed.
+                var readyDatabaseConnection = await application.GetConnectionStringAsync(DatabaseResourceName, cancellationToken);
+                await ReadClusterIdentifierAsync(readyDatabaseConnection, cancellationToken);
+
+                using (var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    startupTimeout.CancelAfter(ServerStartupObservationTimeout);
+
+                    Assert.That(
+                        async () => await application.ResourceNotifications.WaitForResourceAsync(ServerResourceName, KnownResourceStates.Running, startupTimeout.Token),
+                        Throws.InstanceOf<OperationCanceledException>(),
+                        "The server must remain waiting while its database is unhealthy, even when PostgreSQL is healthy.");
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(GetSnapshot(application, PostgresResourceName).State?.Text, Is.EqualTo(KnownResourceStates.Running));
+                    Assert.That(GetSnapshot(application, PostgresResourceName).HealthStatus, Is.EqualTo(HealthStatus.Healthy));
+                    Assert.That(GetSnapshot(application, DatabaseResourceName).HealthStatus, Is.EqualTo(HealthStatus.Unhealthy));
+                    Assert.That(GetSnapshot(application, ServerResourceName).State?.Text, Is.EqualTo(KnownResourceStates.Waiting));
+                    Assert.That(GetSnapshot(application, ServerResourceName).StartTimeStamp, Is.Null);
+                }
+
+                databaseHealthReleased.SetResult();
                 await startupObservation;
                 await application.ResourceNotifications.WaitForResourceHealthyAsync(DatabaseResourceName, cancellationToken);
 
