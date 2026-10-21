@@ -216,7 +216,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(elementCountAfterRefusal, Is.EqualTo(elementCount));
                 Assert.That(totalAfterModification, Is.EqualTo(35));
                 Assert.That(creation.NewIssues, Is.Empty);
-                Assert.That(untypedPart.NewIssues.Select(issue => issue.Rule), Is.EqualTo(new[] { "untyped-usage" }));
+                Assert.That(untypedPart.NewIssues.Select(issue => issue.Rule), Is.EqualTo(["untyped-usage"]));
                 Assert.That(modification.NewIssues, Is.Empty);
                 Assert.That(typing.NewIssues, Is.Empty);
                 Assert.That(typing.ResolvedIssueCount, Is.EqualTo(1));
