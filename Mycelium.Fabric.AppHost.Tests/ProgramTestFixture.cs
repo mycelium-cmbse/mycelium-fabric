@@ -167,7 +167,7 @@ namespace Mycelium.Fabric.AppHost.Tests
         }
 
         private static async Task<(string ClusterIdentifier, string ContainerId)> VerifyInitialEnvironmentAsync(
-            string volumeName, string password, ICollection<string> failures, CancellationToken cancellationToken)
+            string volumeName, string password, List<string> failures, CancellationToken cancellationToken)
         {
             await using var builder = await CreateBuilderAsync(volumeName, password, cancellationToken);
             var postgres = builder.Resources.OfType<PostgresServerResource>().Single(resource => resource.Name == PostgresResourceName);
