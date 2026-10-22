@@ -38,6 +38,7 @@ See the official [Aspire prerequisites](https://aspire.dev/get-started/prerequis
 | Item | Value and role |
 | --- | --- |
 | AppHost project / launch profile | `Mycelium.Fabric.AppHost` |
+| Aspire CLI project selection | `Mycelium.Fabric.AppHost/aspire.config.json`; `appHost.path` selects `Mycelium.Fabric.AppHost.csproj` relative to that file |
 | PostgreSQL resource | `postgres`, using `docker.io/library/postgres:18.6` |
 | Database resource / connection name | `functionaldata` |
 | Physical database | `mycelium_functional_data` |
@@ -182,7 +183,7 @@ Report build results, existing unit regressions, automated environment startup/c
 
 ## Dependency management
 
-The AppHost SDK declaration is `Aspire.AppHost.Sdk/13.6.1`. Explicit environment packages are `Aspire.Hosting.PostgreSQL` and `Aspire.Hosting.Testing` at `13.6.1`, with test-only `Npgsql` at `10.0.3`. Environment tests use `Microsoft.NET.Test.Sdk` `18.8.1`, `NUnit` `4.6.1` and `NUnit3TestAdapter` `6.2.0`. The AppHost SDK supplies its own implicit `Aspire.Hosting.AppHost` reference; do not add a duplicate reference or central version for it. The configured SDK uses the matching CLI bundle through .NET 10's `dnx` support; see the [Aspire SDK documentation](https://aspire.dev/get-started/aspire-sdk/).
+The AppHost SDK declaration is `Aspire.AppHost.Sdk/13.6.2`. Explicit environment packages are `Aspire.Hosting.PostgreSQL` and `Aspire.Hosting.Testing` at `13.6.2`, with test-only `Npgsql` at `10.0.3`. Environment tests use `Microsoft.NET.Test.Sdk` `18.8.1`, `NUnit` `4.6.1` and `NUnit3TestAdapter` `6.2.0`. The AppHost SDK supplies its own implicit `Aspire.Hosting.AppHost` reference; do not add a duplicate reference or central version for it. The configured SDK uses the matching CLI bundle through .NET 10's `dnx` support; see the [Aspire SDK documentation](https://aspire.dev/get-started/aspire-sdk/).
 
 **Central Package Management (CPM)** means owning NuGet package versions in root `Directory.Packages.props`. Where scoped CPM configuration is absent, project references declare their versions locally. When present, its activation properties and central-version items must cover the same four projects: ConcurrentServer, ConcurrentServer.Tests, AppHost and AppHost.Tests. Keep MCP excluded, `CentralPackageTransitivePinningEnabled=false`, and participating package references versionless without `VersionOverride`. Transfer version ownership coherently; central entries alone do not activate CPM or supply versions to an excluded project. The AppHost SDK version remains in its SDK declaration.
 
