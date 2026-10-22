@@ -12,8 +12,6 @@ namespace Mycelium.Fabric.AppHost
     using Aspire.Hosting;
     using Aspire.Hosting.ApplicationModel;
 
-    using Microsoft.Extensions.Hosting;
-
     /// <summary>
     /// Defines and runs the local PostgreSQL and concurrent-server environment.
     /// </summary>
@@ -51,9 +49,7 @@ namespace Mycelium.Fabric.AppHost
             var builder = DistributedApplication.CreateBuilder(args);
             var volumeName = builder.Configuration["FunctionalData:VolumeName"] ?? "mycelium-fabric-functionaldata-pg18";
 
-            var postgres = builder.AddPostgres("postgres")
-                .WithImageTag("18.6")
-                .WithDataVolume(volumeName);
+            var postgres = builder.AddPostgres("postgres").WithImageTag("18.6").WithDataVolume(volumeName);
 
             var functionalData = postgres.AddDatabase("functionaldata", "mycelium_functional_data");
 
