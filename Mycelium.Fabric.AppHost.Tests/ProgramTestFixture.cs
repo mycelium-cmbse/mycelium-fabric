@@ -77,7 +77,7 @@ namespace Mycelium.Fabric.AppHost.Tests
                 await RunDockerAsync(["volume", "create", "--label", OwnerLabel + "=" + ownerId, volumeName], timeout.Token);
 
                 phase = "startup ordering, connectivity, outage and container restart";
-                var retainedState = await VerifyInitialEnvironmentAsync(volumeName, password, timeout.Token);
+                var retainedState = await VerifyInitialEnvironmentAsync(volumeName, password, failures, timeout.Token);
 
                 phase = "normal shutdown and retained storage";
                 var retainedVolume = await RunDockerAsync(["volume", "inspect", "--format", "{{.Name}}", volumeName], timeout.Token);
@@ -167,7 +167,7 @@ namespace Mycelium.Fabric.AppHost.Tests
         }
 
         private static async Task<(string ClusterIdentifier, string ContainerId)> VerifyInitialEnvironmentAsync(
-            string volumeName, string password, CancellationToken cancellationToken)
+            string volumeName, string password, ICollection<string> failures, CancellationToken cancellationToken)
         {
             await using var builder = await CreateBuilderAsync(volumeName, password, cancellationToken);
             var postgres = builder.Resources.OfType<PostgresServerResource>().Single(resource => resource.Name == PostgresResourceName);
@@ -292,9 +292,9 @@ namespace Mycelium.Fabric.AppHost.Tests
                 catch (OperationCanceledException) when (startupCancellation.IsCancellationRequested && observationCancellation.IsCancellationRequested)
                 {
                 }
-                catch (Exception exception) when (exception is not AssertionException)
+                catch (Exception exception)
                 {
-                    throw new AssertionException("Startup cleanup failed (" + exception.GetType().Name + "). " + DescribeResourceStates(application));
+                    failures.Add("Startup cleanup failed (" + exception.GetType().Name + "). " + DescribeResourceStates(application));
                 }
             }
         }
