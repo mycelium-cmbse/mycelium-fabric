@@ -124,6 +124,11 @@ namespace Mycelium.Fabric.Mcp.Changes
         private readonly HashSet<string> failedTemporaryNames = [];
 
         /// <summary>
+        /// The number of the change that created each element of the batch, indexed by the <c>Id</c> of the element.
+        /// </summary>
+        private readonly Dictionary<Guid, int> creationChangeNumbers = [];
+
+        /// <summary>
         /// The elements to delete at the end of the batch, with the number of the change that deletes them.
         /// </summary>
         private readonly List<(int ChangeNumber, IElement Element)> deletions = [];
@@ -277,6 +282,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             var changeType = GetChangeType(change);
+            var addedCount = this.addedIds.Count;
 
             try
             {
@@ -284,6 +290,12 @@ namespace Mycelium.Fabric.Mcp.Changes
                 {
                     case ChangeType.CREATED:
                         this.Create(change);
+
+                        foreach (var addedId in this.addedIds.Skip(addedCount))
+                        {
+                            this.creationChangeNumbers[addedId] = changeNumber;
+                        }
+
                         break;
                     case ChangeType.UPDATED:
                         this.Update(change);
@@ -692,7 +704,9 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (existingMember != null)
             {
-                throw new InvalidChangeException($"The {Describe(owner)} already has a member named '{name}', whose identifier is {existingMember.Id}.");
+                throw new InvalidChangeException(this.creationChangeNumbers.TryGetValue(existingMember.Id, out var creationChangeNumber)
+                    ? $"The {Describe(owner)} already has a member named '{name}', created by change {creationChangeNumber} of this batch: give one of them another name."
+                    : $"The {Describe(owner)} already has a member named '{name}', whose identifier is {existingMember.Id}.");
             }
         }
 
@@ -716,7 +730,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 throw new InvalidChangeException(this.failedTemporaryNames.Contains(reference)
                     ? $"The {role} '{reference}' has not been created, because the change that creates it has failed."
-                    : $"The {role} '{reference}' is neither the identifier of an element nor the temporary name of an element created by a previous change.");
+                    : $"The {role} '{reference}' is neither the identifier of an element nor the temporary name of an element created by a previous change of this batch. Temporary names only live in their own batch: to refer to an element created by an earlier batch, use its identifier from createdElements.");
             }
 
             if (!this.elementsById.TryGetValue(elementId, out var element))
