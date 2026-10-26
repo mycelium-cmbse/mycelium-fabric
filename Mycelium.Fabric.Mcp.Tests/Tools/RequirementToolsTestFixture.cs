@@ -169,7 +169,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
-            var batch = new ConstructionTools(emptyModelProvider).ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
+            var batch = new ConstructionTools(emptyModelProvider, new Mock<IModelValidator>().Object, Options.Create(new ConstructionOptions { ReportNewIssues = false })).ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
             var result = new RequirementTools(emptyModelProvider).CheckRequirements();
 
             using (Assert.EnterMultipleScope())
