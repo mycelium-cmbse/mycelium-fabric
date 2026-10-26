@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
 
     using SysML2.NET.Serializer.Json;
@@ -156,6 +157,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(payloadPower.Explanation, Is.EqualTo("64 < 70"));
                 Assert.That(problems.TotalFound, Is.EqualTo(1));
                 Assert.That(problems.Requirements[0].ReqId, Is.EqualTo("REQ-SYS-001"));
+            }
+        }
+
+        [Test]
+        public void CheckRequirements_OnAPartTypedByADefinition_AddsUpThePartsOfTheDefinition()
+        {
+            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
+
+            var batch = new ConstructionTools(emptyModelProvider).ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
+            var result = new RequirementTools(emptyModelProvider).CheckRequirements();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(batch.Applied, Is.True, string.Join(" ", batch.Problems));
+                Assert.That(result.TotalFound, Is.EqualTo(1));
+                Assert.That(result.Requirements[0].ReqId, Is.EqualTo("REQ-STG-001"));
+                Assert.That(result.Requirements[0].Status, Is.EqualTo(RequirementStatus.NotSatisfied));
+                Assert.That(result.Requirements[0].SatisfiedBy, Is.EqualTo("Demo::stageA"));
+                Assert.That(result.Requirements[0].Value, Is.EqualTo(4));
             }
         }
 
