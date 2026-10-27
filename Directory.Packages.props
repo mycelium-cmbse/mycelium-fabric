@@ -2,20 +2,25 @@
 
 <Project>
 
-    <!-- CPM currently applies only to the concurrent server and its tests. -->
-    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer' Or '$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer.Tests'">
+    <PropertyGroup>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
         <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     </PropertyGroup>
 
-    <!-- No deliberately floored packages. Existing dependency versions are retained. -->
-    <ItemGroup Condition="'$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer' Or '$(MSBuildProjectName)' == 'Mycelium.Fabric.ConcurrentServer.Tests'">
+    <!-- No deliberately floored packages. -->
+    <ItemGroup>
         <PackageVersion Include="Carter" Version="10.0.0" />
+        <PackageVersion Include="CsvHelper" Version="33.1.0" />
         <PackageVersion Include="ErrorOr" Version="2.1.1" />
+        <PackageVersion Include="Google.OrTools" Version="9.15.6755" />
         <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+        <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+        <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
+        <PackageVersion Include="SysML2.NET.Dal" Version="0.24.1" />
         <PackageVersion Include="SysML2.NET.Serializer.Json" Version="0.24.1" />
         <PackageVersion Include="SysML2.NET.Serializer.MessagePack" Version="0.24.1" />
 
+        <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
         <PackageVersion Include="Moq" Version="4.20.72" />
         <PackageVersion Include="NUnit" Version="4.6.1" />
