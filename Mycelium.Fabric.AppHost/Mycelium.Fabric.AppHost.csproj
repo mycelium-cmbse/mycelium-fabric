@@ -4,6 +4,13 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <LangVersion>14.0</LangVersion>
+        <Description>The Mycelium Fabric AppHost project for the local PostgreSQL and concurrent-server environment.</Description>
+        <Company>Starion Group S.A.</Company>
+        <Copyright>Copyright © Starion Group S.A.</Copyright>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <RepositoryUrl>https://github.com/mycelium-cmbse/mycelium-fabric.git</RepositoryUrl>
+        <RepositoryType>Git</RepositoryType>
+        <Authors>Sam Gerene, Antoine Théate, Régis André, Tanase-Marius Manafu, Omrane Haj Mohamed</Authors>
         <ImplicitUsings>false</ImplicitUsings>
         <Nullable>disable</Nullable>
         <IsPackable>false</IsPackable>
