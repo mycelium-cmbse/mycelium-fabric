@@ -107,6 +107,10 @@ namespace Mycelium.Fabric.Mcp.Prompts
               contaminationReleased == false). Take the operator from the wording: 'at least' is '>=', 'at most' and 'not
               exceed' are '<=', 'less than' and 'below' are '<'. When the text gives several limits, constrain the first
               one and name the others in the summary. Only a requirement without any limit stays textual.
+            - A value that the specification leaves to be defined (TBD) is an attribute without value, never an invented
+              number: sum_attribute and check_requirements then report it as missing.
+            - A margin that the specification gives for a value of a unit (maturity margin) is an attribute named after
+              this value with Margin, in %: massMargin = 10. The budgets and the checks add it.
             """;
 
         /// <summary>

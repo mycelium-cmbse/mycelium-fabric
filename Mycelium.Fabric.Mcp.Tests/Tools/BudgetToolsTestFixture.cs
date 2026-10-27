@@ -148,6 +148,34 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(payloadMass.Contributions.Select(contribution => contribution.Value), Is.EquivalentTo([38, 1.5]));
                 Assert.That(cameraContribution.QualifiedName, Is.EqualTo(CameraQualifiedName));
                 Assert.That(cameraContribution.Types, Is.EqualTo(["OpticalCamera"]));
+                Assert.That(payloadMass.TotalWithMargins, Is.Null);
+                Assert.That(payloadMass.MissingValues, Is.Null);
+            }
+        }
+
+        [Test]
+        public void SumAttribute_WithMarginsAndMissingValues_GivesTheTotalWithMarginsAndListsTheMissingValues()
+        {
+            var complete = BudgetChangesHelper.CreateModel(withMissingValues: false, withPartOutside: false);
+            var incomplete = BudgetChangesHelper.CreateModel(withMissingValues: true, withPartOutside: false);
+
+            Guid GetSpacecraftId(IModelProvider provider) => provider.Elements.Single(element => element.DeclaredName == BudgetChangesHelper.SpacecraftName).Id;
+            Guid GetPartId(IModelProvider provider, string name) => provider.Elements.OfType<PartUsage>().Single(element => element.DeclaredName == name).Id;
+
+            var completeMass = new BudgetTools(complete).SumAttribute(GetSpacecraftId(complete), "mass");
+            var incompleteMass = new BudgetTools(incomplete).SumAttribute(GetSpacecraftId(incomplete), "mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(completeMass.Total, Is.EqualTo(13));
+                Assert.That(completeMass.TotalWithMargins, Is.EqualTo(13.5));
+                Assert.That(completeMass.MissingValues, Is.Null);
+                Assert.That(incompleteMass.Total, Is.EqualTo(8));
+                Assert.That(incompleteMass.TotalWithMargins, Is.EqualTo(8.5));
+                Assert.That(incompleteMass.MissingValues.Select(missingValue => missingValue.QualifiedName), Is.EqualTo(["Budget::spacecraft::wheel2", "Budget::spacecraft::battery"]));
+                Assert.That(() => new BudgetTools(incomplete).SumAttribute(GetPartId(incomplete, "battery"), "mass"),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("No part under 'battery' has a numeric value for 'mass'. These parts have no value yet: Budget::spacecraft::battery. "
+                        + "Use get_attribute_values to get the attribute names."));
             }
         }
 

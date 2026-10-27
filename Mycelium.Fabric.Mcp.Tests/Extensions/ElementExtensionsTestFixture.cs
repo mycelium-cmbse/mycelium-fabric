@@ -118,6 +118,32 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         }
 
         [Test]
+        public void VerifyCollectValues()
+        {
+            // wheel1 has a mass and a margin; wheel2, of the same type, and the battery, which declares its mass, have none
+            // yet; the harness has no mass at all and is not counted as missing.
+            var spacecraft = BudgetChangesHelper.CreateModel(withMissingValues: true, withPartOutside: false).Elements
+                .OfType<IPartUsage>()
+                .Single(part => part.DeclaredName == BudgetChangesHelper.SpacecraftName);
+
+            var spacecraftMass = spacecraft.CollectValues("mass");
+            var payloadMass = this.payloadSubsystem.CollectValues("mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IElement)null).CollectValues("mass"), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(spacecraftMass.Contributions.Select(contribution => (contribution.QualifiedName, contribution.Value, contribution.Margin)),
+                    Is.EqualTo(new (string, double, double?)[] { ("Budget::spacecraft::wheel1", 5, 10), ("Budget::spacecraft::computer", 3, null) }));
+                Assert.That(spacecraftMass.MissingValues.Select(missingValue => missingValue.QualifiedName), Is.EqualTo(["Budget::spacecraft::wheel2", "Budget::spacecraft::battery"]));
+                Assert.That(spacecraftMass.MissingValues[0].Types, Is.EqualTo(["Wheel"]));
+                Assert.That(spacecraftMass.MissingValues[1].Types, Is.Empty);
+                Assert.That(payloadMass.Contributions.Select(contribution => contribution.Margin), Is.All.Null);
+                Assert.That(payloadMass.MissingValues, Is.Empty);
+                Assert.That(this.payloadSubsystem.CollectValues("temperature").MissingValues, Is.Empty);
+            }
+        }
+
+        [Test]
         public void CollectContributions_OfPartsDeclaredInADefinition_CountsThemForEachTypedPart()
         {
             var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());

@@ -21,5 +21,14 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Unit">The unit of the total: the unit of the first contribution that has one, or <c>null</c>.</param>
     /// <param name="ContributorCount">The number of parts that contribute to the total.</param>
     /// <param name="Contributions">The value that each contributing part adds to the total, in its own unit.</param>
-    public sealed record SumResult(string Attribute, double Total, Unit Unit, int ContributorCount, IReadOnlyList<Contribution> Contributions);
+    /// <param name="TotalWithMargins">
+    /// The total increased by the margins that the model gives for the values (attribute <c>massMargin</c> in % for
+    /// <c>mass</c>), in the unit of the total and rounded to 3 decimals, or <c>null</c> when the model gives no margin.
+    /// </param>
+    /// <param name="MissingValues">
+    /// The parts that should contribute and have no value yet ("to be defined"), so that the total is incomplete, or
+    /// <c>null</c> when no value is missing.
+    /// </param>
+    public sealed record SumResult(string Attribute, double Total, Unit Unit, int ContributorCount, IReadOnlyList<Contribution> Contributions, double? TotalWithMargins = null,
+        IReadOnlyList<MissingValue> MissingValues = null);
 }

@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.Mcp.Requirements
 {
     using System;
+    using System.Collections.Generic;
 
     using Mycelium.Fabric.Mcp.Values;
 
@@ -62,6 +63,12 @@ namespace Mycelium.Fabric.Mcp.Requirements
         public double? Value { get; init; }
 
         /// <summary>
+        /// Gets the value without the margins that the model gives for the values of the parts (attribute <c>massMargin</c>
+        /// in % for <c>mass</c>), when <see cref="Value"/> includes some, or <c>null</c>.
+        /// </summary>
+        public double? ValueWithoutMargins { get; init; }
+
+        /// <summary>
         /// Gets the unit of <see cref="Value"/>, or <c>null</c> when it has none.
         /// </summary>
         public Unit Unit { get; init; }
@@ -79,5 +86,11 @@ namespace Mycelium.Fabric.Mcp.Requirements
         /// for example <c>assume subj.cargoMass &lt;= 500: 450 &lt;= 500; require subj.range &gt;= 600: 580 &lt; 600</c>.
         /// </summary>
         public string Explanation { get; init; }
+
+        /// <summary>
+        /// Gets what may make the outcome wrong although it was computed, for example parts next to the satisfying part,
+        /// outside it, whose values are not counted, or <c>null</c> when there is nothing to report.
+        /// </summary>
+        public IReadOnlyList<string> Warnings { get; init; }
     }
 }

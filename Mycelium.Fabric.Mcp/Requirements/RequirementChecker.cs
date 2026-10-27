@@ -47,6 +47,11 @@ namespace Mycelium.Fabric.Mcp.Requirements
         private const string UnreadableExpression = "(unreadable)";
 
         /// <summary>
+        /// The number of parts named in a warning, the others being counted.
+        /// </summary>
+        private const int NamedPartCount = 5;
+
+        /// <summary>
         /// The elements of the model.
         /// </summary>
         private readonly IReadOnlyList<IElement> elements;
@@ -246,16 +251,57 @@ namespace Mycelium.Fabric.Mcp.Requirements
                 .DistinctBy(rollUp => (rollUp.Part.Id, rollUp.Attribute))
                 .ToList();
 
-            var value = readValues.Count == 1 ? readValues[0].Total : null;
+            var readValue = readValues.Count == 1 ? readValues[0] : null;
+
+            var warnings = context.RollUps
+                .DistinctBy(rollUp => (rollUp.Part.Id, rollUp.Attribute))
+                .Select(WarnAboutPartsBeside)
+                .Where(warning => warning != null)
+                .ToList();
 
             return check with
             {
                 Status = status,
-                Value = value?.Number,
-                Unit = value?.Unit,
+                Value = readValue?.Total.Number,
+                ValueWithoutMargins = readValue?.TotalWithoutMargins?.Number,
+                Unit = readValue?.Total.Unit,
                 Gap = required.Count == 1 ? required[0].Gap : null,
-                Explanation = Explain(assumptions, required)
+                Explanation = Explain(assumptions, required),
+                Warnings = warnings.Count == 0 ? null : warnings
             };
+        }
+
+        /// <summary>
+        /// Warns when parts next to the part whose value was computed, outside it, carry the same attribute: they are most
+        /// likely parts of the system left outside it, whose values the check does not count.
+        /// </summary>
+        /// <param name="rollUp">The value computed for a part.</param>
+        /// <returns>The warning, or <c>null</c> when no part next to the part carries the attribute.</returns>
+        private static string WarnAboutPartsBeside(RollUp rollUp)
+        {
+            var parts = rollUp.Part.GetPartsBeside()
+                .Select(part => (Part: part, Contributions: part.CollectContributions(rollUp.Attribute)))
+                .Where(part => part.Contributions.Count > 0)
+                .ToList();
+
+            if (parts.Count == 0)
+            {
+                return null;
+            }
+
+            var total = NumberValue.Sum(parts.SelectMany(part => part.Contributions).Select(contribution => contribution.GetValueWithMargin()));
+            var amount = total.IsError ? string.Empty : $" ({total.Value})";
+
+            var names = string.Join(", ", parts.Take(NamedPartCount).Select(part => $"'{part.Part.DeclaredName}'"));
+            names = parts.Count > NamedPartCount ? $"{names} and {parts.Count - NamedPartCount} more" : names;
+
+            var satisfyingPart = rollUp.Part.DeclaredName;
+
+            return parts.Count == 1
+                ? $"{names} is next to '{satisfyingPart}' in the same package, not inside it, and carries {rollUp.Attribute}{amount}, which this check does not count. "
+                    + "If it belongs to the same system, put the parts of the system inside the part that holds it."
+                : $"{names} are next to '{satisfyingPart}' in the same package, not inside it, and carry {rollUp.Attribute}{amount}, which this check does not count. "
+                    + "If they belong to the same system, put the parts of the system inside the part that holds it.";
         }
 
         /// <summary>

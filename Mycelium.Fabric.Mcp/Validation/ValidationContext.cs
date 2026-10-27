@@ -13,6 +13,8 @@ namespace Mycelium.Fabric.Mcp.Validation
     using System.Collections.Generic;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Extensions;
+
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Requirements;
@@ -20,7 +22,7 @@ namespace Mycelium.Fabric.Mcp.Validation
 
     /// <summary>
     /// What the <see cref="IValidationRule"/>s need to know about the whole model to check one element: the types that are
-    /// specialized, the requirements that a satisfy link refers to, and the number of elements of each qualified name. Each one
+    /// specialized, the requirements that a satisfy link refers to, the features that satisfy them, and the number of elements of each qualified name. Each one
     /// is computed once per validation, when a rule first needs it, so that the rules that are not checked cost nothing.
     /// </summary>
     public sealed class ValidationContext
@@ -34,6 +36,11 @@ namespace Mycelium.Fabric.Mcp.Validation
         /// The <c>Id</c> of the requirements that a satisfy link, which is not negated, refers to.
         /// </summary>
         private readonly Lazy<HashSet<Guid>> satisfiedRequirementIds;
+
+        /// <summary>
+        /// The <c>Id</c> of the features that a satisfy link, which is not negated, names as satisfying its requirement.
+        /// </summary>
+        private readonly Lazy<HashSet<Guid>> satisfyingFeatureIds;
 
         /// <summary>
         /// The number of elements of each qualified name, for the elements whose qualified name can be computed.
@@ -63,6 +70,14 @@ namespace Mycelium.Fabric.Mcp.Validation
                 .Select(satisfy => satisfy.satisfiedRequirement)
                 .Where(requirement => requirement != null)
                 .Select(requirement => requirement.Id)
+                .ToHashSet());
+
+            this.satisfyingFeatureIds = new Lazy<HashSet<Guid>>(() => elements
+                .OfType<ISatisfyRequirementUsage>()
+                .Where(satisfy => !satisfy.IsNegated)
+                .Select(satisfy => satisfy.ResolveSatisfyingFeature())
+                .Where(feature => feature != null)
+                .Select(feature => feature.Id)
                 .ToHashSet());
 
             this.qualifiedNameCounts = new Lazy<Dictionary<string, int>>(() => elements
@@ -131,6 +146,21 @@ namespace Mycelium.Fabric.Mcp.Validation
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Tells whether an element satisfies a requirement: a satisfy link names it as the satisfying feature.
+        /// </summary>
+        /// <param name="element">The element, for example the part that holds the system.</param>
+        /// <returns><c>true</c> when a satisfy link, which is not negated, names the element.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="element"/> is <c>null</c>.
+        /// </exception>
+        public bool SatisfiesRequirements(IElement element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+
+            return this.satisfyingFeatureIds.Value.Contains(element.Id);
         }
 
         /// <summary>
