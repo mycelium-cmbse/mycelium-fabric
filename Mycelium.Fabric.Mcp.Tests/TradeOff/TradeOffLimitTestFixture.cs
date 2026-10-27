@@ -43,6 +43,42 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         }
 
         [Test]
+        public void VerifySymbolAndThreshold()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThan, 150, null, 0).Symbol, Is.EqualTo("<"));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 0).Symbol, Is.EqualTo("<="));
+                Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThan, 300, null, 0).Symbol, Is.EqualTo(">"));
+                Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 0).Symbol, Is.EqualTo(">="));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 20).Threshold, Is.EqualTo(125));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 155, null, 20).Threshold, Is.EqualTo(129.167));
+                Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 20).Threshold, Is.EqualTo(360));
+                Assert.That(new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 10).Threshold, Is.Null);
+            }
+        }
+
+        [Test]
+        public void VerifyGetComparedValuesAndDescribeBreach()
+        {
+            var massWithMargin = new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 20);
+            var capacityWithMargin = new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 20);
+            var capacity = new TradeOffLimit("capacity", TradeOffOperator.GreaterThan, 300, null, 0);
+            var powerBalance = new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 10);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(massWithMargin.GetComparedValues(125.8, 0), Is.EqualTo((150.96, 150d)));
+                Assert.That(capacityWithMargin.GetComparedValues(320, 0), Is.EqualTo((320d, 360d)));
+                Assert.That(powerBalance.GetComparedValues(200, 210), Is.EqualTo((220d, 210d)));
+                Assert.That(massWithMargin.DescribeBreach(150.96, 150), Is.EqualTo("mass * 1.2 = 150.96 > 150"));
+                Assert.That(capacityWithMargin.DescribeBreach(320, 360), Is.EqualTo("capacity = 320 < 300 * 1.2 = 360"));
+                Assert.That(capacity.DescribeBreach(250, 300), Is.EqualTo("capacity = 250 <= 300"));
+                Assert.That(powerBalance.DescribeBreach(220, 210), Is.EqualTo("power * 1.1 = 220 > powerOutput = 210"));
+            }
+        }
+
+        [Test]
         public void VerifyGetLinearForm()
         {
             using (Assert.EnterMultipleScope())

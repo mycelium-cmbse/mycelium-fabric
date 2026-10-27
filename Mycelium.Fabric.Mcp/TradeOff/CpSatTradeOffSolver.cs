@@ -188,9 +188,15 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     this.model.AddExactlyOne(literals);
                 }
 
-                foreach (var (decision, decisionIndex) in problem.Decisions.Select((decision, decisionIndex) => (decision, decisionIndex)).Where(pair => pair.decision.Required))
+                for (var decisionIndex = 0; decisionIndex < problem.Decisions.Count; decisionIndex++)
                 {
-                    this.model.Add(this.optionLiterals[decisionIndex][decision.CurrentOptionIndex] == 0);
+                    for (var optionIndex = 0; optionIndex < problem.Decisions[decisionIndex].Options.Count; optionIndex++)
+                    {
+                        if (!problem.IsAllowed(decisionIndex, optionIndex))
+                        {
+                            this.model.Add(this.optionLiterals[decisionIndex][optionIndex] == 0);
+                        }
+                    }
                 }
 
                 if (forcedVariant != null)
@@ -200,7 +206,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
                 foreach (var (limit, limitIndex) in problem.Limits.Select((limit, limitIndex) => (limit, limitIndex)))
                 {
-                    this.AddLimit(limit, $"constraint {limitIndex + 1}: {limit.Description}");
+                    this.AddLimit(limit, $"{limit.Name ?? $"constraint {limitIndex + 1}"}: {limit.Description}");
                 }
 
                 foreach (var (dependency, dependencyIndex) in problem.Dependencies.Select((dependency, dependencyIndex) => (dependency, dependencyIndex)))

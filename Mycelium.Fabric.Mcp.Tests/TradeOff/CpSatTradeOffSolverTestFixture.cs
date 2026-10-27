@@ -153,6 +153,24 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             }
         }
 
+        [Test]
+        public void VerifySolveWithExcludedVariants()
+        {
+            var problem = CreatePropulsionProblem(1) with { Excluded = [new TradeOffVariantReference(0, "electric")] };
+
+            var withoutElectric = this.solver.Solve(problem);
+            var compared = this.solver.Solve(problem with { CompareDecisionIndex = 0 });
+            var namedLimit = this.solver.Solve(problem with { Limits = [.. problem.Limits, Limit("mass", TradeOffOperator.LessThanOrEqual, 90) with { Name = "REQ-SYS-001" }] });
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(withoutElectric.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(withoutElectric.Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
+                Assert.That(compared.Alternatives.Select(alternative => alternative.Variant), Is.EqualTo(["thermal"]));
+                Assert.That(namedLimit.Alternatives.Single().Conflicts, Is.EqualTo(["REQ-SYS-001: mass <= 90"]));
+            }
+        }
+
         /// <summary>
         /// Creates the propulsion example: the best combination is electric (102 kg: large battery, 3 panels B, high power
         /// unit), then thermal (104 kg: small tank, 2 panels B).

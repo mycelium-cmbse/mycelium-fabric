@@ -106,6 +106,55 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         }
 
         [Test]
+        public void VerifyIsAllowed()
+        {
+            var withoutLight = this.problem with { Excluded = [new TradeOffVariantReference(0, "light")] };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.problem.IsAllowed(0, 0), Is.True);
+                Assert.That(this.problem.IsAllowed(0, 1), Is.True);
+                Assert.That(this.problem.IsAllowed(1, 0), Is.False);
+                Assert.That(this.problem.IsAllowed(1, 1), Is.True);
+                Assert.That(this.problem.IsExcluded(new TradeOffVariantReference(0, "light")), Is.False);
+                Assert.That(withoutLight.IsExcluded(new TradeOffVariantReference(0, "light")), Is.True);
+                Assert.That(withoutLight.IsAllowed(0, 1), Is.False);
+                Assert.That((withoutLight with { CompareDecisionIndex = 0 }).GetAlternatives(), Is.EqualTo([new TradeOffVariantReference(0, "current")]));
+            }
+        }
+
+        [Test]
+        public void VerifyEnumerateSelections()
+        {
+            var withoutLight = this.problem with { Excluded = [new TradeOffVariantReference(0, "light")] };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.problem.EnumerateSelections(10), Is.EqualTo(new[] { new[] { 0, 1 }, new[] { 1, 1 } }));
+                Assert.That(this.problem.EnumerateSelections(1), Is.Null);
+                Assert.That(withoutLight.EnumerateSelections(10), Is.EqualTo(new[] { new[] { 0, 1 } }));
+            }
+        }
+
+        [Test]
+        public void VerifyIsRespected()
+        {
+            var requires = new TradeOffDependency(TradeOffRuleKind.Requires, new TradeOffVariantReference(0, "light"), [new TradeOffVariantReference(1, "small")], "camera.light requires fuelTank.small");
+            var excludes = requires with { Kind = TradeOffRuleKind.Excludes };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.problem.IsRespected(null, [0, 0]), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.problem.IsRespected(requires, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(this.problem.IsRespected(requires, [0, 0]), Is.True);
+                Assert.That(this.problem.IsRespected(requires, [1, 0]), Is.False);
+                Assert.That(this.problem.IsRespected(requires, [1, 1]), Is.True);
+                Assert.That(this.problem.IsRespected(excludes, [1, 1]), Is.False);
+                Assert.That(this.problem.IsRespected(excludes, [1, 0]), Is.True);
+            }
+        }
+
+        [Test]
         public void VerifyCountChanges()
         {
             using (Assert.EnterMultipleScope())

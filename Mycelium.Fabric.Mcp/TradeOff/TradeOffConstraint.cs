@@ -18,6 +18,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     public sealed record TradeOffConstraint
     {
         /// <summary>
+        /// Gets the optional short name of the constraint, shown with it.
+        /// </summary>
+        [Description("Optional: a short name shown with the constraint, for example the requirement it comes from ('REQ-SYS-001').")]
+        public string Name { get; init; }
+
+        /// <summary>
         /// Gets the name of the attribute whose total is constrained.
         /// </summary>
         [Description("The attribute whose total under the root is constrained, for example 'mass' or 'power'.")]

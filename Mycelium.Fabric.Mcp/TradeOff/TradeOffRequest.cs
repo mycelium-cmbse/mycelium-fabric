@@ -25,6 +25,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// <param name="CompareBy">
     /// The name of the choice whose variants are compared, each with its own best combinations, or <c>null</c>.
     /// </param>
+    /// <param name="Excluded">
+    /// The variants that no combination takes, written <c>choice.variant</c>, or <c>null</c> for none: the user turns them off in
+    /// the view of the trade-off.
+    /// </param>
+    /// <param name="Title">The short title of the trade-off, shown by its view, or <c>null</c>.</param>
     public sealed record TradeOffRequest(Guid RootId, IReadOnlyList<TradeOffChoice> Choices, IReadOnlyList<TradeOffObjective> Objectives, IReadOnlyList<TradeOffConstraint> Constraints,
-        IReadOnlyList<TradeOffRule> Rules, int Count, string CompareBy);
+        IReadOnlyList<TradeOffRule> Rules, int Count, string CompareBy, IReadOnlyList<string> Excluded = null, string Title = null);
 }
