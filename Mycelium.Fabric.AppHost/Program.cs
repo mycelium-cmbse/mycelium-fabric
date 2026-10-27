@@ -24,17 +24,6 @@ namespace Mycelium.Fabric.AppHost
         /// Builds the local Aspire resource model and runs the application until host shutdown.
         /// </summary>
         /// <param name="args">The command-line arguments forwarded to the Aspire application builder.</param>
-        /// <remarks>
-        /// <para>
-        /// Declares PostgreSQL 18.6 and the <c>mycelium_functional_data</c> database. The concurrent server
-        /// receives <c>ConnectionStrings:functionaldata</c> and starts only after the database is healthy.
-        /// This configuration does not register a database client or implement application persistence.
-        /// </para>
-        /// <para>
-        /// The <c>FunctionalData:VolumeName</c> configuration key selects the named PostgreSQL volume,
-        /// defaulting to <c>mycelium-fabric-functionaldata-pg18</c>. Normal shutdown retains that volume.
-        /// </para>
-        /// </remarks>
         /// <exception cref="System.ArgumentNullException">
         /// <paramref name="args"/> is <see langword="null"/>.
         /// </exception>
