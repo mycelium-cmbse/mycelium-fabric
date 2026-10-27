@@ -74,7 +74,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
             var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
-                [new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150 } } }]);
+                [new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150 } } }], new Dictionary<string, Guid>());
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);
             var builder = new ConstraintDtoBuilder(dtos);

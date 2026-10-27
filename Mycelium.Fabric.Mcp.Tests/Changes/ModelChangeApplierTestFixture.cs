@@ -44,6 +44,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Core.Systems.Requirements;
     using SysML2.NET.Dal;
+    using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
 
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
@@ -142,7 +143,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             {
                 Assert.That(() => new ModelChangeApplier(null, deSerializer.Object), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => new ModelChangeApplier(serializer.Object, null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object).Apply([], []), Throws.Nothing);
+                Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object).Apply([], [], new Dictionary<string, Guid>()), Throws.Nothing);
 
                 serializer.Verify(mock => mock.Serialize(It.IsAny<IEnumerable<IIdentified>>(), SerializationModeKind.JSON, false, It.IsAny<Stream>(), It.IsAny<JsonWriterOptions>()),
                     Times.Once);
@@ -159,11 +160,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => this.applier.Apply(null, []), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => this.applier.Apply(dtos, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.Apply(null, []), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.Apply(dtos, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.applier.Apply(dtos, [], null), Throws.TypeOf<ArgumentNullException>());
             }
 
-            var result = this.applier.Apply(dtos,
+            var result = this.Apply(dtos,
             [
                 new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "mainCamera" } },
                 new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = CameraId.ToString(), Name = "lens" } },
@@ -189,7 +191,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         [Test]
         public void Apply_WithCreations_BuildsTheElementsAndTheirRelationships()
         {
-            var result = this.applier.Apply([],
+            var result = this.Apply([],
             [
                 new ModelChange { Identity = "spacecraft", Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } },
                 new ModelChange { Identity = "requirements", Payload = new ElementPayload { Type = "Package", Owner = "spacecraft", Name = "Requirements" } },
@@ -238,7 +240,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         [Test]
         public void Apply_WithUpdates_ReplacesTheChangedProperties()
         {
-            var creation = this.applier.Apply([],
+            var creation = this.Apply([],
             [
                 new ModelChange { Identity = "spacecraft", Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } },
                 new ModelChange { Identity = "Camera", Payload = new ElementPayload { Type = "PartDefinition", Owner = "spacecraft", Name = "Camera" } },
@@ -249,7 +251,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             var model = CommitRequestHelper.Apply([], creation.Value);
             var createdIds = model.Where(dto => dto.DeclaredName != null).ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
 
-            var result = this.applier.Apply(model,
+            var result = this.Apply(model,
             [
                 new ModelChange { Identity = "SmallCamera", Payload = new ElementPayload { Type = "PartDefinition", Owner = createdIds["Spacecraft"], Name = "SmallCamera" } },
                 new ModelChange { Identity = createdIds["camera"], Payload = new ElementPayload { Name = "mainCamera", Definition = "SmallCamera" } },
@@ -291,7 +293,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             var dtos = ReadSatelliteDtos();
             var opticalCameraId = dtos.Single(dto => dto.DeclaredName == "OpticalCamera").Id.ToString();
 
-            var refusal = this.applier.Apply(dtos, [new ModelChange { Identity = opticalCameraId }]);
+            var refusal = this.Apply(dtos, [new ModelChange { Identity = opticalCameraId }]);
 
             using (Assert.EnterMultipleScope())
             {
@@ -301,7 +303,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(refusal.FirstError.Description, Does.Contain("'EOSat1::Architecture::eosat1::payloadSubsystem::camera'"));
             }
 
-            var result = this.applier.Apply(dtos,
+            var result = this.Apply(dtos,
             [
                 new ModelChange { Identity = CameraId.ToString() },
                 new ModelChange { Identity = opticalCameraId },
@@ -336,7 +338,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             var relationshipId = dtos.OfType<DtoRelationship>().First().Id.ToString();
             var documentationId = dtos.First(dto => dto.GetType().Name == "Documentation").Id;
 
-            var result = this.applier.Apply(dtos,
+            var result = this.Apply(dtos,
             [
                 null,
                 new ModelChange { Payload = new ElementPayload { Type = "Package", Name = " " } },
@@ -397,9 +399,117 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         }
 
         [Test]
-        public void Apply_WithADuplicateNameOrATemporaryNameOfAnotherBatch_ExplainsTheProblem()
+        public void Apply_WithTheTemporaryNamesOfPreviousBatches_ResolvesThemAndRemembersTheNewOnes()
         {
-            var result = this.applier.Apply(ReadSatelliteDtos(),
+            var temporaryNames = new Dictionary<string, Guid>();
+
+            var first = this.applier.Apply([],
+            [
+                new ModelChange { Identity = "spacecraft", Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } },
+                new ModelChange { Identity = "Camera", Payload = new ElementPayload { Type = "PartDefinition", Owner = "spacecraft", Name = "Camera" } }
+            ], temporaryNames);
+
+            var model = CommitRequestHelper.Apply([], first.Value);
+            var namesAfterFirstBatch = temporaryNames.Keys.Order(StringComparer.Ordinal).ToList();
+
+            var second = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = "camera", Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "camera", Definition = "Camera" } }
+            ], temporaryNames);
+
+            var camera = Assemble(CommitRequestHelper.Apply(model, second.Value))[temporaryNames["camera"]];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(first.IsError, Is.False);
+                Assert.That(second.IsError, Is.False);
+                Assert.That(namesAfterFirstBatch, Is.EqualTo(["Camera", "spacecraft"]));
+                Assert.That(temporaryNames.Keys.Order(StringComparer.Ordinal), Is.EqualTo(["Camera", "camera", "spacecraft"]));
+                Assert.That(camera.qualifiedName, Is.EqualTo("Spacecraft::camera"));
+                Assert.That(camera.GetTypeNames(), Is.EqualTo(["Camera"]));
+            }
+        }
+
+        [Test]
+        public void Apply_WithATemporaryNameGivenAgain_DesignatesTheNewElement()
+        {
+            var temporaryNames = new Dictionary<string, Guid>();
+
+            var first = this.applier.Apply([],
+            [
+                new ModelChange { Identity = "pkg", Payload = new ElementPayload { Type = "Package", Name = "First" } }
+            ], temporaryNames);
+
+            var model = CommitRequestHelper.Apply([], first.Value);
+            var firstId = temporaryNames["pkg"];
+
+            var second = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = "pkg", Payload = new ElementPayload { Type = "Package", Name = "Second" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "pkg", Name = "x" } }
+            ], temporaryNames);
+
+            var elements = Assemble(CommitRequestHelper.Apply(model, second.Value));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(second.IsError, Is.False);
+                Assert.That(temporaryNames["pkg"], Is.Not.EqualTo(firstId));
+                Assert.That(elements[temporaryNames["pkg"]].qualifiedName, Is.EqualTo("Second"));
+                Assert.That(elements.Values.Single(element => element.DeclaredName == "x").qualifiedName, Is.EqualTo("Second::x"));
+            }
+        }
+
+        [Test]
+        public void Apply_WithARefusedBatch_LeavesTheTemporaryNamesUnchanged()
+        {
+            var oldId = Guid.NewGuid();
+            var temporaryNames = new Dictionary<string, Guid> { ["old"] = oldId };
+
+            var result = this.applier.Apply([],
+            [
+                new ModelChange { Identity = "kept", Payload = new ElementPayload { Type = "Package", Name = "Kept" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "missing", Name = "x" } }
+            ], temporaryNames);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(temporaryNames, Is.EqualTo(new Dictionary<string, Guid> { ["old"] = oldId }));
+            }
+        }
+
+        [Test]
+        public void Apply_WithTheTemporaryNameOfADeletedElement_ExplainsTheProblem()
+        {
+            var temporaryNames = new Dictionary<string, Guid>();
+
+            var creation = this.applier.Apply([],
+            [
+                new ModelChange { Identity = "tmp", Payload = new ElementPayload { Type = "Package", Name = "Tmp" } }
+            ], temporaryNames);
+
+            var model = CommitRequestHelper.Apply([], creation.Value);
+            var deletion = this.applier.Apply(model, [new ModelChange { Identity = temporaryNames["tmp"].ToString() }], temporaryNames);
+            model = CommitRequestHelper.Apply(model, deletion.Value);
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "tmp", Name = "x" } }
+            ], temporaryNames);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(deletion.IsError, Is.False);
+                Assert.That(result.IsError, Is.True);
+                Assert.That(result.Errors.Single().Description, Does.StartWith("Change 1 (create): The owner 'tmp' is the temporary name of an element that no longer exists."));
+            }
+        }
+
+        [Test]
+        public void Apply_WithADuplicateNameOrAnUnknownTemporaryName_ExplainsTheProblem()
+        {
+            var result = this.Apply(ReadSatelliteDtos(),
             [
                 new ModelChange { Identity = "optics", Payload = new ElementPayload { Type = "Package", Name = "Optics" } },
                 new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "optics", Name = "lens" } },
@@ -413,7 +523,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             {
                 Assert.That(problems, Has.Count.EqualTo(2));
                 Assert.That(problems[0], Is.EqualTo("Change 3 (create): The Package 'Optics' already has a member named 'lens', created by change 2 of this batch: give one of them another name."));
-                Assert.That(problems[1], Does.StartWith("Change 4 (create): The owner 'pkgTech'").And.Contain("only live in their own batch"));
+                Assert.That(problems[1], Does.StartWith("Change 4 (create): The owner 'pkgTech'").And.Contain("nor the temporary name of an element created so far"));
             }
         }
 
@@ -422,7 +532,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         {
             var dtos = ReadSatelliteDtos();
 
-            var result = this.applier.Apply(dtos,
+            var result = this.Apply(dtos,
             [
                 new ModelChange
                 {
@@ -479,7 +589,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             model.Single(dto => dto.Id == subjectTyping.TypedFeature).OwnedRelationship.Add(subjectTyping.Id);
             model.Add(subjectTyping);
 
-            var replacement = this.applier.Apply(model,
+            var replacement = this.Apply(model,
             [
                 new ModelChange { Identity = EclipseEnergyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 } } },
                 new ModelChange { Identity = cameraMass.Id.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "power", Operator = "<=", Limit = 60 } } }
@@ -501,8 +611,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             }
 
             // A part that satisfies a requirement can only be deleted with its satisfy link.
-            var refusal = this.applier.Apply(model, [new ModelChange { Identity = CameraId.ToString() }]);
-            var deletion = this.applier.Apply(model, [new ModelChange { Identity = satisfy.Id.ToString() }, new ModelChange { Identity = CameraId.ToString() }]);
+            var refusal = this.Apply(model, [new ModelChange { Identity = CameraId.ToString() }]);
+            var deletion = this.Apply(model, [new ModelChange { Identity = satisfy.Id.ToString() }, new ModelChange { Identity = CameraId.ToString() }]);
 
             using (Assert.EnterMultipleScope())
             {
@@ -517,14 +627,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithInvalidRequirementProperties_ReturnsEveryProblem()
         {
             var dtos = ReadSatelliteDtos();
-            var creation = this.applier.Apply(dtos, [new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString() } }]);
+            var creation = this.Apply(dtos, [new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId.ToString(), SatisfyingPart = CameraId.ToString() } }]);
             var satisfyDto = creation.Value.Change.Select(dataVersion => dataVersion.Payload).OfType<DtoSatisfyRequirementUsage>().Single();
             Assert.That(satisfyDto.DeclaredName, Is.Null);
 
             var model = CommitRequestHelper.Apply(dtos, creation.Value);
             var massBudget = MassBudgetId.ToString();
 
-            var result = this.applier.Apply(model,
+            var result = this.Apply(model,
             [
                 new ModelChange { Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId.ToString(), Name = "cameraMass", ReqId = "REQ-SYS-001", Text = "The camera shall weigh at most 40 kg." } },
                 new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150 } } },
@@ -579,7 +689,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             builder.Unit("Units", "kilogram", "kg");
             var kilogram = builder.Unit("SI", "kilogram", "kg");
 
-            var result = this.applier.Apply(dtos,
+            var result = this.Apply(dtos,
             [
                 new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "isRedundant", Value = true } },
                 new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "band", Value = "S-band" } },
@@ -647,7 +757,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             builder.Enumeration(RequirementsPackageId, "ModeB", "nominal");
             var massBudget = MassBudgetId.ToString();
 
-            var result = this.applier.Apply(dtos,
+            var result = this.Apply(dtos,
             [
                 new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "isRedundant", Value = true, Unit = "kg" } },
                 new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "length", Value = 3, Unit = "furlong" } },
@@ -700,7 +810,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithPortsAndConnectors_BuildsThemAsTheTextualNotation()
         {
             var dtos = ReadSatelliteDtos();
-            var result = this.applier.Apply(dtos, ConnectionChangesHelper.CreateChanges());
+            var result = this.Apply(dtos, ConnectionChangesHelper.CreateChanges());
 
             var elements = Assemble(CommitRequestHelper.Apply(dtos, result.Value));
             var newElements = elements.Values.Where(element => dtos.TrueForAll(dto => dto.Id != element.Id)).ToList();
@@ -748,14 +858,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithPortAndConnectorUpdatesAndDeletions_ChangesThemUnlessStillConnected()
         {
             var dtos = ReadSatelliteDtos();
-            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value);
+            var model = CommitRequestHelper.Apply(dtos, this.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value);
             var newIds = model.Where(dto => dtos.TrueForAll(original => original.Id != dto.Id)).ToList();
             var ids = newIds.Where(dto => dto.DeclaredName != null).ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
             var connectionId = newIds.Single(dto => dto.GetType().Name == "ConnectionUsage").Id;
             var bindingId = newIds.Single(dto => dto.GetType().Name == "BindingConnectorAsUsage").Id;
             var massMemoryId = "8f7fcbf6-8c6a-5546-1eb6-2e5adfe7a3d4";
 
-            var refusal = this.applier.Apply(model, [new ModelChange { Identity = ids["dataIn"] }, new ModelChange { Identity = massMemoryId }]);
+            var refusal = this.Apply(model, [new ModelChange { Identity = ids["dataIn"] }, new ModelChange { Identity = massMemoryId }]);
 
             string[] expectedProblems =
             [
@@ -765,7 +875,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             Assert.That(refusal.Errors.Select(error => error.Description), Is.EqualTo(expectedProblems));
 
-            var result = this.applier.Apply(model,
+            var result = this.Apply(model,
             [
                 new ModelChange { Identity = ids["imageLink"], Payload = new ElementPayload { Name = "cameraToComputer", Text = "Images and housekeeping." } },
                 new ModelChange { Identity = ids["dataIn"], Payload = new ElementPayload { Conjugated = false } },
@@ -801,7 +911,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithInvalidPortsAndConnectors_ReturnsEveryProblem()
         {
             var dtos = ReadSatelliteDtos();
-            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value);
+            var model = CommitRequestHelper.Apply(dtos, this.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value);
             var ids = model.Where(dto => dto.DeclaredName is "imageLink" or "dataOut" or "DataInterface").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
             var conjugatedPortDefinitionId = model.Single(dto => dto.GetType().Name == "ConjugatedPortDefinition").Id.ToString();
             var eosat1 = ConnectionChangesHelper.Eosat1Id;
@@ -809,7 +919,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             var opticalCamera = ConnectionChangesHelper.OpticalCameraId;
             IReadOnlyList<string> validEnds = [ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn];
 
-            var result = this.applier.Apply(model,
+            var result = this.Apply(model,
             [
                 new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Ends = [ConnectionChangesHelper.CameraDataOut] } },
                 new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = eosat1, Ends = ["payloadSubsystem.lens", "dataHandlingSubsystem"] } },
@@ -879,7 +989,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithRelationshipsBetweenExistingElements_BuildsThemAsTheTextualNotation()
         {
             var dtos = ReadSatelliteDtos();
-            var result = this.applier.Apply(dtos, RelationshipChangesHelper.CreateChanges());
+            var result = this.Apply(dtos, RelationshipChangesHelper.CreateChanges());
 
             var elements = Assemble(CommitRequestHelper.Apply(dtos, result.Value));
             var newElements = elements.Values.Where(element => dtos.TrueForAll(dto => dto.Id != element.Id)).ToList();
@@ -916,10 +1026,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithRelationshipUpdatesAndDeletions_ReplacesTheSpecializationUnlessStillReferenced()
         {
             var dtos = ReadSatelliteDtos();
-            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, RelationshipChangesHelper.CreateChanges()).Value);
+            var model = CommitRequestHelper.Apply(dtos, this.Apply(dtos, RelationshipChangesHelper.CreateChanges()).Value);
             var ids = model.Where(dto => dto.DeclaredName is "Equipment" or "Sensor" or "acquireImage").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
 
-            var refusal = this.applier.Apply(model, [new ModelChange { Identity = ids["Equipment"] }, new ModelChange { Identity = ids["acquireImage"] }]);
+            var refusal = this.Apply(model, [new ModelChange { Identity = ids["Equipment"] }, new ModelChange { Identity = ids["acquireImage"] }]);
 
             using (Assert.EnterMultipleScope())
             {
@@ -927,7 +1037,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(refusal.Errors.Select(error => error.Description), Has.All.Contains("is still referenced by"));
             }
 
-            var result = this.applier.Apply(model,
+            var result = this.Apply(model,
             [
                 new ModelChange { Identity = "instrument", Payload = new ElementPayload { Type = "PartDefinition", Owner = PackageId.ToString(), Name = "Instrument" } },
                 new ModelChange { Identity = ConnectionChangesHelper.OpticalCameraId, Payload = new ElementPayload { Specializes = "instrument" } },
@@ -950,13 +1060,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         public void Apply_WithInvalidRelationships_ReturnsEveryProblem()
         {
             var dtos = ReadSatelliteDtos();
-            var model = CommitRequestHelper.Apply(dtos, this.applier.Apply(dtos, RelationshipChangesHelper.CreateChanges()).Value);
+            var model = CommitRequestHelper.Apply(dtos, this.Apply(dtos, RelationshipChangesHelper.CreateChanges()).Value);
             var ids = model.Where(dto => dto.DeclaredName is "Equipment" or "Sensor" or "acquireImage" or "downlinkImage").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
             var opticalCamera = ConnectionChangesHelper.OpticalCameraId;
             var eosat1 = Eosat1Id.ToString();
             var camera = CameraId.ToString();
 
-            var result = this.applier.Apply(model,
+            var result = this.Apply(model,
             [
                 new ModelChange { Identity = opticalCamera, Payload = new ElementPayload { Specializes = camera } },
                 new ModelChange { Identity = camera, Payload = new ElementPayload { Specializes = camera } },
@@ -1003,6 +1113,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(result.IsError, Is.True);
                 Assert.That(problems, Is.EqualTo(expectedProblems));
             }
+        }
+
+        /// <summary>
+        /// Applies a batch with no temporary name from an earlier batch, which is how a batch is first applied.
+        /// </summary>
+        /// <param name="model">The DTOs of the model to modify.</param>
+        /// <param name="changes">The changes to apply.</param>
+        /// <returns>The result of the <see cref="ModelChangeApplier"/>.</returns>
+        private ErrorOr<CommitRequest> Apply(IReadOnlyCollection<DtoElement> model, IReadOnlyList<ModelChange> changes)
+        {
+            return this.applier.Apply(model, changes, new Dictionary<string, Guid>());
         }
 
         /// <summary>

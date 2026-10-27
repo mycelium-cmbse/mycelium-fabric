@@ -48,11 +48,13 @@ namespace Mycelium.Fabric.Mcp.Prompts
 
             Phase 2, once the user has approved the plan:
             5. Build with apply_changes, one batch per package or subsystem, until every section of the specification is
-               built. Refer to the elements created in the same batch by their temporary names. If a batch is refused,
+               built. Give each new element a temporary name, unique in the whole model, and refer to it by this name
+               in the same batch and in the next ones (or by its identifier from createdElements). If a batch is refused,
                correct every reported problem and send it again. After each applied batch, read newIssues: correct its
-               errors in the next batch; a warning can wait when a later batch of your plan resolves it. Temporary names
-               only live in their batch: later batches use the identifiers of createdElements. So send one batch at a
-               time, never several apply_changes calls at once, and wait for its result before the next batch.
+               errors in the next batch; a warning can wait when a later batch of your plan resolves it. Send one batch
+               at a time, never several apply_changes calls at once, and wait for its result before the next batch.
+               Phase 2 is one job: do not stop to report a partial result or to ask the user, and do not give up on a
+               refused batch. Fix it and go on until every section of the specification is built.
             6. Check with validate_model (severity Warning), then with check_requirements. Correct every error, and every
                warning that a missing element explains, then check again, until no error is left or for 3 rounds at most.
                A requirement that is not satisfied is not an error: report it, and never change a value of the
@@ -87,6 +89,8 @@ namespace Mycelium.Fabric.Mcp.Prompts
               the documentation of its source element ('Refines: HLR-R001.'), so that it is not lost.
 
             Modelling rules:
+            - Two members of a package cannot have the same name: name a usage differently from its definition
+              (part definition Camera, part usage camera), and a package differently from what it contains.
             - One part per unit: four wheels are four parts. Put the numeric values on the units or on their part
               definitions, never on a subsystem or on the system when its units carry the same quantity: sum_attribute
               computes the totals, and a value on a part hides the values of its sub-parts.

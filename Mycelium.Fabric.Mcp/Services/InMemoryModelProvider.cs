@@ -70,6 +70,12 @@ namespace Mycelium.Fabric.Mcp.Services
         private readonly Lock modelLock = new();
 
         /// <summary>
+        /// The <c>Id</c> of the elements created by the applied batches, indexed by their temporary name, so that a batch can
+        /// refer to an element of an earlier batch by the name that it was given. Guarded by <see cref="modelLock"/>.
+        /// </summary>
+        private Dictionary<string, Guid> temporaryNames = [];
+
+        /// <summary>
         /// The elements of the loaded model, indexed by their <c>Id</c>.
         /// </summary>
         private Dictionary<Guid, IElement> elementsById = [];
@@ -140,6 +146,7 @@ namespace Mycelium.Fabric.Mcp.Services
             {
                 this.SetModel(dtos);
                 this.headCommitId = Guid.Empty;
+                this.temporaryNames = [];
             }
         }
 
@@ -147,7 +154,7 @@ namespace Mycelium.Fabric.Mcp.Services
         /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into a
         /// <see cref="CommitRequest"/> by the <see cref="IModelChangeApplier"/>, then committed, and the created elements
         /// are read from the committed request. When one change is invalid, the model is left unchanged and the problems are
-        /// returned.
+        /// returned. The temporary names that an applied batch gives to its elements stay valid in the next batches.
         /// </summary>
         /// <param name="changes">The changes to apply, in order.</param>
         /// <returns>The <see cref="ApplyChangesResult"/> that tells whether the batch has been applied.</returns>
@@ -160,7 +167,8 @@ namespace Mycelium.Fabric.Mcp.Services
 
             lock (this.modelLock)
             {
-                var commitRequest = this.changeApplier.Apply(this.ElementDtos, changes);
+                var batchTemporaryNames = new Dictionary<string, Guid>(this.temporaryNames);
+                var commitRequest = this.changeApplier.Apply(this.ElementDtos, changes, batchTemporaryNames);
 
                 if (commitRequest.IsError)
                 {
@@ -169,6 +177,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
                 var previousElementIds = this.elementsById.Keys.ToHashSet();
                 this.ApplyCommit(commitRequest.Value);
+                this.temporaryNames = batchTemporaryNames;
 
                 return new ApplyChangesResult(this.GetCreatedElements(commitRequest.Value, previousElementIds), []);
             }

@@ -28,7 +28,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Gets the identity of the element: the element to update or delete, or the optional temporary name of the element
         /// to create.
         /// </summary>
-        [Description("Update and delete: the element, as an identifier (Id) or the temporary name of an element created by a previous change. Create, optional: a temporary name for the new element (for example 'camera'), unique in the batch, that later changes of the same batch use in identity, owner or definition.")]
+        [Description("Update and delete: the element, as an identifier (Id) or the temporary name of an element created by a previous change. Create, optional: a temporary name for the new element (for example 'camera'), unique in the batch, that later changes of this batch and of the next batches use in identity, owner or definition (the name of an earlier batch designates its last element).")]
         public string Identity { get; init; }
 
         /// <summary>
