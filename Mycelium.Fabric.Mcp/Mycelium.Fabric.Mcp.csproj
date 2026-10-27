@@ -17,13 +17,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="CsvHelper" Version="33.1.0" />
-      <PackageReference Include="ErrorOr" Version="2.1.1" />
-      <PackageReference Include="Google.OrTools" Version="9.15.6755" />
-      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
-      <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
-      <PackageReference Include="SysML2.NET.Dal" Version="0.24.1" />
-      <PackageReference Include="SysML2.NET.Serializer.Json" Version="0.24.1" />
+      <PackageReference Include="CsvHelper" />
+      <PackageReference Include="ErrorOr" />
+      <PackageReference Include="Google.OrTools" />
+      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+      <PackageReference Include="ModelContextProtocol" />
+      <PackageReference Include="SysML2.NET.Dal" />
+      <PackageReference Include="SysML2.NET.Serializer.Json" />
     </ItemGroup>
 
 </Project>
