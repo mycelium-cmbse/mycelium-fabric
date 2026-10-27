@@ -15,8 +15,10 @@ namespace Mycelium.Fabric.Mcp.Tools
     using System.Linq;
 
     using ModelContextProtocol;
+    using ModelContextProtocol.Extensions.Apps;
     using ModelContextProtocol.Server;
 
+    using Mycelium.Fabric.Mcp.Resources;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.TradeOff;
 
@@ -69,6 +71,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// Thrown when the request is invalid, with a message that tells the AI assistant what to correct.
         /// </exception>
         [McpServerTool(Name = "solve_trade_off", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+        [McpAppUi(ResourceUri = TradeOffResource.Uri)]
         [Description("Finds, with a constraint solver, the best combinations of equipment for what matters to the user (the lightest, the least power hungry...), "
             + "with or without budgets. Use it to compare options (which engine, which camera, how many solar panels) instead of searching yourself. "
             + "First read the current parts and values (sum_attribute, get_attribute_values) and ask the user for the candidate variants and their values. "
