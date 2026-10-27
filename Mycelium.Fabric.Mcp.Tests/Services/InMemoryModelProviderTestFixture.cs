@@ -56,6 +56,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         /// </summary>
         private static readonly Guid CameraId = Guid.Parse("558a0ae4-8585-66a3-9bc6-52322650941c");
 
+        /// <summary>
+        /// The <c>Id</c> of the <c>aocsSubsystem</c> part in <c>Satellite.json</c>.
+        /// </summary>
+        private static readonly Guid AocsSubsystemId = Guid.Parse("aed7ac47-7926-ea14-6637-ac50ef557797");
+
         private string dataDirectory;
 
         private Uri satelliteModelPath;
@@ -320,6 +325,46 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.ApplyChanges(afterLoad);
 
             Assert.That(seenNames, Is.EqualTo(new[] { Array.Empty<string>(), ["pkg"], ["pkg"], Array.Empty<string>() }));
+        }
+
+        [Test]
+        public void VerifyPreviewChanges()
+        {
+            var provider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            Assert.That(() => provider.PreviewChanges(null), Throws.TypeOf<ArgumentNullException>());
+
+            provider.LoadModel(this.satelliteModelPath);
+            var spare = provider.ApplyChanges([new ModelChange { Identity = "spare", Payload = new ElementPayload { Type = "Package", Name = "Spare" } }]).CreatedElements.Single();
+            var elements = provider.Elements;
+
+            var preview = provider.PreviewChanges(
+            [
+                new ModelChange { Identity = "starTracker", Payload = new ElementPayload { Type = "PartUsage", Owner = AocsSubsystemId.ToString(), Name = "starTracker" } },
+                new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "mainCamera" } },
+                new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "camera2" } },
+                new ModelChange { Identity = "spare" }
+            ]);
+
+            var invalidPreview = provider.PreviewChanges([new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "unknownOwner", Name = "lens" } }]);
+
+            // The preview gives its temporary names to no later batch.
+            var afterPreview = provider.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "starTracker", Name = "lens" } }]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(preview.Problems, Is.Empty);
+                Assert.That(preview.CreatedElements.Select(created => created.QualifiedName), Is.EqualTo(["EOSat1::Architecture::eosat1::aocsSubsystem::starTracker"]));
+                Assert.That(preview.ModifiedElements, Is.EqualTo(new[] { new ChangedElement(CameraId, "EOSat1::Architecture::eosat1::payloadSubsystem::camera2", "PartUsage") }));
+                Assert.That(preview.DeletedElements, Is.EqualTo(new[] { new ChangedElement(spare.Id, "Spare", "Package") }));
+                Assert.That(preview.Elements.Any(element => element.Id == spare.Id), Is.False);
+                Assert.That(invalidPreview.IsValid, Is.False);
+                Assert.That(invalidPreview.Problems.Single(), Does.StartWith("Change 1 (create)"));
+                Assert.That(invalidPreview.Elements, Is.Empty);
+                Assert.That(provider.Elements, Is.SameAs(elements));
+                Assert.That(provider.GetElementById(CameraId).DeclaredName, Is.EqualTo("camera"));
+                Assert.That(provider.GetElementById(spare.Id), Is.Not.Null);
+                Assert.That(afterPreview.Applied, Is.False);
+            }
         }
 
         [Test]

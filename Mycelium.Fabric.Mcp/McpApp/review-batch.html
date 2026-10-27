@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch review</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="mcp">
+    <div class="ap-h">
+        <div>
+            <div class="ap-t">Batch review</div>
+            <div class="ap-s" id="target_state">Loading the batch…</div>
+        </div>
+        <div class="ap-c" id="pills"></div>
+    </div>
+
+    <div class="seg">
+        <button class="on" data-t="chg">Changes</button>
+        <button data-t="chk">Checks <span class="cnt warn" id="check_count" hidden></span></button>
+    </div>
+    <div class="segp on" data-p="chg">
+        <div class="chg" id="changes"></div>
+        <div class="impact" id="impacts" hidden></div>
+    </div>
+    <div class="segp" data-p="chk">
+        <div class="chk-list" id="checks"></div>
+    </div>
+
+    <div class="ap-f">
+        <div id="note" hidden></div>
+        <div id="comment_zone" class="full">
+            <textarea id="comment1" placeholder="Comment for the assistant (optional)"></textarea>
+        </div>
+        <div id="button_zone" class="acts">
+            <button class="btn pri" id="btn_apply">
+                <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                Apply as 1 commit
+            </button>
+            <button class="btn danger" id="btn_cancel">Reject</button>
+        </div>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>

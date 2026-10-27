@@ -18,6 +18,7 @@
         <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
         <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
         <PackageVersion Include="ModelContextProtocol" Version="2.3.0" />
+        <PackageVersion Include="ModelContextProtocol.Extensions.Apps" Version="2.3.0" />
         <PackageVersion Include="SysML2.NET.Dal" Version="0.25.0" />
         <PackageVersion Include="SysML2.NET.Serializer.Json" Version="0.25.0" />
         <PackageVersion Include="SysML2.NET.Serializer.MessagePack" Version="0.25.0" />

@@ -53,6 +53,8 @@ namespace Mycelium.Fabric.Mcp.Prompts
                correct every reported problem and send it again. After each applied batch, read newIssues: correct its
                errors in the next batch; a warning can wait when a later batch of your plan resolves it. Send one batch
                at a time, never several apply_changes calls at once, and wait for its result before the next batch.
+               When apply_changes answers that the batch waits for the decision of the user, stop and wait for the user's
+               message: it tells whether the batch has been applied, with the identifiers, or rejected, with a comment.
                Phase 2 is one job: do not stop to report a partial result or to ask the user, and do not give up on a
                refused batch. Fix it and go on until every section of the specification is built.
             6. Check with validate_model (severity Warning), then with check_requirements. Correct every error, and every

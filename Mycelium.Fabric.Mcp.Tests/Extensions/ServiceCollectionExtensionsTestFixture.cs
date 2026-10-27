@@ -78,6 +78,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var documentReaderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDocumentReader)).ToList();
             var toolRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerTool)).ToList();
             var promptRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerPrompt)).ToList();
+            var resourceRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerResource)).ToList();
+            var pendingBatchStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IPendingBatchStore)).ToList();
+            var appHostDetectorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IAppHostDetector)).ToList();
 
             using (Assert.EnterMultipleScope())
             {
@@ -111,8 +114,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(documentParserRegistrations.Select(descriptor => descriptor.Lifetime), Has.All.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(documentReaderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(documentReaderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(13));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(14));
                 Assert.That(promptRegistrations, Has.Count.EqualTo(2));
+                Assert.That(resourceRegistrations, Has.Count.EqualTo(1));
+                Assert.That(pendingBatchStoreRegistrations, Has.Count.EqualTo(1));
+                Assert.That(pendingBatchStoreRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(pendingBatchStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(PendingBatchStore)));
+                Assert.That(appHostDetectorRegistrations, Has.Count.EqualTo(1));
+                Assert.That(appHostDetectorRegistrations[0].ImplementationType, Is.EqualTo(typeof(AppHostDetector)));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
