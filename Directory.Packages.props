@@ -9,6 +9,7 @@
 
     <!-- No deliberately floored packages. -->
     <ItemGroup>
+        <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.2" />
         <PackageVersion Include="Carter" Version="10.0.0" />
         <PackageVersion Include="CsvHelper" Version="33.1.0" />
         <PackageVersion Include="ErrorOr" Version="2.1.1" />
