@@ -36,10 +36,105 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// The unit in which the values and the totals of each attribute are expressed, by attribute name, or <c>null</c> when no
     /// attribute has a unit.
     /// </param>
+    /// <param name="Excluded">The variants that no combination takes, or <c>null</c> for none.</param>
     public sealed record TradeOffProblem(IReadOnlyList<TradeOffDecision> Decisions, IReadOnlyDictionary<string, double> FixedTotals, IReadOnlyList<TradeOffObjective> Objectives,
         IReadOnlyList<TradeOffLimit> Limits, IReadOnlyList<TradeOffDependency> Dependencies, int Count, int? CompareDecisionIndex,
-        IReadOnlyDictionary<string, Unit> AttributeUnits = null)
+        IReadOnlyDictionary<string, Unit> AttributeUnits = null, IReadOnlyList<TradeOffVariantReference> Excluded = null)
     {
+        /// <summary>
+        /// Tells whether a combination may take an option: its variant is not turned off, and it is not the absence of a
+        /// required equipment.
+        /// </summary>
+        /// <param name="decisionIndex">The index of the decision.</param>
+        /// <param name="optionIndex">The index of the option in the decision.</param>
+        /// <returns><c>true</c> when the option may be taken.</returns>
+        public bool IsAllowed(int decisionIndex, int optionIndex)
+        {
+            var decision = this.Decisions[decisionIndex];
+            var option = decision.Options[optionIndex];
+
+            return !(decision.Required && option.IsCurrent) && !this.IsExcluded(new TradeOffVariantReference(decisionIndex, option.Variant));
+        }
+
+        /// <summary>
+        /// Tells whether a variant is turned off.
+        /// </summary>
+        /// <param name="reference">The <see cref="TradeOffVariantReference"/> of the variant.</param>
+        /// <returns><c>true</c> when no combination may take the variant.</returns>
+        public bool IsExcluded(TradeOffVariantReference reference)
+        {
+            return this.Excluded?.Contains(reference) == true;
+        }
+
+        /// <summary>
+        /// Lists every combination that takes allowed options only, in the order of the decisions and of their options, when
+        /// there are not more than <paramref name="maximum"/> of them.
+        /// </summary>
+        /// <param name="maximum">The largest number of combinations to list.</param>
+        /// <returns>The selection of each combination, or <c>null</c> when there are more than <paramref name="maximum"/>.</returns>
+        public IReadOnlyList<IReadOnlyList<int>> EnumerateSelections(int maximum)
+        {
+            var allowedOptions = this.Decisions
+                .Select((decision, decisionIndex) => Enumerable.Range(0, decision.Options.Count).Where(optionIndex => this.IsAllowed(decisionIndex, optionIndex)).ToList())
+                .ToList();
+
+            long count = 1;
+
+            foreach (var options in allowedOptions)
+            {
+                count *= options.Count;
+
+                if (count > maximum)
+                {
+                    return null;
+                }
+            }
+
+            IEnumerable<IReadOnlyList<int>> selections = [[]];
+
+            foreach (var options in allowedOptions)
+            {
+                selections = selections.SelectMany(selection => options.Select(optionIndex => (IReadOnlyList<int>)[.. selection, optionIndex])).ToList();
+            }
+
+            return [.. selections];
+        }
+
+        /// <summary>
+        /// Tells whether a selection respects a dependency.
+        /// </summary>
+        /// <param name="dependency">The <see cref="TradeOffDependency"/> to check.</param>
+        /// <param name="selection">The index of the selected option of each decision.</param>
+        /// <returns><c>true</c> when the dependency is respected.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="dependency"/> or <paramref name="selection"/> is <c>null</c>.
+        /// </exception>
+        public bool IsRespected(TradeOffDependency dependency, IReadOnlyList<int> selection)
+        {
+            ArgumentNullException.ThrowIfNull(dependency);
+            ArgumentNullException.ThrowIfNull(selection);
+
+            if (!this.Takes(dependency.If, selection))
+            {
+                return true;
+            }
+
+            return dependency.Kind == TradeOffRuleKind.Requires
+                ? dependency.Then.Any(reference => this.Takes(reference, selection))
+                : !dependency.Then.Any(reference => this.Takes(reference, selection));
+        }
+
+        /// <summary>
+        /// Tells whether a selection takes a variant.
+        /// </summary>
+        /// <param name="reference">The <see cref="TradeOffVariantReference"/> of the variant.</param>
+        /// <param name="selection">The index of the selected option of each decision.</param>
+        /// <returns><c>true</c> when the selected option of the decision is of this variant.</returns>
+        private bool Takes(TradeOffVariantReference reference, IReadOnlyList<int> selection)
+        {
+            return this.Decisions[reference.DecisionIndex].Options[selection[reference.DecisionIndex]].Variant == reference.Variant;
+        }
+
         /// <summary>
         /// Gets the unit in which the totals and the values of an attribute are expressed.
         /// </summary>
@@ -71,6 +166,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     .Select(option => option.Variant)
                     .Distinct()
                     .Select(variant => new TradeOffVariantReference(decisionIndex, variant))
+                    .Where(reference => !this.IsExcluded(reference))
             ];
         }
 
