@@ -10,8 +10,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.Mcp.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.AppHost", "Mycelium.Fabric.AppHost\Mycelium.Fabric.AppHost.csproj", "{B75594C4-B28D-4C71-8CAC-95204B600BA9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mycelium.Fabric.AppHost.Tests", "Mycelium.Fabric.AppHost.Tests\Mycelium.Fabric.AppHost.Tests.csproj", "{D03B754A-6A4E-489F-94A2-27AD66A96AD8}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,10 +36,6 @@ Global
 		{B75594C4-B28D-4C71-8CAC-95204B600BA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B75594C4-B28D-4C71-8CAC-95204B600BA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B75594C4-B28D-4C71-8CAC-95204B600BA9}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D03B754A-6A4E-489F-94A2-27AD66A96AD8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D03B754A-6A4E-489F-94A2-27AD66A96AD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D03B754A-6A4E-489F-94A2-27AD66A96AD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D03B754A-6A4E-489F-94A2-27AD66A96AD8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

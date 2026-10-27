@@ -9,12 +9,15 @@
 
 namespace Mycelium.Fabric.AppHost
 {
+    using System.Diagnostics.CodeAnalysis;
+
     using Aspire.Hosting;
     using Aspire.Hosting.ApplicationModel;
 
     /// <summary>
     /// Defines and runs the local PostgreSQL and concurrent-server environment.
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public static class Program
     {
         /// <summary>
