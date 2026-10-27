@@ -15,6 +15,8 @@
         <IsPackable>false</IsPackable>
         <PreserveCompilationContext>true</PreserveCompilationContext>
         <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
+        <!-- The MCP Apps of the C# SDK are experimental (MCPEXP003): the tests build the capabilities of a host that shows them. -->
+        <NoWarn>$(NoWarn);MCPEXP003</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
