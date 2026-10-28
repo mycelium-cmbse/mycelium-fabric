@@ -24,6 +24,7 @@
     <ItemGroup>
         <PackageReference Include="Carter" />
         <PackageReference Include="ErrorOr" />
+        <PackageReference Include="MessagePack" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />
         <PackageReference Include="SysML2.NET.Serializer.Json" />
         <PackageReference Include="SysML2.NET.Serializer.MessagePack" />
