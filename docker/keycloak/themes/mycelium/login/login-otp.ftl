@@ -19,7 +19,7 @@
                                     onclick="toggleOTP(${otpCredential?index}, '${otpCredential.id}')">
                                 <span class="${properties.kcLoginOTPListItemHeaderClass!}">
                                     <span class="${properties.kcLoginOTPListItemIconBodyClass!}">
-                                      <i class="${properties.kcLoginOTPListItemIconClass!}" aria-hidden="true"></i>
+                                        <i class="${properties.kcLoginOTPListItemIconClass!}" aria-hidden="true"></i>
                                     </span>
                                     <span class="${properties.kcLoginOTPListItemTitleClass!}">${otpCredential.userLabel}</span>
                                 </span>
