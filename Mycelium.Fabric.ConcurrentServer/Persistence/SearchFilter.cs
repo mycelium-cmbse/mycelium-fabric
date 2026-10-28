@@ -20,9 +20,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
     /// <remarks>
     /// This is the <c>Constraint</c> of Systems Modeling API and Services 1.0 §7.1.4 (pp. 36–39): a
     /// <see cref="PrimitiveSearchFilter"/> is the property-operator-value tuple the specification
-    /// defines, and a <see cref="CompositeSearchFilter"/> joins two or more of them. It is declared here
-    /// rather than taken from <c>SysML2.NET.PIM.DTO</c> because <c>PrimitiveConstraint</c> does not
-    /// specialize <c>Constraint</c> there, which leaves that tree unable to hold a leaf.
+    /// defines, and a <see cref="CompositeSearchFilter"/> joins two or more of them. Fabric retains this
+    /// hierarchy for typed <see cref="ConstraintValue"/> values, guarded factory construction, nested
+    /// AND/OR composition and negation. SysML2.NET PIM constraints store primitive values as strings.
     /// </remarks>
     public abstract class SearchFilter
     {
