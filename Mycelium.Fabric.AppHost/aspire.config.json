@@ -1,5 +1,5 @@
 {
-  "appHost": {
-    "path": "Mycelium.Fabric.AppHost.csproj"
-  }
+    "appHost": {
+        "path": "Mycelium.Fabric.AppHost.csproj"
+    }
 }
