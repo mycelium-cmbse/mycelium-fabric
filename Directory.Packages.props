@@ -20,6 +20,7 @@
         <PackageVersion Include="SysML2.NET.Serializer.Json" Version="0.24.1" />
         <PackageVersion Include="SysML2.NET.Serializer.MessagePack" Version="0.24.1" />
 
+        <PackageVersion Include="AngleSharp" Version="1.8.6" />
         <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
         <PackageVersion Include="Moq" Version="4.20.72" />
