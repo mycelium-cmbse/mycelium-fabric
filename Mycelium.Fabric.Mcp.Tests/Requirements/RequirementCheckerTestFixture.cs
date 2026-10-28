@@ -153,6 +153,36 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 Assert.That(checks[7].Explanation, Is.EqualTo("420 >= 360"));
                 Assert.That(checks[8].Name, Is.EqualTo("untracedRequirement"));
                 Assert.That(checks[8].Explanation, Does.StartWith("The requirement has no required constraint").And.Contains("No part satisfies the requirement"));
+                Assert.That(checks.Select(check => check.ValueWithoutMargins), Is.All.Null);
+                Assert.That(checks.Select(check => check.Warnings), Is.All.Null);
+            }
+        }
+
+        [Test]
+        public void CheckRequirements_WithMarginsMissingValuesOrPartsOutside_DoesNotReportAWrongSatisfied()
+        {
+            static RequirementCheck Check(bool withMissingValues, bool withPartOutside) =>
+                new RequirementChecker(BudgetChangesHelper.CreateModel(withMissingValues, withPartOutside).Elements).CheckRequirements().Single();
+
+            var complete = Check(withMissingValues: false, withPartOutside: false);
+            var incomplete = Check(withMissingValues: true, withPartOutside: false);
+            var partOutside = Check(withMissingValues: false, withPartOutside: true);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(complete.Status, Is.EqualTo(RequirementStatus.Satisfied));
+                Assert.That(complete.Value, Is.EqualTo(13.5));
+                Assert.That(complete.ValueWithoutMargins, Is.EqualTo(13));
+                Assert.That(complete.Gap, Is.EqualTo(6.5));
+                Assert.That(complete.Explanation, Is.EqualTo("13.5 [kg] <= 20 [kg]"));
+                Assert.That(complete.Warnings, Is.Null);
+                Assert.That(incomplete.Status, Is.EqualTo(RequirementStatus.NotEvaluated));
+                Assert.That(incomplete.Value, Is.Null);
+                Assert.That(incomplete.Explanation, Is.EqualTo("The value of 'mass' is missing (to be defined) for 2 parts under 'Budget::spacecraft': "
+                    + "Budget::spacecraft::wheel2, Budget::spacecraft::battery. Give them a value to check the requirement."));
+                Assert.That(partOutside.Status, Is.EqualTo(RequirementStatus.Satisfied));
+                Assert.That(partOutside.Warnings, Is.EqualTo(["'solarArray' is next to 'spacecraft' in the same package, not inside it, and carries mass (4 [kg]), which this check does not count. "
+                    + "If it belongs to the same system, put the parts of the system inside the part that holds it."]));
             }
         }
 

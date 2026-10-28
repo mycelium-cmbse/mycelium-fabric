@@ -79,7 +79,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </exception>
         [McpServerTool(Name = "validate_model", ReadOnly = true)]
         [Description("Checks the model with deterministic rules and lists the issues found, the most serious first. Errors: the model is broken (missing element, element outside the containment tree, duplicate qualified name). "
-            + "Warnings: the model is probably incomplete (a part without type nor feature, a requirement that cannot be verified or that no part satisfies). Information: points to tidy up. "
+            + "Warnings: the model is probably incomplete (a part without type nor feature, a requirement that cannot be verified or that no part satisfies, a part left next to the part that satisfies the requirements instead of inside it). Information: points to tidy up. "
             + "Choose the rules to check when the user asks about some points only, for example requirement-without-id and requirement-without-constraint for the requirements. "
             + "The result lists every rule checked with its description and number of issues. Call it after building or changing the model, or when the user asks whether the model is valid, instead of judging the model yourself. "
             + "The results are paged: when nextOffset is not null, call the tool again with this offset to get the next page.")]

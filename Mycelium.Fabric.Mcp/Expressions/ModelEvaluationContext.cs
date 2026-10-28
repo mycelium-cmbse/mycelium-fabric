@@ -16,6 +16,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
     using ErrorOr;
 
     using Mycelium.Fabric.Mcp.Extensions;
+    using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.POCO.Core.Features;
@@ -190,14 +191,23 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
         /// <summary>
         /// Computes the value of an attribute of a part as <c>sum_attribute</c> does, with the simulated value of one part
-        /// if any, and records it.
+        /// if any, and records it. The value includes the margins that the model gives for the values of the parts; it is
+        /// not computed while the value of a part is missing ("to be defined"), since the total would be incomplete.
         /// </summary>
         /// <param name="part">The part.</param>
         /// <param name="attributeName">The name of the attribute.</param>
-        /// <returns>The value, or an error when no part under the part has a numeric value for it.</returns>
+        /// <returns>The value, or an error when a value is missing or when no part under the part has a numeric value for it.</returns>
         private ErrorOr<ModelValue> RollUp(IFeature part, string attributeName)
         {
-            var contributions = part.CollectContributions(attributeName)
+            var values = part.CollectValues(attributeName);
+
+            if (values.MissingValues.Count > 0)
+            {
+                return Error.Validation(description: $"The value of '{attributeName}' is missing (to be defined) for {values.MissingValues.Count} {(values.MissingValues.Count == 1 ? "part" : "parts")} under '{part.qualifiedName}': "
+                    + $"{MissingValue.Describe(values.MissingValues)}. Give {(values.MissingValues.Count == 1 ? "it" : "them")} a value to check the requirement.");
+            }
+
+            var contributions = values.Contributions
                 .Select(contribution => this.valueOverride != null && this.valueOverride.ElementId == contribution.Id && this.valueOverride.Attribute == attributeName
                     ? contribution with { Value = this.valueOverride.Value }
                     : contribution)
@@ -208,14 +218,18 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 return Error.Validation(description: $"No part under '{part.qualifiedName}' has a numeric value for '{attributeName}'.");
             }
 
-            var total = NumberValue.Sum(contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit)));
+            var total = NumberValue.Sum(contributions.Select(contribution => contribution.GetValueWithMargin()));
 
             if (total.IsError)
             {
                 return total.Errors;
             }
 
-            this.rollUps.Add(new RollUp(part, attributeName, total.Value, contributions));
+            var totalWithoutMargins = contributions.Exists(contribution => contribution.Margin != null)
+                ? NumberValue.Sum(contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit))).Value
+                : null;
+
+            this.rollUps.Add(new RollUp(part, attributeName, total.Value, contributions, totalWithoutMargins));
 
             return total.Value;
         }

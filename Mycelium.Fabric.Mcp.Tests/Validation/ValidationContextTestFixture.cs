@@ -126,6 +126,24 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
         }
 
         [Test]
+        public void VerifySatisfiesRequirements()
+        {
+            // The spacecraft satisfies the mass requirement; its wheel and the solar array next to it do not.
+            var elements = BudgetChangesHelper.CreateModel(withMissingValues: false, withPartOutside: true).Elements;
+            var context = new ValidationContext(elements);
+
+            bool SatisfiesRequirements(string name) => context.SatisfiesRequirements(elements.Single(element => element.DeclaredName == name));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => context.SatisfiesRequirements(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(SatisfiesRequirements(BudgetChangesHelper.SpacecraftName), Is.True);
+                Assert.That(SatisfiesRequirements("wheel1"), Is.False);
+                Assert.That(SatisfiesRequirements(BudgetChangesHelper.SolarArrayName), Is.False);
+            }
+        }
+
+        [Test]
         public void VerifyCountElementsNamed()
         {
             // Two root namespaces declare a Payload package with a camera part, and an Aocs package owns a camera too.

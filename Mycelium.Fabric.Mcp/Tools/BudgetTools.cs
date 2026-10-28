@@ -82,14 +82,19 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </summary>
         /// <param name="elementId">The <c>Id</c> of the root element of the sum.</param>
         /// <param name="attributeName">The declared name of the attribute to add up.</param>
-        /// <returns>The <see cref="SumResult"/> that gives the total and the contribution of each part.</returns>
+        /// <returns>
+        /// The <see cref="SumResult"/> that gives the total, the contribution of each part, the total with the margins of the
+        /// model, and the parts whose value is missing.
+        /// </returns>
         /// <exception cref="McpException">
         /// Thrown when <paramref name="attributeName"/> is <c>null</c>, empty or white space, when no element of the model
         /// has the given identifier, or when no part under the element has a numeric value for the attribute.
         /// </exception>
         [McpServerTool(Name = "sum_attribute", ReadOnly = true)]
-        [Description("Computes the sum of a numeric attribute (for example 'mass' or 'power') over an element and all its sub-parts, using the values of their definitions and converting their units. Gives the total and the contribution of each part. Use it for any mass or power budget instead of adding the values yourself.")]
-        [return: Description("The total and its unit, the number of contributing parts, and the contribution of each part with its identifier, qualified name, types, value and unit.")]
+        [Description("Computes the sum of a numeric attribute (for example 'mass' or 'power') over an element and all its sub-parts, using the values of their definitions and converting their units. Gives the total and the contribution of each part. "
+            + "Lists the parts whose value is missing (attribute declared without value, to be defined, or part of the same type as a contributing part without value): the total is then incomplete. "
+            + "When the model gives margins (an attribute named after the summed one with Margin, in %, for example massMargin = 10), also gives the total with margins. Use it for any mass or power budget instead of adding the values yourself.")]
+        [return: Description("The total and its unit, the number of contributing parts, the contribution of each part with its identifier, qualified name, types, value, unit and margin, the total with margins (null without margin), and the parts whose value is missing (null when none).")]
         public SumResult SumAttribute([Description("The identifier (Id, a GUID) of the root element of the sum, for example the satellite or a subsystem.")] Guid elementId,
             [Description("The name of the attribute to add up, for example 'mass' or 'power'.")] string attributeName)
         {
@@ -99,16 +104,20 @@ namespace Mycelium.Fabric.Mcp.Tools
             }
 
             var element = this.modelProvider.GetRequiredElementById(elementId);
-            var contributions = element.CollectContributions(attributeName);
+            var values = element.CollectValues(attributeName);
+            var contributions = values.Contributions;
 
             if (contributions.Count == 0)
             {
-                throw new McpException($"No part under '{element.DeclaredName}' has a numeric value for '{attributeName}'. Use get_attribute_values to get the attribute names.");
+                var missingValues = values.MissingValues.Count == 0 ? string.Empty : $" These parts have no value yet: {MissingValue.Describe(values.MissingValues)}.";
+
+                throw new McpException($"No part under '{element.DeclaredName}' has a numeric value for '{attributeName}'.{missingValues} Use get_attribute_values to get the attribute names.");
             }
 
             var total = SumContributions(contributions);
+            double? totalWithMargins = contributions.Any(contribution => contribution.Margin != null) ? SumValues(contributions.Select(contribution => contribution.GetValueWithMargin())).Number : null;
 
-            return new SumResult(attributeName, total.Number, total.Unit, contributions.Count, contributions);
+            return new SumResult(attributeName, total.Number, total.Unit, contributions.Count, contributions, totalWithMargins, values.MissingValues.Count == 0 ? null : values.MissingValues);
         }
 
         /// <summary>
@@ -155,7 +164,18 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <exception cref="McpException">Thrown when two contributions have units of different dimensions.</exception>
         private static NumberValue SumContributions(IEnumerable<Contribution> contributions)
         {
-            var total = NumberValue.Sum(contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit)));
+            return SumValues(contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit)));
+        }
+
+        /// <summary>
+        /// Adds values, converted to the unit of the first one that has a unit.
+        /// </summary>
+        /// <param name="values">The values.</param>
+        /// <returns>The total, rounded to 3 decimals.</returns>
+        /// <exception cref="McpException">Thrown when two values have units of different dimensions.</exception>
+        private static NumberValue SumValues(IEnumerable<NumberValue> values)
+        {
+            var total = NumberValue.Sum(values);
 
             return total.IsError ? throw new McpException(total.FirstError.Description) : total.Value;
         }

@@ -100,7 +100,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(solverRegistrations, Has.Count.EqualTo(1));
                 Assert.That(solverRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(solverRegistrations[0].ImplementationType, Is.EqualTo(typeof(CpSatTradeOffSolver)));
-                Assert.That(ruleRegistrations, Has.Count.EqualTo(8));
+                Assert.That(ruleRegistrations, Has.Count.EqualTo(9));
                 Assert.That(ruleRegistrations.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(ruleRegistrations.Select(descriptor => descriptor.ImplementationType), Is.Unique);
                 Assert.That(validatorRegistrations, Has.Count.EqualTo(1));
@@ -209,7 +209,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(result, Is.SameAs(services));
-                Assert.That(services, Has.Count.EqualTo(8));
+                Assert.That(services, Has.Count.EqualTo(9));
                 Assert.That(services.Select(descriptor => descriptor.ServiceType), Is.All.EqualTo(typeof(IValidationRule)));
                 Assert.That(services.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Scoped));
                 Assert.That(implementationTypes, Is.Unique);
