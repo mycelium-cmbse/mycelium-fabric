@@ -1,0 +1,59 @@
+{
+    "realm": "mycelium",
+    "displayName": "Mycelium",
+    "enabled": true,
+    "sslRequired": "none",
+    "loginTheme": "mycelium",
+    "emailTheme": "mycelium",
+    "registrationAllowed": true,
+    "resetPasswordAllowed": true,
+    "rememberMe": true,
+    "ssoSessionIdleTimeout": 1800,
+    "loginWithEmailAllowed": true,
+    "duplicateEmailsAllowed": false,
+    "smtpServer": {
+        "host": "mailpit",
+        "port": "1025",
+        "from": "no-reply@mycelium.example",
+        "fromDisplayName": "Mycelium"
+    },
+    "clients": [
+        {
+            "clientId": "bloom-web",
+            "name": "Mycelium Bloom",
+            "enabled": true,
+            "publicClient": true,
+            "protocol": "openid-connect",
+            "standardFlowEnabled": true,
+            "directAccessGrantsEnabled": false,
+            "baseUrl": "http://localhost:5209/",
+            "redirectUris": [
+                "http://localhost:5209/*"
+            ],
+            "webOrigins": [
+                "http://localhost:5209"
+            ],
+            "attributes": {
+                "pkce.code.challenge.method": "S256",
+                "post.logout.redirect.uris": "http://localhost:5209/*"
+            }
+        }
+    ],
+    "users": [
+        {
+            "username": "demo",
+            "email": "demo@example.org",
+            "firstName": "Demo",
+            "lastName": "User",
+            "enabled": true,
+            "emailVerified": true,
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "mycelium",
+                    "temporary": false
+                }
+            ]
+        }
+    ]
+}
