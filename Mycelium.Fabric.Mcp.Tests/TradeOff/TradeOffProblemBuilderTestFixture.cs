@@ -307,6 +307,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             var provider = new Mock<IModelProvider>();
             provider.Setup(modelProvider => modelProvider.GetRequiredElementById(root.Id)).Returns(root);
             provider.Setup(modelProvider => modelProvider.GetRequiredElementById(unit.Id)).Returns(unit);
+            provider.Setup(modelProvider => modelProvider.Elements).Returns([]);
 
             var massRequest = new TradeOffRequest(root.Id, [Choice(unit.Id, Variant("light", ("mass", 1)))], [new TradeOffObjective { Attribute = "mass" }], null, null, 1, null);
             var powerProblem = TradeOffProblemBuilder.Build(provider.Object, massRequest with { Objectives = [new TradeOffObjective { Attribute = "power" }] });

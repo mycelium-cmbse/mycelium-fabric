@@ -114,7 +114,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(Read(readExpressions["call with an argument that cannot be read"]), Is.EqualTo("error: The reference to 'x' does not resolve to an element of the model."));
                 Assert.That(Read(readExpressions["call of a function of the user"]),
                     Is.EqualTo("error: The function 'MyFunctions::max' is not a function of the SysML v2 library that the server evaluates. Supported functions: abs, sqrt, floor, round, min, max, sum, product, size, isEmpty, notEmpty, select, collect."));
-                Assert.That(Read(readExpressions["unit of the user"]), Is.EqualTo("error: 'Units::kilogram' is not a unit of the SysML v2 library (SI, USCustomaryUnits)."));
+                Assert.That(Read(readExpressions["unit of the user"]), Is.EqualTo("error: 'Units::kilogram' is not a unit: a unit is declared in a library package, such as SI."));
                 Assert.That(Read(readExpressions["body without parameter"]), Is.EqualTo("error: The body of select or collect needs a parameter and an expression, as in {in p; p.mass > 10}."));
                 Assert.That(Read(readExpressions["body without expression"]), Is.EqualTo("error: The body of select or collect needs a parameter and an expression, as in {in p; p.mass > 10}."));
                 Assert.That(Read(readExpressions["body whose expression cannot be read"]), Is.EqualTo("error: The reference to 'x' does not resolve to an element of the model."));

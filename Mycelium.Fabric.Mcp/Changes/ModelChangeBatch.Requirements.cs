@@ -96,7 +96,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         /// <param name="constraint">The constraint to check.</param>
         /// <exception cref="InvalidChangeException">Thrown when the constraint is incomplete or invalid.</exception>
-        private static void CheckConstraint(ConstraintPayload constraint)
+        private void CheckConstraint(ConstraintPayload constraint)
         {
             CheckPath(constraint.Attribute, "The attribute of the constraint is missing.");
 
@@ -127,7 +127,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 CheckPath(constraint.LimitAttribute, "The limit attribute of the constraint is empty.");
             }
 
-            CheckValue(constraint.Limit, constraint.Unit);
+            this.CheckValue(constraint.Limit, constraint.Unit);
 
             if (constraint.Limit is { Number: null } && constraint.Operator is not ("==" or "!="))
             {
@@ -153,7 +153,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("A margin in percent only applies to a positive limit: include the margin in the limit instead.");
             }
 
-            if (margin > 0 && constraint.Unit != null && Math.Abs(ParseUnit(constraint.Unit).Offset) > 0)
+            if (margin > 0 && constraint.Unit != null && Math.Abs(this.ParseUnit(constraint.Unit).Offset) > 0)
             {
                 throw new InvalidChangeException($"A margin in percent does not apply to a unit with an offset, such as {constraint.Unit}: include the margin in the limit instead.");
             }
@@ -211,7 +211,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (payload.Constraint != null)
             {
-                CheckConstraint(payload.Constraint);
+                this.CheckConstraint(payload.Constraint);
             }
         }
 

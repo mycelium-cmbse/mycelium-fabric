@@ -271,6 +271,48 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         }
 
         /// <summary>
+        /// Creates a library package at the top of a model, as <c>library package ProjectUnits { ... }</c> declares it.
+        /// </summary>
+        /// <param name="name">The name of the library package.</param>
+        /// <returns>The new library package.</returns>
+        public LibraryPackage Library(string name)
+        {
+            var library = this.Add(new LibraryPackage { DeclaredName = name });
+            this.AddOwnedRelationship(this.Add(new Namespace()), new OwningMembership(), library);
+
+            return library;
+        }
+
+        /// <summary>
+        /// Adds a unit to a package, with a conversion to another unit when values are given, as <c>attribute &lt;slug&gt; slug
+        /// { :&gt;&gt; unitConversion { :&gt;&gt; referenceUnit = kg; :&gt;&gt; conversionFactor = 14.5939; } }</c> declares it.
+        /// The features of the conversion have no name, as when they redefine the features of the library that is not in the
+        /// model.
+        /// </summary>
+        /// <param name="packageId">The <c>Id</c> of the package.</param>
+        /// <param name="name">The name of the unit.</param>
+        /// <param name="shortName">The short name of the unit.</param>
+        /// <param name="conversionValues">The values of the features of the conversion, for example the reference unit and the factor.</param>
+        /// <returns>The new attribute.</returns>
+        public AttributeUsage UnitIn(Guid packageId, string name, string shortName, params IElement[] conversionValues)
+        {
+            var unit = this.Add(new AttributeUsage { DeclaredName = name, DeclaredShortName = shortName });
+            this.AddOwnedRelationship(this.Get(packageId), new OwningMembership(), unit);
+
+            if (conversionValues.Length > 0)
+            {
+                var conversion = this.Attribute(unit.Id, null);
+
+                foreach (var value in conversionValues)
+                {
+                    this.Attribute(conversion.Id, null, value);
+                }
+            }
+
+            return unit;
+        }
+
+        /// <summary>
         /// Adds a unit to a package at the top of a model, as <c>attribute &lt;kg&gt; kilogram;</c> declares it in the <c>SI</c>
         /// package of the library.
         /// </summary>

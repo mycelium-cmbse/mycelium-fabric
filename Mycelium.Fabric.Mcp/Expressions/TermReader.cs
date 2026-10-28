@@ -184,35 +184,36 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 return Error.Validation(description: "The number with a unit has no unit.");
             }
 
-            var unit = ReadUnit(arguments[1]);
+            var unit = ReadUnit(arguments[1], []);
 
             return unit.IsError ? unit.Errors : Read(arguments[0]).Then(Term (value) => new QuantityTerm(value, unit.Value));
         }
 
         /// <summary>
-        /// Reads a unit: a reference to a unit of the SI library, by its short name (<c>kg</c>) or name (<c>kilogram</c>),
-        /// or a product, quotient or power of units (<c>m/s^2</c>). The reference is read from its name even when the
-        /// library is not in the model.
+        /// Reads a unit: a reference to a unit declared in a library of the model (see <see cref="LibraryUnits"/>), a
+        /// reference by its short name (<c>kg</c>) or name (<c>kilogram</c>) to a unit of the SI library that is not in the
+        /// model, or a product, quotient or power of units (<c>m/s^2</c>).
         /// </summary>
         /// <param name="expression">The expression of the unit.</param>
+        /// <param name="declarations">The <c>Id</c> of the units of a library being read, to detect a unit defined from itself.</param>
         /// <returns>The <see cref="Unit"/>, or an error when the unit is not known.</returns>
-        private static ErrorOr<Unit> ReadUnit(IElement expression)
+        internal static ErrorOr<Unit> ReadUnit(IElement expression, HashSet<Guid> declarations)
         {
-            if (expression is IFeatureReferenceExpression { referent: { } unitFeature } && !UnitCatalog.LibraryPackages.Contains(unitFeature.owningNamespace?.qualifiedName))
+            if (expression is IFeatureReferenceExpression { referent: { } unitFeature })
             {
-                return Error.Validation(description: $"'{unitFeature.qualifiedName}' is not a unit of the SysML v2 library ({string.Join(", ", UnitCatalog.LibraryPackages)}).");
+                return LibraryUnits.ReadDeclaration(unitFeature, declarations);
             }
 
             if (expression is IFeatureReferenceExpression reference)
             {
-                var name = reference.referent is { } libraryUnit ? libraryUnit.DeclaredShortName ?? libraryUnit.DeclaredName : GetMemberShortName(reference) ?? GetMemberName(reference);
+                var name = GetMemberShortName(reference) ?? GetMemberName(reference);
 
                 return UnitCatalog.TryParse(name, out var unit) ? unit : Error.Validation(description: $"The unit '{name}' is not known.");
             }
 
             if (expression is IOperatorExpression { Operator: "*" or "/" or "**" or "^" } operation && GetArguments(operation) is [var left, var right])
             {
-                var leftUnit = ReadUnit(left);
+                var leftUnit = ReadUnit(left, declarations);
 
                 if (leftUnit.IsError)
                 {
@@ -224,7 +225,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
                     return right is ILiteralInteger exponent ? leftUnit.Value.Power(exponent.Value) : Error.Validation(description: "The exponent of a unit must be an integer.");
                 }
 
-                return ReadUnit(right).Then(rightUnit => operation.Operator == "*" ? leftUnit.Value.Multiply(rightUnit) : leftUnit.Value.Divide(rightUnit));
+                return ReadUnit(right, declarations).Then(rightUnit => operation.Operator == "*" ? leftUnit.Value.Multiply(rightUnit) : leftUnit.Value.Divide(rightUnit));
             }
 
             return Error.Validation(description: "The unit of the number is not a reference to a unit.");
@@ -310,7 +311,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// </summary>
         /// <param name="expression">The feature reference or feature chain expression.</param>
         /// <returns>The name, or <c>null</c>.</returns>
-        private static string GetMemberName(IElement expression)
+        internal static string GetMemberName(IElement expression)
         {
             return GetReferenceMembership(expression)?.MemberName;
         }
