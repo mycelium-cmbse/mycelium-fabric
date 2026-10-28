@@ -85,7 +85,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="model"/>, <paramref name="changes"/> or <paramref name="temporaryNames"/> is <c>null</c>.
         /// </exception>
-        public ErrorOr<CommitRequest> Apply(IReadOnlyCollection<IElement> model, IReadOnlyList<ModelChange> changes, IDictionary<string, Guid> temporaryNames)
+        public ErrorOr<CommitRequest> Apply(IReadOnlyCollection<IElement> model, IReadOnlyList<ModelChange> changes, Dictionary<string, Guid> temporaryNames)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(changes);

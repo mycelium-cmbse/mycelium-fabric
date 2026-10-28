@@ -203,7 +203,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             IReadOnlyList<ModelChange> changes = [new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "mainCamera" } }];
 
             ErrorOr<CommitRequest> problem = Error.Validation(description: "Change 1 (update): a problem.");
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes, It.IsAny<IDictionary<string, Guid>>())).Returns(problem);
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes, It.IsAny<Dictionary<string, Guid>>())).Returns(problem);
 
             var refusal = this.modelProvider.ApplyChanges(changes);
 
@@ -225,7 +225,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             var subject = AddOwnedElement(commitRequest, lens, new DtoSubjectMembership(), new DtoReferenceUsage { DeclaredName = "subj" });
             AddOwnedElement(commitRequest, subject, new DtoFeatureMembership(), new DtoAttributeUsage { DeclaredName = "mass" });
 
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes, It.IsAny<IDictionary<string, Guid>>())).Returns(commitRequest);
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), changes, It.IsAny<Dictionary<string, Guid>>())).Returns(commitRequest);
 
             var result = this.modelProvider.ApplyChanges(changes);
             var renamedCamera = this.modelProvider.GetElementById(CameraId);
@@ -247,14 +247,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(camera.DeclaredName, Is.EqualTo("camera"));
             }
 
-            this.changeApplier.Verify(applier => applier.Apply(It.Is<IReadOnlyCollection<DtoElement>>(model => model.Count == 548), changes, It.IsAny<IDictionary<string, Guid>>()), Times.Exactly(2));
+            this.changeApplier.Verify(applier => applier.Apply(It.Is<IReadOnlyCollection<DtoElement>>(model => model.Count == 548), changes, It.IsAny<Dictionary<string, Guid>>()), Times.Exactly(2));
 
             // The ports and connectors are created elements, but not the conjugate of a port definition, nor the ends of a
             // connector; the ends of an interface definition are.
             this.modelProvider.LoadModel(this.satelliteModelPath);
             var connectionChanges = ConnectionChangesHelper.CreateChanges();
             var connectionCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(this.modelProvider.ElementDtos, connectionChanges, new Dictionary<string, Guid>()).Value;
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), connectionChanges, It.IsAny<IDictionary<string, Guid>>())).Returns(connectionCommitRequest);
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), connectionChanges, It.IsAny<Dictionary<string, Guid>>())).Returns(connectionCommitRequest);
 
             var connectionResult = this.modelProvider.ApplyChanges(connectionChanges);
             var createdElements = connectionResult.CreatedElements.ToDictionary(createdElement => createdElement.QualifiedName ?? createdElement.Type);
@@ -289,28 +289,28 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             ErrorOr<CommitRequest> problem = Error.Validation(description: "Change 1 (create): a problem.");
 
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), applied, It.IsAny<IDictionary<string, Guid>>()))
-                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, IDictionary<string, Guid>>((_, _, names) =>
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), applied, It.IsAny<Dictionary<string, Guid>>()))
+                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, Dictionary<string, Guid>>((_, _, names) =>
                 {
                     seenNames.Add([.. names.Keys]);
                     names["pkg"] = packageId;
                 })
                 .Returns(commitRequest);
 
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), refused, It.IsAny<IDictionary<string, Guid>>()))
-                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, IDictionary<string, Guid>>((_, _, names) =>
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), refused, It.IsAny<Dictionary<string, Guid>>()))
+                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, Dictionary<string, Guid>>((_, _, names) =>
                 {
                     seenNames.Add([.. names.Keys]);
                     names["refused"] = Guid.NewGuid();
                 })
                 .Returns(problem);
 
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), next, It.IsAny<IDictionary<string, Guid>>()))
-                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, IDictionary<string, Guid>>((_, _, names) => seenNames.Add([.. names.Keys]))
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), next, It.IsAny<Dictionary<string, Guid>>()))
+                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, Dictionary<string, Guid>>((_, _, names) => seenNames.Add([.. names.Keys]))
                 .Returns(commitRequest);
 
-            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), afterLoad, It.IsAny<IDictionary<string, Guid>>()))
-                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, IDictionary<string, Guid>>((_, _, names) => seenNames.Add([.. names.Keys]))
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), afterLoad, It.IsAny<Dictionary<string, Guid>>()))
+                .Callback<IReadOnlyCollection<DtoElement>, IReadOnlyList<ModelChange>, Dictionary<string, Guid>>((_, _, names) => seenNames.Add([.. names.Keys]))
                 .Returns(commitRequest);
 
             this.modelProvider.ApplyChanges(applied);

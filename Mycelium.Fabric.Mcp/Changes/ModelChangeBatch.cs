@@ -158,7 +158,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// already there: a name designates the last element that has received it.
         /// </summary>
         /// <param name="temporaryNames">The temporary names to complete, indexed by name.</param>
-        public void AddTemporaryNamesTo(IDictionary<string, Guid> temporaryNames)
+        public void AddTemporaryNamesTo(Dictionary<string, Guid> temporaryNames)
         {
             foreach (var (temporaryName, elementId) in this.temporaryNames)
             {
