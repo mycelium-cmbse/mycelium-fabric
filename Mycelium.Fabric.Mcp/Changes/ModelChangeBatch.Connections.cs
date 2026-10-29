@@ -13,12 +13,15 @@ namespace Mycelium.Fabric.Mcp.Changes
     using System.Collections.Generic;
     using System.Linq;
 
+    using SysML2.NET.Core.Core.Types;
     using SysML2.NET.Core.DTO.Core.Features;
+    using SysML2.NET.Core.DTO.Kernel.Connectors;
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
     using SysML2.NET.Core.DTO.Systems.Connections;
     using SysML2.NET.Core.DTO.Systems.Allocations;
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.DTO.Systems.Flows;
     using SysML2.NET.Core.DTO.Systems.Interfaces;
     using SysML2.NET.Core.DTO.Systems.Occurrences;
     using SysML2.NET.Core.DTO.Systems.Ports;
@@ -111,12 +114,28 @@ namespace Mycelium.Fabric.Mcp.Changes
                 return;
             }
 
-            feature.Direction = payload.Direction;
+            SetDirection(feature, payload.Direction);
 
             if (payload.IsEnd == true && owner is IConnectionDefinition)
             {
                 feature.IsEnd = true;
                 feature.IsConstant = true;
+            }
+        }
+
+        /// <summary>
+        /// Sets the direction of a feature. A usage with a direction, such as a parameter of an action
+        /// (<c>in currentStatus : VehicleStatus;</c>), is referential, as the textual notation makes it.
+        /// </summary>
+        /// <param name="feature">The feature.</param>
+        /// <param name="direction">The direction, or <c>null</c> for none.</param>
+        private static void SetDirection(IFeature feature, FeatureDirectionKind? direction)
+        {
+            feature.Direction = direction;
+
+            if (direction != null && feature is IUsage)
+            {
+                feature.IsComposite = false;
             }
         }
 
@@ -140,6 +159,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 IPortUsage => (definition is IPortDefinition, "a port definition"),
                 IInterfaceUsage => (definition is IInterfaceDefinition, "an interface definition"),
                 IConnectionUsage => (definition is IConnectionDefinition, "a connection definition"),
+                IFlowUsage => (definition is IFlowDefinition, "a flow definition"),
                 _ => (true, null)
             };
 
@@ -172,7 +192,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Creates a connector between two features: a <c>ConnectionUsage</c>, an <c>InterfaceUsage</c> between two ports, or
         /// a <c>BindingConnectorAsUsage</c>. Each end is a reference feature, owned through an <c>EndFeatureMembership</c>,
-        /// that subsets the connected feature, or a chain of features for a path such as <c>camera.dataOut</c>.
+        /// that subsets the connected feature, or a chain of features for a path such as <c>camera.dataOut</c>. The ends of a
+        /// <c>FlowUsage</c> are <c>FlowEnd</c>s, built by <see cref="AddFlowEnd"/>, and its item is a payload feature.
         /// </summary>
         /// <param name="connector">The new connector, which has no identifier yet.</param>
         /// <param name="change">The change that creates it, whose identity is an optional temporary name.</param>
@@ -181,11 +202,15 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Performed: null }
+            if (payload is not { Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Performed: null, Trigger: null, Guard: null, Effect: null }
                 || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
-                throw new InvalidChangeException("A connector takes two ends, and optionally an owner, a name, a definition and a text.");
+                throw new InvalidChangeException(connector is IFlowUsage
+                    ? "A FlowUsage takes two ends, and optionally an owner, a name, a definition, an item and a text."
+                    : "A connector takes two ends, and optionally an owner, a name, a definition and a text.");
             }
+
+            CheckBehaviourProperties(connector, payload);
 
             if (payload.Ends is not { Count: ConnectorEndCount })
             {
@@ -233,6 +258,9 @@ namespace Mycelium.Fabric.Mcp.Changes
                 }
             }
 
+            var isFlow = connector is IFlowUsage;
+            var item = isFlow ? this.CheckFlow(payload, ends) : null;
+
             this.AddOwnedMember(owner, connector, change.Identity);
 
             if (!string.IsNullOrWhiteSpace(payload.Text))
@@ -245,9 +273,21 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.AddTyping(connector, definition);
             }
 
+            if (item != null)
+            {
+                this.AddFlowItem(connector, item);
+            }
+
             foreach (var end in ends)
             {
-                this.AddEnd(connector, end);
+                if (isFlow)
+                {
+                    this.AddFlowEnd(connector, end);
+                }
+                else
+                {
+                    this.AddEnd(connector, end);
+                }
             }
         }
 
@@ -289,18 +329,39 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="features">The features of the path of the end, the connected feature being the last one.</param>
         private void AddEnd(IElement connector, List<IElement> features)
         {
-            var end = this.Add(new ReferenceUsage { IsEnd = true, IsConstant = connector is not (IBindingConnectorAsUsage or ISuccessionAsUsage) });
+            var end = this.Add(new ReferenceUsage { IsEnd = true, IsConstant = connector is not (IBindingConnectorAsUsage or ISuccession) });
             this.AddOwnedRelationship(connector, new EndFeatureMembership { Visibility = VisibilityKind.Public }, end);
+            this.AddReferenceSubsetting(end, features);
+        }
 
+        /// <summary>
+        /// Makes a feature reference the feature of a path, as an end of a connector does: a <c>ReferenceSubsetting</c> that
+        /// designates the feature, or that owns a feature chained through the features of a path such as
+        /// <c>camera.dataOut</c>.
+        /// </summary>
+        /// <param name="feature">The referencing feature.</param>
+        /// <param name="features">The features of the path, the referenced feature being the last one.</param>
+        private void AddReferenceSubsetting(IElement feature, IReadOnlyList<IElement> features)
+        {
             if (features.Count == 1)
             {
-                this.AddOwnedRelationship(end, new ReferenceSubsetting { ReferencedFeature = features[0].Id });
+                this.AddOwnedRelationship(feature, new ReferenceSubsetting { ReferencedFeature = features[0].Id });
                 return;
             }
 
             var chain = this.Add(new Feature());
-            this.AddOwnedRelationship(end, new ReferenceSubsetting { ReferencedFeature = chain.Id }, chain);
+            this.AddOwnedRelationship(feature, new ReferenceSubsetting { ReferencedFeature = chain.Id }, chain);
+            this.AddChainings(chain, features);
+        }
 
+        /// <summary>
+        /// Chains a feature through the features of a path, as <c>camera.dataOut</c> does: a <c>FeatureChaining</c> owned by
+        /// the chain for each feature, in order.
+        /// </summary>
+        /// <param name="chain">The chained feature.</param>
+        /// <param name="features">The features of the path.</param>
+        private void AddChainings(IElement chain, IEnumerable<IElement> features)
+        {
             foreach (var feature in features)
             {
                 this.AddOwnedRelationship(chain, new FeatureChaining { ChainingFeature = feature.Id });

@@ -74,19 +74,26 @@ namespace Mycelium.Fabric.Mcp.Prompts
             - Kinds: when the specification names the kinds of an element (kinds of stakeholders, of vehicles), each kind is
               a PartDefinition with specializes: the general one (GovernmentAgency specializes Stakeholder).
             - Phases: a StateUsage per phase, in the order of the specification, inside a StateDefinition of the mission.
+              Each change of phase is a TransitionUsage owned by the StateDefinition, with ends: [the phase it leaves, the
+              phase it enters]; when the specification names the event that ends a phase, that event is an ItemDefinition
+              and the trigger of the transition (a guard or an effect only when the specification gives one).
               Operations: an ActionUsage inside the StateUsage of each phase that performs it. When the operations of a
               phase come in sequence, a SuccessionAsUsage owned by the StateUsage links each operation to the next one
-              (ends: ['loadConsumablesAndPropellants', 'transferCrewToVehicle']). Functions: an ActionDefinition for the
-              top-level function, and an ActionUsage per function, inside the function that it decomposes; sub-functions
-              that the specification orders are linked by successions too.
+              (ends: ['loadConsumablesAndPropellants', 'transferCrewToVehicle']). What a state or mode does when it is
+              entered, while it is active or when it is left: an ActionUsage owned by it with stateAction Entry, Do or Exit.
+              Functions: an ActionDefinition for the top-level function, and an ActionUsage per function, inside the
+              function that it decomposes; sub-functions that the specification orders are linked by successions too. The
+              inputs and outputs of a function are its parameters: a ReferenceUsage with direction In or Out, typed by
+              their ItemDefinition; what passes from one function or component to another is a FlowUsage with item and
+              ends such as ['acquire.image', 'store.image'].
             - Logical components: a PartDefinition each, and a PartUsage in a logical architecture part. Each function that
               a component performs is a PerformActionUsage owned by its PartDefinition, with performed: the ActionUsage of
               the function.
             - Analyses: an AnalysisCaseDefinition each; calculations: a CalculationDefinition each; with their description.
             - A requirement satisfied by an operation, a function or an interface: a SatisfyRequirementUsage whose
               satisfyingPart is the ActionUsage or the InterfaceUsage.
-            - A relation that apply_changes cannot create yet, such as a refinement or a transition between phases, goes in
-              the documentation of its source element ('Refines: HLR-R001.'), so that it is not lost.
+            - A relation that apply_changes cannot create yet, such as a refinement, goes in the documentation of its source
+              element ('Refines: HLR-R001.'), so that it is not lost.
 
             Modelling rules:
             - Two members of a package cannot have the same name: name a usage differently from its definition
