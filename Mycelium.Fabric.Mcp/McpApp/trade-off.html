@@ -4,97 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trade-off</title>
-    <style>
-        body { font-family: var(--font-sans, "Segoe UI", Arial, sans-serif); margin: 0; padding: 12px; color: var(--color-text-primary, #1f2937);
-               background: var(--color-background-primary, #ffffff); }
-        h1 { font-size: 15px; margin: 0 0 8px; }
-        .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-        button { font: inherit; font-size: 13px; padding: 4px 10px; }
-        pre { font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow: auto; margin: 0;
-              border: 1px solid var(--color-border-primary, #d5dbe3); border-radius: 6px; padding: 8px; }
-        #log { color: var(--color-text-secondary, #5b6472); margin-bottom: 8px; }
-    </style>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="trade-off.css">
 </head>
 <body>
-<h1>Trade-off (temporary view: raw result)</h1>
-<div class="acts">
-    <button id="test_message">Test ui/message</button>
-    <button id="test_context">Test ui/update-model-context</button>
-    <button id="test_fullscreen">Test fullscreen</button>
+<div class="mcp tr">
+    <header class="tr-head">
+        <div class="tr-title" id="title">Waiting for the trade-off…</div>
+        <div class="tr-sub"><span id="subtitle"></span> <span id="busy" hidden>· Solving…</span></div>
+    </header>
+    <div class="tr-error" id="error" hidden></div>
+    <div class="tr-grid">
+        <section class="tr-card" id="setup">
+            <h2>Set-up</h2>
+            <div id="choices"></div>
+            <div id="objectives"></div>
+            <div id="constraints"></div>
+        </section>
+        <section class="tr-card">
+            <h2>Every combination</h2>
+            <div id="chart"></div>
+        </section>
+        <section class="tr-card">
+            <h2>Best options</h2>
+            <div id="options"></div>
+            <div id="excluded"></div>
+            <div class="tr-pick" id="pick" hidden></div>
+        </section>
+    </div>
 </div>
-<pre id="log">Waiting for the host…</pre>
-<pre id="result">Waiting for the result of solve_trade_off…</pre>
-<script>
-    // Temporary page of issue #67: it shows what the host sends and tests the messages that the real view will need.
-    let nextId = 1;
-    const pending = new Map();
-    const $ = id => document.getElementById(id);
-
-    function log(text) {
-        $("log").textContent += "\n" + text;
-    }
-
-    function request(method, params) {
-        const id = nextId++;
-        window.parent.postMessage({ jsonrpc: "2.0", id: id, method: method, params: params }, "*");
-        return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-    }
-
-    function notify(method, params) {
-        window.parent.postMessage({ jsonrpc: "2.0", method: method, params: params }, "*");
-    }
-
-    window.addEventListener("message", event => {
-        const message = event.data;
-        if (!message || message.jsonrpc !== "2.0") return;
-
-        if (message.id !== undefined && !message.method) {
-            const call = pending.get(message.id);
-            pending.delete(message.id);
-            if (call) message.error ? call.reject(message.error) : call.resolve(message.result);
-            return;
-        }
-
-        if (message.id !== undefined) {
-            window.parent.postMessage({ jsonrpc: "2.0", id: message.id, result: {} }, "*");
-        }
-
-        if (message.method === "ui/notifications/tool-result") {
-            const result = message.params ?? {};
-            const shown = result.structuredContent ?? JSON.parse(result.content?.[0]?.text ?? "null");
-            $("result").textContent = (result.structuredContent ? "structuredContent:\n" : "content[0].text:\n") + JSON.stringify(shown, null, 2);
-        }
-    });
-
-    async function test(label, method, params) {
-        try {
-            log(label + ": " + JSON.stringify(await request(method, params)));
-        } catch (error) {
-            log(label + " refused: " + JSON.stringify(error));
-        }
-    }
-
-    const text = "Test from the trade-off view: please answer 'received'.";
-    $("test_message").addEventListener("click", () => test("ui/message", "ui/message", { role: "user", content: [{ type: "text", text: text }] }));
-    $("test_context").addEventListener("click", () => test("ui/update-model-context", "ui/update-model-context", { content: [{ type: "text", text: text }] }));
-    $("test_fullscreen").addEventListener("click", () => test("ui/request-display-mode", "ui/request-display-mode", { mode: "fullscreen" }));
-
-    new ResizeObserver(() => notify("ui/notifications/size-changed", {
-        width: Math.ceil(window.innerWidth), height: Math.ceil(document.documentElement.scrollHeight)
-    })).observe(document.body);
-
-    request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "trade-off", version: "0.1.0" }, appCapabilities: {} })
-        .then(result => {
-            const context = result?.hostContext ?? {};
-            for (const [name, value] of Object.entries(context.styles?.variables ?? {})) {
-                if (value) document.documentElement.style.setProperty(name, value);
-            }
-            if (context.theme) document.documentElement.style.colorScheme = context.theme;
-            log("host: " + JSON.stringify(result?.hostInfo) + ", display modes: " + JSON.stringify(context.availableDisplayModes ?? null)
-                + ", capabilities: " + JSON.stringify(result?.hostCapabilities ?? null));
-            notify("ui/notifications/initialized", {});
-        })
-        .catch(error => log("ui/initialize refused: " + JSON.stringify(error)));
-</script>
+<script src="trade-off.js"></script>
 </body>
 </html>
