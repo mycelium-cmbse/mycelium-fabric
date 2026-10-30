@@ -39,7 +39,7 @@ jobs:
         run: |
           dotnet tool install --global dotnet-sonarscanner
           dotnet tool install --global dotnet-coverage
-          dotnet sonarscanner begin /k:"mycelium-cmbse_mycelium-fabric" /o:"mycelium-cmbse" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml
+          dotnet sonarscanner begin /k:"mycelium-cmbse_mycelium-fabric" /o:"mycelium-cmbse" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml /d:sonar.coverage.exclusions="**/McpApp/**"
 
       - name: Build
         run: dotnet build Mycelium.Fabric.sln --no-restore --no-incremental /p:ContinuousIntegrationBuild=true
