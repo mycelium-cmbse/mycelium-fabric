@@ -37,6 +37,41 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
     public abstract class ApiBase
     {
         /// <summary>
+        /// The log message template of the invocation of an operation that takes no identifier.
+        /// </summary>
+        protected const string InvokedLogTemplate = "{OperationId} invoked";
+
+        /// <summary>
+        /// The log message template of the invocation of an operation on a project.
+        /// </summary>
+        protected const string ProjectInvokedLogTemplate = "{OperationId} invoked for project {ProjectId}";
+
+        /// <summary>
+        /// The log message template of the invocation of an operation on a branch.
+        /// </summary>
+        protected const string BranchInvokedLogTemplate = "{OperationId} invoked for project {ProjectId} and branch {BranchId}";
+
+        /// <summary>
+        /// The log message template of the invocation of an operation on a commit.
+        /// </summary>
+        protected const string CommitInvokedLogTemplate = "{OperationId} invoked for project {ProjectId} and commit {CommitId}";
+
+        /// <summary>
+        /// The log message template of the invocation of an operation on a tag.
+        /// </summary>
+        protected const string TagInvokedLogTemplate = "{OperationId} invoked for project {ProjectId} and tag {TagId}";
+
+        /// <summary>
+        /// The log message template of the invocation of an operation on a query.
+        /// </summary>
+        protected const string QueryInvokedLogTemplate = "{OperationId} invoked for project {ProjectId} and query {QueryId}";
+
+        /// <summary>
+        /// The log message template of the invocation of an operation on an element.
+        /// </summary>
+        protected const string ElementInvokedLogTemplate = "{OperationId} invoked for project {ProjectId}, commit {CommitId} and element {ElementId}";
+
+        /// <summary>
         /// The RFC 7240 §3 header acknowledging the preferences honoured.
         /// </summary>
         private const string PreferenceAppliedHeader = "Preference-Applied";

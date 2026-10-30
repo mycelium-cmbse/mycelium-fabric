@@ -56,7 +56,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked", operationId);
+                logger.LogInformation(InvokedLogTemplate, operationId);
             }
 
             return NotYetImplemented(context, operationId);
@@ -83,7 +83,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked", operationId);
+                logger.LogInformation(InvokedLogTemplate, operationId);
             }
 
             return NotYetImplemented(context, operationId);

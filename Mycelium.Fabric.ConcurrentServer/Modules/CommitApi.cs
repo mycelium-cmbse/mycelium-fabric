@@ -59,7 +59,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
             if (versioningService == null)
@@ -103,7 +103,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
             if (versioningService == null)
@@ -164,7 +164,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId} and commit {CommitId}", operationId, projectId, commitId);
+                logger.LogInformation(CommitInvokedLogTemplate, operationId, projectId, commitId);
             }
 
             if (versioningService == null)
@@ -210,7 +210,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId} and commit {CommitId}", operationId, projectId, commitId);
+                logger.LogInformation(CommitInvokedLogTemplate, operationId, projectId, commitId);
             }
 
             if (versioningService == null)

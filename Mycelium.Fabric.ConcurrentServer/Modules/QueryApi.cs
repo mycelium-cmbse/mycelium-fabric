@@ -55,7 +55,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
             if (queryService == null)
@@ -99,7 +99,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
             if (queryService == null)
@@ -150,7 +150,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
+                logger.LogInformation(QueryInvokedLogTemplate, operationId, projectId, queryId);
             }
 
             if (queryService == null)
@@ -197,7 +197,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
+                logger.LogInformation(QueryInvokedLogTemplate, operationId, projectId, queryId);
             }
 
             if (queryService == null)
@@ -254,7 +254,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
+                logger.LogInformation(QueryInvokedLogTemplate, operationId, projectId, queryId);
             }
 
             if (queryService == null)
@@ -301,7 +301,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
+                logger.LogInformation(QueryInvokedLogTemplate, operationId, projectId, queryId);
             }
 
             if (queryService == null)
@@ -364,7 +364,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
             if (queryService == null)
@@ -408,7 +408,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
             if (queryService == null)
