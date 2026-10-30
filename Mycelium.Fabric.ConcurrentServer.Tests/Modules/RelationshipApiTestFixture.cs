@@ -10,18 +10,24 @@
 namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 {
     using System;
+    using System.Net.Http;
+    using System.Threading;
     using System.Threading.Tasks;
 
+    using Microsoft.AspNetCore.Http;
     using Microsoft.Extensions.Logging;
 
     using Moq;
 
     using Mycelium.Fabric.ConcurrentServer.Modules;
+    using Mycelium.Fabric.ConcurrentServer.Services;
     using Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers;
 
-    /// <summary>
-    /// Suite of tests for the <see cref="RelationshipApi"/> class.
-    /// </summary>
+    using SysML2.NET.Core.DTO.Core.Features;
+    using SysML2.NET.Core.DTO.Root.Elements;
+    using SysML2.NET.PIM;
+    using SysML2.NET.PSM;
+
     [TestFixture]
     public class RelationshipApiTestFixture
     {
@@ -31,15 +37,26 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
         private static readonly Guid RelatedElementId = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
+        private static readonly Guid RelationshipId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+
         private Mock<ILogger<RelationshipApi>> logger;
+
+        private Mock<IElementNavigationService> navigationService;
 
         [SetUp]
         public void SetUp()
         {
-            this.logger = new Mock<ILogger<RelationshipApi>>();
-            this.logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            EndpointHost.ResetMocks();
+
+            this.logger = EndpointHost.Logger<RelationshipApi>();
+
+            this.navigationService = EndpointHost.NavigationService;
         }
-        
+
+        private static IRelationship Record()
+        {
+            return new FeatureTyping { Id = RelationshipId };
+        }
 
         [Test]
         public void VerifyAddRoutes()
@@ -55,9 +72,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(templates, Has.Count.EqualTo(1));
+
                 Assert.That(
                     templates["getRelationshipsByProjectCommitRelatedElement"],
                     Is.EqualTo("/projects/{projectId:guid}/commits/{commitId:guid}/elements/{relatedElementId:guid}/relationships"));
+
                 Assert.That(app.DeclaredStatusCodes("getRelationshipsByProjectCommitRelatedElement"), Is.EqualTo([200, 404, 500]));
             }
         }
@@ -65,16 +84,43 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         [Test]
         public async Task VerifyGetRelationshipsByProjectCommitRelatedElement()
         {
-            Assert.That(
-                () => RelationshipApi.GetRelationshipsByProjectCommitRelatedElement(null, ProjectId, CommitId, RelatedElementId, Mock.Of<ILogger<RelationshipApi>>()),
-                Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(
-                context => RelationshipApi.GetRelationshipsByProjectCommitRelatedElement(context, ProjectId, CommitId, RelatedElementId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get,
+                $"/projects/{ProjectId}/commits/{CommitId}/elements/{RelatedElementId}/relationships");
 
             invocation.AssertNotYetImplemented("getRelationshipsByProjectCommitRelatedElement");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getRelationshipsByProjectCommitRelatedElement");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getRelationshipsByProjectCommitRelatedElement");
+
+            this.navigationService
+                .Setup(service => service.GetRelationshipsByRelatedElementAsync(ProjectId, CommitId, RelatedElementId, It.IsAny<Direction>(), It.IsAny<QueryParameters>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new PagedResult<IRelationship> { Records = [Record()] });
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get,
+                $"/projects/{ProjectId}/commits/{CommitId}/elements/{RelatedElementId}/relationships?direction=out");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, RelationshipId.ToString());
+
+            this.navigationService.Verify(service => service.GetRelationshipsByRelatedElementAsync(ProjectId, CommitId, RelatedElementId, Direction.@out,
+                It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()), Times.Once);
+
+            // An absent direction is served as both, the widest of the three allowable values.
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get,
+                $"/projects/{ProjectId}/commits/{CommitId}/elements/{RelatedElementId}/relationships");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, RelationshipId.ToString());
+
+            this.navigationService.Verify(service => service.GetRelationshipsByRelatedElementAsync(ProjectId, CommitId, RelatedElementId, Direction.both,
+                It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()), Times.Once);
+
+            // A direction outside {in, out, both} is rejected without reaching the service.
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get,
+                $"/projects/{ProjectId}/commits/{CommitId}/elements/{RelatedElementId}/relationships?direction=sideways");
+
+            invocation.AssertError(StatusCodes.Status400BadRequest, "getRelationshipsByProjectCommitRelatedElement");
+
+            this.navigationService.Verify(service => service.GetRelationshipsByRelatedElementAsync(ProjectId, CommitId, RelatedElementId, It.IsAny<Direction>(),
+                It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         }
     }
 }

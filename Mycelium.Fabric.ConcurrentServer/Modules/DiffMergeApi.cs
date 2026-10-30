@@ -10,101 +10,242 @@
 namespace Mycelium.Fabric.ConcurrentServer.Modules
 {
     using System;
+    using System.Collections.Generic;
+    using System.Threading;
     using System.Threading.Tasks;
+
+    using ErrorOr;
 
     using Microsoft.AspNetCore.Http;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
 
+    using Mycelium.Fabric.ConcurrentServer.Http;
+    using Mycelium.Fabric.ConcurrentServer.Serialization;
+    using Mycelium.Fabric.ConcurrentServer.Services;
+
+    using SysML2.NET.PSM.DTO;
+
     /// <summary>
-    /// Hand-coded request handlers for the DiffMerge routes registered by the generated companion partial.
+    /// Handlers of the diff and merge routes.
     /// </summary>
     /// <remarks>
-    /// Both operations below belong to the <c>ProjectDataVersioningService</c> — Systems Modeling API and
-    /// Services 1.0 §7.2.3 (pp. 42–45) — and are bound to their REST/HTTP endpoints by §8.1.3 (pp. 50–56).
-    /// They are the operations that make concurrent modelling tractable: <c>diffCommits</c> reports what
-    /// changed between two snapshots, and <c>mergeIntoBranch</c> reconciles divergent work.
+    /// Binds <c>ProjectDataVersioningService</c> <c>diffCommits</c> and <c>mergeIntoBranch</c> (Systems Modeling API and Services 1.0 §7.2.3) to their §8.1.3 endpoints.
     /// </remarks>
     public partial class DiffMergeApi : ApiBase
     {
         /// <summary>
-        /// Handles <c>POST /projects/{projectId}/branches/{targetBranchId}/merge</c>, the REST/HTTP binding
-        /// of <c>ProjectDataVersioningService::mergeIntoBranch</c> — "Merge the given commits
-        /// (commitsToMerge) in the given branch (baseBranch)."
+        /// The comma-separated query parameter naming the commits to merge.
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project the merge takes place in.</param>
-        /// <param name="targetBranchId">
-        /// The identifier of the branch the commits are merged into — the <c>baseBranch</c> of the
-        /// operation.
-        /// </param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        private const string SourceCommitIdParameter = "sourceCommitId";
+
+        /// <summary>
+        /// The query parameter carrying the description of the merged commit.
+        /// </summary>
+        private const string DescriptionParameter = "description";
+
+        /// <summary>
+        /// The query parameter naming the base commit of a difference.
+        /// </summary>
+        private const string BaseCommitIdParameter = "baseCommitId";
+
+        /// <summary>
+        /// The query parameter filtering the reported changes by <c>ChangeType</c>.
+        /// </summary>
+        private const string ChangeTypesParameter = "changeTypes";
+
+        /// <summary>
+        /// Handles <c>POST /projects/{projectId}/branches/{targetBranchId}/merge</c>: <c>ProjectDataVersioningService::mergeIntoBranch</c> (Systems Modeling API and Services 1.0 §7.2.3).
+        /// </summary>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="targetBranchId">The identifier of the branch merged into.</param>
+        /// <param name="resolution">The optional conflict resolution Data from the request body.</param>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// Per §7.2.3 (pp. 42–45) the commits in <c>commitsToMerge</c> "may be commits referenced by a
-        /// CommitReference, such as Branch.head or Tag.taggedCommit, or any other commit in the owning
-        /// project (Project.commits)". The operation returns a <c>MergeResult</c> carrying either the
-        /// commit produced by a successful merge (<c>MergeResult.mergeCommit</c>) or, when the merge fails,
-        /// the set of <c>DataIdentity</c> records representing the conflicts (<c>MergeResult.conflict</c>).
-        /// Two optional inputs may be supplied: a <c>resolution</c> set of Data that resolves the
-        /// conflicts, and a <c>description</c> for the merged commit.
-        /// <para>
-        /// Not yet implemented — answers <c>500</c> with an RFC 7807 payload.
-        /// </para>
+        /// Commits to merge come from the required <c>sourceCommitId</c> query parameter; the target branch and those commits must belong to the project, since
+        /// <c>mergeIntoBranch</c> takes no project. A merge answers <c>201</c> with its commit or <c>409</c> with the conflicts.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task Merge(HttpContext context, Guid projectId, Guid targetBranchId, ILogger<DiffMergeApi> logger)
+        [ProducesResponseType(typeof(SysML2.NET.PSM.DTO.Error), StatusCodes.Status500InternalServerError)]
+        private static async Task Merge(HttpContext context, Guid projectId, Guid targetBranchId, DataBody resolution,
+            [FromServices] IProjectDataVersioningService versioningService, ILogger<DiffMergeApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 logger.LogInformation("merge invoked for project {ProjectId} and target branch {TargetBranchId}", projectId, targetBranchId);
             }
 
-            return NotYetImplemented(context, "merge");
+            if (versioningService == null)
+            {
+                await NotYetImplemented(context, "merge");
+
+                return;
+            }
+
+            try
+            {
+                var commitsToMerge = context.Request.ReadIds(SourceCommitIdParameter);
+
+                if (commitsToMerge.IsError)
+                {
+                    await Failed(context, "merge", commitsToMerge.Errors);
+
+                    return;
+                }
+
+                if (commitsToMerge.Value.Count == 0)
+                {
+                    await Invalid(context, "merge", $"{SourceCommitIdParameter}.missing", $"The '{SourceCommitIdParameter}' query parameter is required.");
+
+                    return;
+                }
+
+                if (resolution.Content.IsError)
+                {
+                    await Failed(context, "merge", resolution.Content.Errors);
+
+                    return;
+                }
+
+                var scope = await InProjectAsync(versioningService, projectId, targetBranchId, commitsToMerge.Value, context.RequestAborted);
+
+                if (scope.IsError)
+                {
+                    await Failed(context, "merge", scope.Errors);
+
+                    return;
+                }
+
+                var outcome = await versioningService.MergeIntoBranchAsync(targetBranchId, commitsToMerge.Value, resolution.Content.Value,
+                    context.Request.Query[DescriptionParameter], context.RequestAborted);
+
+                if (outcome.IsError)
+                {
+                    await Failed(context, "merge", outcome.Errors);
+
+                    return;
+                }
+
+                await MergeResultMapper.ToPsm(outcome.Value).Match(mergeCommit => Negotiated(context, mergeCommit, StatusCodes.Status201Created),
+                    conflict => Negotiated(context, conflict, StatusCodes.Status409Conflict));
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "merge", exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>GET /projects/{projectId}/commits/{compareCommitId}/diff</c>, the REST/HTTP binding
-        /// of <c>ProjectDataVersioningService::diffCommits</c> — "Get the difference between two commits -
-        /// compareCommit and baseCommit."
+        /// Handles <c>GET /projects/{projectId}/commits/{compareCommitId}/diff</c>: <c>ProjectDataVersioningService::diffCommits</c> (Systems Modeling API and Services 1.0 §7.2.3).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project the commits belong to.</param>
-        /// <param name="compareCommitId">
-        /// The identifier of the commit being compared — the <c>compareCommit</c> of the operation. The
-        /// <c>baseCommit</c> is supplied separately by the request.
-        /// </param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="compareCommitId">The identifier of the commit compared against the base commit.</param>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// §7.2.3 (pp. 42–45) defines the result set-theoretically: the operation "gets
-        /// compareCommit.versionedData - baseCommit.versionedData and returns a DataDifference object with
-        /// baseData and compareData for each difference". Data present in the compare commit but absent
-        /// from the base yields a <c>DataDifference</c> with <c>compareData</c> populated and
-        /// <c>baseData</c> empty; data absent from the compare commit but present in the base yields the
-        /// mirror image; data present in both but differing yields both fields populated.
-        /// <para>
-        /// The optional <c>changeTypes</c> argument is a collection of the <c>ChangeType</c> literals
-        /// <c>CREATED</c>, <c>UPDATED</c> and <c>DELETED</c>. When it is omitted, differences for all data
-        /// created, updated or deleted in the compare commit versus the base commit are returned; when it
-        /// is supplied, only differences of the given types are returned.
-        /// </para>
-        /// Not yet implemented — answers <c>500</c> with an RFC 7807 payload.
+        /// The base commit comes from the required <c>baseCommitId</c> query parameter; both commits must belong to the project, since <c>diffCommits</c> takes
+        /// no project. The <c>changeTypes</c> query parameter is an extension of the OpenAPI document carrying the §7.2.3 <c>changeTypes</c> argument.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task Diff(HttpContext context, Guid projectId, Guid compareCommitId, ILogger<DiffMergeApi> logger)
+        [ProducesResponseType(typeof(SysML2.NET.PSM.DTO.Error), StatusCodes.Status500InternalServerError)]
+        private static async Task Diff(HttpContext context, Guid projectId, Guid compareCommitId, [FromServices] IProjectDataVersioningService versioningService,
+            ILogger<DiffMergeApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 logger.LogInformation("diff invoked for project {ProjectId} and compare commit {CompareCommitId}", projectId, compareCommitId);
             }
 
-            return NotYetImplemented(context, "diff");
+            if (versioningService == null)
+            {
+                await NotYetImplemented(context, "diff");
+
+                return;
+            }
+
+            try
+            {
+                var baseCommitId = context.Request.ReadRequiredId(BaseCommitIdParameter);
+
+                if (baseCommitId.IsError)
+                {
+                    await Failed(context, "diff", baseCommitId.Errors);
+
+                    return;
+                }
+
+                var changeTypes = context.Request.ReadChangeTypes(ChangeTypesParameter);
+
+                if (changeTypes.IsError)
+                {
+                    await Failed(context, "diff", changeTypes.Errors);
+
+                    return;
+                }
+
+                var scope = await InProjectAsync(versioningService, projectId, null, [baseCommitId.Value, compareCommitId], context.RequestAborted);
+
+                if (scope.IsError)
+                {
+                    await Failed(context, "diff", scope.Errors);
+
+                    return;
+                }
+
+                await PagedAsync<DataDifference, SysML2.NET.PIM.DTO.DataDifference>(context, "diff",
+                    queryParameters => versioningService.DiffCommitsAsync(baseCommitId.Value, compareCommitId, changeTypes.Value, queryParameters, context.RequestAborted));
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "diff", exception, logger);
+            }
+        }
+
+        /// <summary>
+        /// Checks that a branch and commits belong to a project, through the project-scoped reads of the versioning service.
+        /// </summary>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="branchId">The branch identifier, or <c>null</c> when no branch is involved.</param>
+        /// <param name="commitIds">The commit identifiers.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> of the request.</param>
+        /// <returns>Success, or the errors of the first read that failed.</returns>
+        private static async Task<ErrorOr<Success>> InProjectAsync(IProjectDataVersioningService versioningService, Guid projectId, Guid? branchId,
+            IEnumerable<Guid> commitIds, CancellationToken cancellationToken)
+        {
+            if (branchId.HasValue)
+            {
+                var branch = await versioningService.GetBranchByIdAsync(projectId, branchId.Value, cancellationToken);
+
+                if (branch.IsError)
+                {
+                    return branch.Errors;
+                }
+            }
+
+            foreach (var commitId in commitIds)
+            {
+                var commit = await versioningService.GetCommitByIdAsync(projectId, commitId, cancellationToken);
+
+                if (commit.IsError)
+                {
+                    return commit.Errors;
+                }
+            }
+
+            return Result.Success;
         }
     }
 }

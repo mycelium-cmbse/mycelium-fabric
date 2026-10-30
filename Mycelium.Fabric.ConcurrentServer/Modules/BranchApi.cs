@@ -16,122 +16,191 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
 
+    using Mycelium.Fabric.ConcurrentServer.Serialization;
+    using Mycelium.Fabric.ConcurrentServer.Services;
+
+    using SysML2.NET.PSM.DTO;
+
     /// <summary>
-    /// Hand-coded request handlers for the Branch routes registered by the generated companion partial.
+    /// Handlers of the Branch routes.
     /// </summary>
     /// <remarks>
-    /// Every operation below belongs to the <c>ProjectDataVersioningService</c> — Systems Modeling API and
-    /// Services 1.0 §7.2.3 (pp. 42–45) — and is bound to its REST/HTTP endpoint by §8.1.3 (pp. 50–56).
-    /// A Branch is a named reference to a commit within a project; §7.1.2 (pp. 32–36) defines it as a
-    /// <c>CommitReference</c> whose <c>head</c> is the commit the branch currently points at.
+    /// Binds <c>ProjectDataVersioningService</c> branch operations (Systems Modeling API and Services 1.0 §7.2.3) to their §8.1.3 endpoints.
     /// </remarks>
     public partial class BranchApi : ApiBase
     {
         /// <summary>
-        /// Handles <c>GET /projects/{projectId}/branches</c>, the REST/HTTP binding of
-        /// <c>ProjectDataVersioningService::getBranches</c> — "Get all the branches in the given project."
+        /// Handles <c>GET /projects/{projectId}/branches</c>: <c>ProjectDataVersioningService::getBranches</c> (Systems Modeling API and Services 1.0 §7.2.3).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project whose branches are requested.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
-        /// <remarks>
-        /// The operation returns <c>Branch [1..*]</c>: a conforming project always has at least its default
-        /// branch. Not yet implemented — answers <c>500</c> with an RFC 7807 payload.
-        /// </remarks>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetBranchesByProject(HttpContext context, Guid projectId, ILogger<BranchApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task GetBranchesByProject(HttpContext context, Guid projectId, [FromServices] IProjectDataVersioningService versioningService,
+            ILogger<BranchApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 logger.LogInformation("getBranchesByProject invoked for project {ProjectId}", projectId);
             }
 
-            return NotYetImplemented(context, "getBranchesByProject");
+            if (versioningService == null)
+            {
+                await NotYetImplemented(context, "getBranchesByProject");
+
+                return;
+            }
+
+            try
+            {
+                await PagedAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "getBranchesByProject",
+                    queryParameters => versioningService.GetBranchesAsync(projectId, queryParameters, context.RequestAborted));
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "getBranchesByProject", exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>POST /projects/{projectId}/branches</c>, the REST/HTTP binding of
-        /// <c>ProjectDataVersioningService::createBranch</c> — "Create a new branch with the given name
-        /// (branchName) in the given project, and set the head of the new branch as the given commit
-        /// (head)."
+        /// Handles <c>POST /projects/{projectId}/branches</c>: <c>ProjectDataVersioningService::createBranch</c> (Systems Modeling API and Services 1.0 §7.2.3).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project the branch is created in.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
-        /// <remarks>
-        /// Systems Modeling API and Services 1.0 §7.2.3 (pp. 42–45). Not yet implemented — answers
-        /// <c>500</c> with an RFC 7807 payload.
-        /// </remarks>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="body">The <c>BranchRequest</c> from the request body.</param>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         [ProducesResponseType(StatusCodes.Status201Created)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task PostBranchByProject(HttpContext context, Guid projectId, ILogger<BranchApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task PostBranchByProject(HttpContext context, Guid projectId, RequestBody<BranchRequest> body,
+            [FromServices] IProjectDataVersioningService versioningService, ILogger<BranchApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 logger.LogInformation("postBranchByProject invoked for project {ProjectId}", projectId);
             }
 
-            return NotYetImplemented(context, "postBranchByProject");
+            if (versioningService == null)
+            {
+                await NotYetImplemented(context, "postBranchByProject");
+
+                return;
+            }
+
+            try
+            {
+                if (body.Content.IsError)
+                {
+                    await Failed(context, "postBranchByProject", body.Content.Errors);
+
+                    return;
+                }
+
+                var request = body.Content.Value;
+
+                var outcome = await versioningService.CreateBranchAsync(projectId, request.Name, request.Head.Value, context.RequestAborted);
+
+                await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "postBranchByProject", outcome, StatusCodes.Status201Created);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "postBranchByProject", exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>GET /projects/{projectId}/branches/{branchId}</c>, the REST/HTTP binding of
-        /// <c>ProjectDataVersioningService::getBranchById</c> — "Get the branch with the given id
-        /// (branchId) in the given project."
+        /// Handles <c>GET /projects/{projectId}/branches/{branchId}</c>: <c>ProjectDataVersioningService::getBranchById</c> (Systems Modeling API and Services 1.0 §7.2.3).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project the branch belongs to.</param>
-        /// <param name="branchId">The identifier of the branch that is requested.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
-        /// <remarks>
-        /// §8.1.3 (pp. 50–56) also composes this endpoint into <c>getHeadCommit</c>: the branch returned
-        /// here carries <c>Branch.head</c>, the id of the commit at the tip of the branch. Not yet
-        /// implemented — answers <c>500</c> with an RFC 7807 payload.
-        /// </remarks>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="branchId">The branch identifier.</param>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetBranchesByProjectAndId(HttpContext context, Guid projectId, Guid branchId, ILogger<BranchApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task GetBranchesByProjectAndId(HttpContext context, Guid projectId, Guid branchId, [FromServices] IProjectDataVersioningService versioningService,
+            ILogger<BranchApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 logger.LogInformation("getBranchesByProjectAndId invoked for project {ProjectId} and branch {BranchId}", projectId, branchId);
             }
 
-            return NotYetImplemented(context, "getBranchesByProjectAndId");
+            if (versioningService == null)
+            {
+                await NotYetImplemented(context, "getBranchesByProjectAndId");
+
+                return;
+            }
+
+            try
+            {
+                var outcome = await versioningService.GetBranchByIdAsync(projectId, branchId, context.RequestAborted);
+
+                await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "getBranchesByProjectAndId", outcome, StatusCodes.Status200OK);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "getBranchesByProjectAndId", exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>DELETE /projects/{projectId}/branches/{branchId}</c>, the REST/HTTP binding of
-        /// <c>ProjectDataVersioningService::deleteBranch</c> — "Delete the branch with the given id
-        /// (branchId) in the given project."
+        /// Handles <c>DELETE /projects/{projectId}/branches/{branchId}</c>: <c>ProjectDataVersioningService::deleteBranch</c> (Systems Modeling API and Services 1.0 §7.2.3).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project the branch belongs to.</param>
-        /// <param name="branchId">The identifier of the branch that is deleted.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="branchId">The branch identifier.</param>
+        /// <param name="versioningService">The <see cref="IProjectDataVersioningService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// Systems Modeling API and Services 1.0 §7.2.3 (pp. 42–45). Not yet implemented — answers
-        /// <c>500</c> with an RFC 7807 payload.
+        /// Answers <c>200</c> with the deleted branch, or <c>204</c> when the request carries <c>Prefer: return=minimal</c> (RFC 7240 §4.2).
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task DeleteBranchByProjectAndId(HttpContext context, Guid projectId, Guid branchId, ILogger<BranchApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task DeleteBranchByProjectAndId(HttpContext context, Guid projectId, Guid branchId, [FromServices] IProjectDataVersioningService versioningService,
+            ILogger<BranchApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 logger.LogInformation("deleteBranchByProjectAndId invoked for project {ProjectId} and branch {BranchId}", projectId, branchId);
             }
 
-            return NotYetImplemented(context, "deleteBranchByProjectAndId");
+            if (versioningService == null)
+            {
+                await NotYetImplemented(context, "deleteBranchByProjectAndId");
+
+                return;
+            }
+
+            try
+            {
+                var outcome = await versioningService.DeleteBranchAsync(projectId, branchId, context.RequestAborted);
+
+                await DeletedAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "deleteBranchByProjectAndId", outcome);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "deleteBranchByProjectAndId", exception, logger);
+            }
         }
     }
 }

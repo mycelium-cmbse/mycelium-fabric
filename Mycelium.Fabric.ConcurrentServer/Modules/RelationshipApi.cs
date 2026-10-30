@@ -16,49 +16,72 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
 
+    using Mycelium.Fabric.ConcurrentServer.Http;
+    using Mycelium.Fabric.ConcurrentServer.Services;
+
+    using SysML2.NET.PSM.DTO;
+
     /// <summary>
-    /// Hand-coded request handlers for the Relationship routes registered by the generated companion
-    /// partial.
+    /// Handlers of the Relationship routes.
     /// </summary>
     /// <remarks>
-    /// The operation below belongs to the <c>ElementNavigationService</c> — Systems Modeling API and
-    /// Services 1.0 §7.2.2 (p. 41) — and is bound to its REST/HTTP endpoint by §8.1.3 (pp. 50–56).
+    /// Binds <c>ElementNavigationService::getRelationshipsByRelatedElement</c> (Systems Modeling API and Services 1.0 §7.2.2) to its §8.1.3 endpoint.
     /// </remarks>
     public partial class RelationshipApi : ApiBase
     {
         /// <summary>
-        /// Handles
-        /// <c>GET /projects/{projectId}/commits/{commitId}/elements/{relatedElementId}/relationships</c>,
-        /// the REST/HTTP binding of <c>ElementNavigationService::getRelationshipsByRelatedElement</c> —
-        /// "Get relationships that are incoming, outgoing, or both relative to the given related element."
+        /// Handles <c>GET /projects/{projectId}/commits/{commitId}/elements/{relatedElementId}/relationships</c>: <c>ElementNavigationService::getRelationshipsByRelatedElement</c> (Systems Modeling API and Services 1.0 §7.2.2).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project the relationships belong to.</param>
-        /// <param name="commitId">The identifier of the commit the relationships are read at.</param>
-        /// <param name="relatedElementId">
-        /// The identifier of the element the relationships are traversed relative to.
-        /// </param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="commitId">The commit identifier.</param>
+        /// <param name="relatedElementId">The identifier of the element the relationships relate to.</param>
+        /// <param name="navigationService">The <see cref="IElementNavigationService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// The traversal direction is carried by the <c>direction</c> query parameter, which §8.1.3
-        /// (pp. 50–56) restricts to the allowable values <c>in</c>, <c>out</c> and <c>both</c> — the
-        /// literals of the <c>Direction</c> enumeration declared alongside the operation in §7.2.2 (p. 41).
-        /// Relationship is a subtype of Element in the KerML abstract syntax, so results are Data records
-        /// scoped to the given project and commit. Not yet implemented — answers <c>500</c> with an
-        /// RFC 7807 payload.
+        /// The <c>direction</c> query parameter takes <c>in</c>, <c>out</c> or <c>both</c>.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetRelationshipsByProjectCommitRelatedElement(HttpContext context, Guid projectId, Guid commitId, Guid relatedElementId, ILogger<RelationshipApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task GetRelationshipsByProjectCommitRelatedElement(HttpContext context, Guid projectId, Guid commitId, Guid relatedElementId,
+            [FromServices] IElementNavigationService navigationService, ILogger<RelationshipApi> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getRelationshipsByProjectCommitRelatedElement invoked for project {ProjectId}, commit {CommitId} and related element {RelatedElementId}", projectId, commitId, relatedElementId);
+                logger.LogInformation("getRelationshipsByProjectCommitRelatedElement invoked for project {ProjectId}, commit {CommitId} and related element {RelatedElementId}",
+                    projectId, commitId, relatedElementId);
             }
 
-            return NotYetImplemented(context, "getRelationshipsByProjectCommitRelatedElement");
+            if (navigationService == null)
+            {
+                await NotYetImplemented(context, "getRelationshipsByProjectCommitRelatedElement");
+
+                return;
+            }
+
+            try
+            {
+                var direction = context.Request.ReadDirection();
+
+                if (direction.IsError)
+                {
+                    await Failed(context, "getRelationshipsByProjectCommitRelatedElement", direction.Errors);
+
+                    return;
+                }
+
+                await PagedAsync(context, "getRelationshipsByProjectCommitRelatedElement",
+                    queryParameters => navigationService.GetRelationshipsByRelatedElementAsync(projectId, commitId, relatedElementId, direction.Value, queryParameters,
+                        context.RequestAborted));
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, "getRelationshipsByProjectCommitRelatedElement", exception, logger);
+            }
         }
     }
 }

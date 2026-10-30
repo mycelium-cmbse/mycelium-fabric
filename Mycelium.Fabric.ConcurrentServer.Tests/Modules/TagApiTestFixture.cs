@@ -10,32 +10,57 @@
 namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 {
     using System;
+    using System.Net.Http;
+    using System.Threading;
     using System.Threading.Tasks;
 
+    using ErrorOr;
+
+    using Microsoft.AspNetCore.Http;
     using Microsoft.Extensions.Logging;
 
     using Moq;
 
     using Mycelium.Fabric.ConcurrentServer.Modules;
+    using Mycelium.Fabric.ConcurrentServer.Services;
     using Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers;
 
-    /// <summary>
-    /// Suite of tests for the <see cref="TagApi"/> class.
-    /// </summary>
+    using SysML2.NET.PIM.DTO;
+    using SysML2.NET.PSM;
+
     [TestFixture]
     public class TagApiTestFixture
     {
         private static readonly Guid ProjectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        private static readonly Guid TagId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        private static readonly Guid TagId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        private static readonly Guid TaggedCommitId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
         private Mock<ILogger<TagApi>> logger;
+
+        private Mock<IProjectDataVersioningService> versioningService;
 
         [SetUp]
         public void SetUp()
         {
-            this.logger = new Mock<ILogger<TagApi>>();
-            this.logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            EndpointHost.ResetMocks();
+
+            this.logger = EndpointHost.Logger<TagApi>();
+
+            this.versioningService = EndpointHost.VersioningService;
+        }
+
+        private static Tag Record()
+        {
+            return new Tag
+            {
+                Id = TagId,
+                Name = "Release 1",
+                TaggedCommit = TaggedCommitId,
+                OwningProject = ProjectId,
+                Created = new DateTime(2026, 10, 8, 0, 0, 0, DateTimeKind.Utc)
+            };
         }
 
         [Test]
@@ -70,49 +95,123 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         [Test]
         public async Task VerifyGetTagsByProject()
         {
-            Assert.That(() => TagApi.GetTagsByProject(null, ProjectId, Mock.Of<ILogger<TagApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => TagApi.GetTagsByProject(context, ProjectId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get, $"/projects/{ProjectId}/tags");
 
             invocation.AssertNotYetImplemented("getTagsByProject");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getTagsByProject");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getTagsByProject");
+
+            this.versioningService
+                .Setup(service => service.GetTagsAsync(ProjectId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new PagedResult<Tag> { Records = [Record()], Previous = new Page { Epoch = 2, Identifier = TagId } });
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/tags");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, TagId.ToString());
+
+            using (Assert.EnterMultipleScope())
+            {
+                // §7.1.2 makes taggedCommit the commit a Tag references, so both names carry it.
+                Assert.That(invocation.Payload()[0].GetProperty("taggedCommit").GetProperty("@id").GetString(), Is.EqualTo(TaggedCommitId.ToString()));
+                Assert.That(invocation.Payload()[0].GetProperty("referencedCommit").GetProperty("@id").GetString(), Is.EqualTo(TaggedCommitId.ToString()));
+                Assert.That(invocation.Link, Does.Contain("rel=\"prev\""));
+                Assert.That(invocation.Link, Does.Not.Contain("rel=\"next\""));
+            }
+
+            this.versioningService
+                .Setup(service => service.GetTagsAsync(ProjectId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new PagedResult<Tag>());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/tags");
+
+            Assert.That(invocation.Body, Is.EqualTo("[]"));
         }
 
         [Test]
         public async Task VerifyPostTagByProject()
         {
-            Assert.That(() => TagApi.PostTagByProject(null, ProjectId, Mock.Of<ILogger<TagApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => TagApi.PostTagByProject(context, ProjectId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Post, $"/projects/{ProjectId}/tags");
 
             invocation.AssertNotYetImplemented("postTagByProject");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "postTagByProject");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "postTagByProject");
+
+            this.versioningService
+                .Setup(service => service.CreateTagAsync(ProjectId, "Release 1", TaggedCommitId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Record());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/tags",
+                $$"""{ "@type": "Tag", "name": "Release 1", "taggedCommit": { "@id": "{{TaggedCommitId}}" } }""");
+
+            invocation.AssertPayload(StatusCodes.Status201Created, TagId.ToString());
+
+            this.versioningService.Verify(service => service.CreateTagAsync(ProjectId, "Release 1", TaggedCommitId, It.IsAny<CancellationToken>()), Times.Once);
+
+            // A tag name already taken in the project is a conflict, not a validation failure.
+            this.versioningService
+                .Setup(service => service.CreateTagAsync(ProjectId, "Release 1", TaggedCommitId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.Conflict("tag.duplicate", "A tag with the given name already exists."));
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/tags",
+                $$"""{ "@type": "Tag", "name": "Release 1", "taggedCommit": { "@id": "{{TaggedCommitId}}" } }""");
+
+            invocation.AssertError(StatusCodes.Status409Conflict, "postTagByProject");
         }
 
         [Test]
         public async Task VerifyGetTagByProjectAndId()
         {
-            Assert.That(() => TagApi.GetTagByProjectAndId(null, ProjectId, TagId, Mock.Of<ILogger<TagApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => TagApi.GetTagByProjectAndId(context, ProjectId, TagId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get, $"/projects/{ProjectId}/tags/{TagId}");
 
             invocation.AssertNotYetImplemented("getTagByProjectAndId");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getTagByProjectAndId");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getTagByProjectAndId");
+
+            this.versioningService
+                .Setup(service => service.GetTagByIdAsync(ProjectId, TagId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Record());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/tags/{TagId}");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, TagId.ToString());
+
+            this.versioningService
+                .Setup(service => service.GetTagByIdAsync(ProjectId, TagId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.NotFound("tag.notFound", "No tag with the given id exists."));
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/tags/{TagId}");
+
+            invocation.AssertError(StatusCodes.Status404NotFound, "getTagByProjectAndId");
         }
 
         [Test]
         public async Task VerifyDeleteTagByProjectAndId()
         {
-            Assert.That(() => TagApi.DeleteTagByProjectAndId(null, ProjectId, TagId, Mock.Of<ILogger<TagApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => TagApi.DeleteTagByProjectAndId(context, ProjectId, TagId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Delete, $"/projects/{ProjectId}/tags/{TagId}");
 
             invocation.AssertNotYetImplemented("deleteTagByProjectAndId");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "deleteTagByProjectAndId");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "deleteTagByProjectAndId");
+
+            this.versioningService
+                .Setup(service => service.DeleteTagAsync(ProjectId, TagId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Record());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Delete, $"/projects/{ProjectId}/tags/{TagId}");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, TagId.ToString());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Delete, $"/projects/{ProjectId}/tags/{TagId}", prefer: "return=minimal");
+
+            invocation.AssertMinimalReturn();
+
+            this.versioningService
+                .Setup(service => service.DeleteTagAsync(ProjectId, TagId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.NotFound("tag.notFound", "No tag with the given id exists."));
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Delete, $"/projects/{ProjectId}/tags/{TagId}", prefer: "return=minimal");
+
+            invocation.AssertError(StatusCodes.Status404NotFound, "deleteTagByProjectAndId");
         }
     }
 }

@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 {
     using System;
+    using System.Net.Http;
     using System.Threading.Tasks;
 
     using Microsoft.Extensions.Logging;
@@ -19,21 +20,19 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
     using Mycelium.Fabric.ConcurrentServer.Modules;
     using Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers;
 
-    /// <summary>
-    /// Suite of tests for the <see cref="MetaApi"/> class.
-    /// </summary>
     [TestFixture]
     public class MetaApiTestFixture
     {
         private Mock<ILogger<MetaApi>> logger;
 
         private const string DatatypeId = "https://a.uri";
-        
+
         [SetUp]
         public void SetUp()
         {
-            this.logger = new Mock<ILogger<MetaApi>>();
-            this.logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            EndpointHost.ResetMocks();
+
+            this.logger = EndpointHost.Logger<MetaApi>();
         }
 
         [Test]
@@ -60,25 +59,21 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         [Test]
         public async Task VerifyGetDatatypes()
         {
-            Assert.That(() => MetaApi.GetDatatypes(null, Mock.Of<ILogger<MetaApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => MetaApi.GetDatatypes(context, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, "/meta/datatypes");
 
             invocation.AssertNotYetImplemented("getDatatypes");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getDatatypes");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getDatatypes");
         }
 
         [Test]
         public async Task VerifyGetDatatypeById()
         {
-            Assert.That(() => MetaApi.GetDatatypeById(null, Mock.Of<ILogger<MetaApi>>(), DatatypeId), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => MetaApi.GetDatatypeById(context, this.logger.Object, DatatypeId));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/meta/datatypes/{Uri.EscapeDataString(DatatypeId)}");
 
             invocation.AssertNotYetImplemented("getDatatypeById");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getDatatypeById");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getDatatypeById");
         }
     }
 }

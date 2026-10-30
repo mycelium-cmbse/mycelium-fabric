@@ -15,6 +15,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
 
+    using SysML2.NET.PSM.DTO;
+
     /// <summary>
     /// Hand-coded request handlers for the Meta routes registered by the generated companion partial.
     /// </summary>
@@ -44,11 +46,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
         /// <remarks>
         /// Not a specification endpoint; see the remarks on <see cref="MetaApi"/> for provenance. Not yet
-        /// implemented — answers <c>500</c> with an RFC 7807 payload.
+        /// implemented — answers <c>500</c> with an OpenAPI <c>Error</c> payload.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetDatatypes(HttpContext context, ILogger<MetaApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static Task GetDatatypes(HttpContext context, ILogger<MetaApi> logger)
         {
             if (logger.IsEnabled(LogLevel.Information))
             {
@@ -66,12 +68,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
         /// <param name="datatypeId">The string identifier for the datatype that shall be retrieved.</param>
         /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <remarks>
         /// Not a specification endpoint; see the remarks on <see cref="MetaApi"/> for provenance. Not yet
-        /// implemented — answers <c>500</c> with an RFC 7807 payload.
+        /// implemented — answers <c>500</c> with an OpenAPI <c>Error</c> payload.
+        /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetDatatypeById(HttpContext context, ILogger<MetaApi> logger, string datatypeId)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static Task GetDatatypeById(HttpContext context, ILogger<MetaApi> logger, string datatypeId)
         {
             if (logger.IsEnabled(LogLevel.Information))
             {
