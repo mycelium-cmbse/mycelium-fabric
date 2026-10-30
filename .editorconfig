@@ -93,6 +93,7 @@ resharper_suggest_var_or_type_elsewhere_highlighting = warning
 #### 7. Expressions, patterns & members — DEVELOPMENT_STANDARDS.md §1.1, §1.2, §1.5, §1.6, §2
 dotnet_style_prefer_auto_properties = true:warning
 dotnet_style_prefer_collection_expression = true:warning
+resharper_redundant_type_arguments_of_method_highlighting = warning
 dotnet_style_collection_initializer = true:warning
 dotnet_style_object_initializer = true:suggestion
 dotnet_style_prefer_conditional_expression_over_return = true:suggestion
@@ -112,14 +113,15 @@ csharp_style_throw_expression = true:suggestion
 csharp_style_conditional_delegate_call = true:suggestion
 csharp_style_prefer_static_local_function = true:suggestion
 csharp_style_expression_bodied_methods = false:none
-csharp_style_expression_bodied_properties = false:none
-csharp_style_expression_bodied_indexers = false:none
-csharp_style_expression_bodied_accessors = false:none
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_indexers = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
 csharp_style_expression_bodied_operators = false:none
 csharp_style_expression_bodied_lambdas = when_on_single_line:suggestion
 csharp_style_expression_bodied_local_functions = false:none
 csharp_style_expression_bodied_constructors = false:none
 csharp_style_prefer_primary_constructors = false:none
+resharper_accessor_owner_body = expression_body
 
 #### 8. XML documentation formatting — Rider: XmlDocFormatter
 resharper_xmldoc_indent_size = 1

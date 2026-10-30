@@ -151,7 +151,7 @@ calls follow each other and you want all of them evaluated even if earlier ones 
 using (Assert.EnterMultipleScope())
 {
     Assert.That(invocation.StatusCode, Is.EqualTo(StatusCodes.Status500InternalServerError));
-    Assert.That(invocation.ContentType, Does.Contain("application/problem+json"));
+    Assert.That(invocation.ContentType, Is.EqualTo("application/json"));
 }
 ```
 
@@ -200,17 +200,12 @@ Assert.That(() => subject.SomeMember(), Throws.TypeOf<NotSupportedException>());
 ```
 
 For an **API handler that is not yet implemented**, the contract is an HTTP response, not an exception —
-assert the `500` and the RFC 7807 body rather than a throw:
+assert the `500` and the negotiated OpenAPI `Error` body rather than a throw:
 
 ```csharp
-var invocation = await HandlerInvocation.CaptureAsync(
-    context => BranchApi.GetBranchesByProject(context, projectId, logger.Object));
+var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get, $"/projects/{ProjectId}/branches");
 
-using (Assert.EnterMultipleScope())
-{
-    Assert.That(invocation.StatusCode, Is.EqualTo(StatusCodes.Status500InternalServerError));
-    Assert.That(invocation.Problem.Detail, Does.Contain("getBranchesByProject"));
-}
+invocation.AssertNotYetImplemented("getBranchesByProject");
 ```
 
 When the handler is implemented later (in its own scoped change), the assertion is replaced with the real
@@ -247,13 +242,20 @@ The indexer preference aligns with the project-wide quality rule in `CLAUDE.md`.
 - **Declared response codes** come from the `[ProducesResponseType]` attributes on the handler. Note that
   `Microsoft.AspNetCore.Mvc.ProducesResponseTypeAttribute` implements `IApiResponseMetadataProvider`, not
   `IProducesResponseTypeMetadata` — query the concrete attribute type when reading endpoint metadata.
-- **Handlers** are `static`, take an `HttpContext` plus the route's guid parameters plus an
-  `ILogger<TModule>`, and return `Task`. Call them directly, passing a `Mock<ILogger<TModule>>` (§2). Use
-  a `DefaultHttpContext` with a seekable `MemoryStream` assigned to `Response.Body` so the written payload
-  can be read back and asserted.
+- **Handlers are tested through HTTP, never called directly.** `Modules/EndpointHost.cs` is the
+  `[SetUpFixture]` of the module fixtures: it starts the server once, in memory, through
+  `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`), and exposes two clients —
+  `EndpointHost.Client`, where every service is a `Mock<T>`, and `EndpointHost.WithoutServices`, where none
+  is registered (the not-yet-implemented `500`, §9). Serializers, binding, routing and negotiation stay real.
+- The mocks are **shared**: every module fixture calls `EndpointHost.ResetMocks()` first in its `[SetUp]`
+  and takes its service and logger mocks from `EndpointHost` (`EndpointHost.VersioningService`,
+  `EndpointHost.Logger<TModule>()`, …). Module fixtures therefore never run in parallel.
+- Send requests with `TestHelpers/EndpointInvocation.SendAsync(client, method, path, body, contentType, accept, prefer)`
+  and assert with its helpers (`AssertPayload`, `AssertMinimalReturn`, `AssertError`, `AssertNotYetImplemented`,
+  `VerifyInformationLogged`). Do not test a `null` `HttpContext` — the pipeline never passes one.
 - Prefer asserting the **observable HTTP contract** — status code, content type, response body — over
-  interactions with internal collaborators, except for the logging call, which is asserted through the
-  logger mock.
+  interactions with internal collaborators, except for the service calls and the logging call, which are
+  asserted through their mocks.
 
 ---
 

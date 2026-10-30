@@ -10,34 +10,51 @@
 namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 {
     using System;
+    using System.Net.Http;
+    using System.Threading;
     using System.Threading.Tasks;
 
+    using ErrorOr;
+
+    using Microsoft.AspNetCore.Http;
     using Microsoft.Extensions.Logging;
 
     using Moq;
 
     using Mycelium.Fabric.ConcurrentServer.Modules;
+    using Mycelium.Fabric.ConcurrentServer.Services;
     using Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers;
 
-    /// <summary>
-    /// Suite of tests for the <see cref="ElementApi"/> class.
-    /// </summary>
+    using SysML2.NET.Core.DTO.Root.Elements;
+    using SysML2.NET.Core.DTO.Systems.Parts;
+    using SysML2.NET.PSM;
+
     [TestFixture]
     public class ElementApiTestFixture
     {
         private static readonly Guid ProjectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        private static readonly Guid CommitId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        private static readonly Guid CommitId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-        private static readonly Guid ElementId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        private static readonly Guid ElementId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
         private Mock<ILogger<ElementApi>> logger;
+
+        private Mock<IElementNavigationService> navigationService;
 
         [SetUp]
         public void SetUp()
         {
-            this.logger = new Mock<ILogger<ElementApi>>();
-            this.logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            EndpointHost.ResetMocks();
+
+            this.logger = EndpointHost.Logger<ElementApi>();
+
+            this.navigationService = EndpointHost.NavigationService;
+        }
+
+        private static ErrorOr<IElement> Record()
+        {
+            return new PartDefinition { Id = ElementId, DeclaredName = "Vehicle" };
         }
 
         [Test]
@@ -56,7 +73,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
                 Assert.That(templates, Has.Count.EqualTo(4));
                 Assert.That(templates["getElementsByProjectCommit"], Is.EqualTo("/projects/{projectId:guid}/commits/{commitId:guid}/elements"));
                 Assert.That(templates["getElementByProjectCommitId"], Is.EqualTo("/projects/{projectId:guid}/commits/{commitId:guid}/elements/{elementId:guid}"));
-                Assert.That(templates["getProjectUsageByProjectCommitElement"], Is.EqualTo("/projects/{projectId:guid}/commits/{commitId:guid}/elements/{elementId:guid}/projectUsage"));
+
+                Assert.That(templates["getProjectUsageByProjectCommitElement"],
+                    Is.EqualTo("/projects/{projectId:guid}/commits/{commitId:guid}/elements/{elementId:guid}/projectUsage"));
+
                 Assert.That(templates["getRootsByProjectCommit"], Is.EqualTo("/projects/{projectId:guid}/commits/{commitId:guid}/roots"));
             }
 
@@ -72,49 +92,94 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         [Test]
         public async Task VerifyGetElementsByProjectCommit()
         {
-            Assert.That(() => ElementApi.GetElementsByProjectCommit(null, ProjectId, CommitId, Mock.Of<ILogger<ElementApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => ElementApi.GetElementsByProjectCommit(context, ProjectId, CommitId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements");
 
             invocation.AssertNotYetImplemented("getElementsByProjectCommit");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getElementsByProjectCommit");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getElementsByProjectCommit");
+
+            this.navigationService
+                .Setup(service => service.GetElementsAsync(ProjectId, CommitId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new PagedResult<IElement> { Records = [Record().Value] });
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, ElementId.ToString());
+
+            // §8.1.2 pairs Element with itself, so the Core serializer emits its own metaclass name.
+            Assert.That(invocation.Payload()[0].GetProperty("@type").GetString(), Is.EqualTo("PartDefinition"));
+
+            this.navigationService
+                .Setup(service => service.GetElementsAsync(ProjectId, CommitId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.NotFound("commit.notFound", "No commit with the given id exists."));
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements");
+
+            invocation.AssertError(StatusCodes.Status404NotFound, "getElementsByProjectCommit");
         }
 
         [Test]
         public async Task VerifyGetElementByProjectCommitId()
         {
-            Assert.That(() => ElementApi.GetElementByProjectCommitId(null, ProjectId, CommitId, ElementId, Mock.Of<ILogger<ElementApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => ElementApi.GetElementByProjectCommitId(context, ProjectId, CommitId, ElementId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements/{ElementId}");
 
             invocation.AssertNotYetImplemented("getElementByProjectCommitId");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getElementByProjectCommitId");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getElementByProjectCommitId");
+
+            this.navigationService
+                .Setup(service => service.GetElementByIdAsync(ProjectId, CommitId, ElementId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Record());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements/{ElementId}");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, ElementId.ToString());
+
+            this.navigationService
+                .Setup(service => service.GetElementByIdAsync(ProjectId, CommitId, ElementId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.NotFound("element.notFound", "No element with the given id exists."));
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements/{ElementId}");
+
+            invocation.AssertError(StatusCodes.Status404NotFound, "getElementByProjectCommitId");
         }
 
         [Test]
         public async Task VerifyGetProjectUsageByProjectCommitElement()
         {
-            Assert.That(() => ElementApi.GetProjectUsageByProjectCommitElement(null, ProjectId, CommitId, ElementId, Mock.Of<ILogger<ElementApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => ElementApi.GetProjectUsageByProjectCommitElement(context, ProjectId, CommitId, ElementId, this.logger.Object));
+            // This route has no counterpart in §8.1.3, so it stays unimplemented even with the
+            // ProjectUsageService registered.
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/elements/{ElementId}/projectUsage");
 
             invocation.AssertNotYetImplemented("getProjectUsageByProjectCommitElement");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getProjectUsageByProjectCommitElement");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getProjectUsageByProjectCommitElement");
         }
 
         [Test]
         public async Task VerifyGetRootsByProjectCommit()
         {
-            Assert.That(() => ElementApi.GetRootsByProjectCommit(null, ProjectId, CommitId, Mock.Of<ILogger<ElementApi>>()), Throws.TypeOf<ArgumentNullException>());
-
-            var invocation = await HandlerInvocation.CaptureAsync(context => ElementApi.GetRootsByProjectCommit(context, ProjectId, CommitId, this.logger.Object));
+            var invocation = await EndpointInvocation.SendAsync(EndpointHost.WithoutServices, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/roots");
 
             invocation.AssertNotYetImplemented("getRootsByProjectCommit");
 
-            HandlerInvocation.VerifyInformationLogged(this.logger, "getRootsByProjectCommit");
+            EndpointInvocation.VerifyInformationLogged(this.logger, "getRootsByProjectCommit");
+
+            this.navigationService
+                .Setup(service => service.GetRootElementsAsync(ProjectId, CommitId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new PagedResult<IElement> { Records = [Record().Value] });
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/roots");
+
+            invocation.AssertPayload(StatusCodes.Status200OK, ElementId.ToString());
+
+            this.navigationService
+                .Setup(service => service.GetRootElementsAsync(ProjectId, CommitId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new PagedResult<IElement>());
+
+            invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/commits/{CommitId}/roots");
+
+            Assert.That(invocation.Body, Is.EqualTo("[]"));
         }
     }
 }

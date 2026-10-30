@@ -16,153 +16,247 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
 
+    using Mycelium.Fabric.ConcurrentServer.Serialization;
+    using Mycelium.Fabric.ConcurrentServer.Services;
+
+    using SysML2.NET.PSM.DTO;
+
     /// <summary>
-    /// Hand-coded request handlers for the Project routes registered by the generated companion partial.
+    /// Handlers of the Project routes.
     /// </summary>
     /// <remarks>
-    /// Every operation below belongs to the <c>ProjectService</c> — Systems Modeling API and Services 1.0
-    /// §7.2.1 (pp. 39–40) — and is bound to its REST/HTTP endpoint by §8.1.3 (pp. 50–56). A Project is the
-    /// container for versioned model data; §7.1.2 (pp. 32–36) defines it together with its
-    /// <c>defaultBranch</c> and <c>commits</c>.
+    /// Binds <c>ProjectService</c> operations (Systems Modeling API and Services 1.0 §7.2.1) to their §8.1.3 endpoints.
     /// </remarks>
     public partial class ProjectApi : ApiBase
     {
         /// <summary>
-        /// Handles <c>GET /projects</c>, the REST/HTTP binding of <c>ProjectService::getProjects</c> —
-        /// "Get all projects."
+        /// Handles <c>GET /projects</c>: <c>ProjectService::getProjects</c> (Systems Modeling API and Services 1.0 §7.2.1).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
-        /// <remarks>
-        /// Systems Modeling API and Services 1.0 §7.2.1 (pp. 39–40). §8.1.3 (pp. 50–56) also describes the
-        /// pagination strategy that applies to collection endpoints such as this one. Not yet implemented —
-        /// answers <c>500</c> with an RFC 7807 payload.
-        /// </remarks>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectService">The <see cref="IProjectService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetProjects(HttpContext context, ILogger<ProjectApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task GetProjects(HttpContext context, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "getProjects";
+
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getProjects invoked");
+                logger.LogInformation(InvokedLogTemplate, operationId);
             }
 
-            return NotYetImplemented(context, "getProjects");
+            if (projectService == null)
+            {
+                await NotYetImplemented(context, operationId);
+
+                return;
+            }
+
+            try
+            {
+                await PagedAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId,
+                    queryParameters => projectService.GetProjectsAsync(queryParameters, context.RequestAborted));
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, operationId, exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>POST /projects</c>, the REST/HTTP binding of <c>ProjectService::createProject</c> —
-        /// "Create a new project with the given name and description (optional)."
+        /// Handles <c>POST /projects</c>: <c>ProjectService::createProject</c> (Systems Modeling API and Services 1.0 §7.2.1).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="body">The <c>ProjectRequest</c> from the request body.</param>
+        /// <param name="projectService">The <see cref="IProjectService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// Systems Modeling API and Services 1.0 §7.2.1 (pp. 39–40). Not yet implemented — answers
-        /// <c>500</c> with an RFC 7807 payload.
+        /// <c>ProjectRequest.defaultBranch</c> is ignored, since a project that does not exist yet has no branch.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status201Created)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task PostProject(HttpContext context, ILogger<ProjectApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task PostProject(HttpContext context, RequestBody<ProjectRequest> body, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "postProject";
+
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("postProject invoked");
+                logger.LogInformation(InvokedLogTemplate, operationId);
             }
 
-            return NotYetImplemented(context, "postProject");
+            if (projectService == null)
+            {
+                await NotYetImplemented(context, operationId);
+
+                return;
+            }
+
+            try
+            {
+                if (body.Content.IsError)
+                {
+                    await Failed(context, operationId, body.Content.Errors);
+
+                    return;
+                }
+
+                var request = body.Content.Value;
+
+                var outcome = await projectService.CreateProjectAsync(request.Name, request.Description, context.RequestAborted);
+
+                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status201Created);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, operationId, exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>GET /projects/{projectId}</c>, the REST/HTTP binding of
-        /// <c>ProjectService::getProjectById</c> — "Get project with the given id (projectId)."
+        /// Handles <c>GET /projects/{projectId}</c>: <c>ProjectService::getProjectById</c> (Systems Modeling API and Services 1.0 §7.2.1).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project that is requested.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="projectService">The <see cref="IProjectService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task GetProjectById(HttpContext context, Guid projectId, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
+        {
+            const string operationId = "getProjectById";
+
+            ArgumentNullException.ThrowIfNull(context);
+
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
+            }
+
+            if (projectService == null)
+            {
+                await NotYetImplemented(context, operationId);
+
+                return;
+            }
+
+            try
+            {
+                var outcome = await projectService.GetProjectByIdAsync(projectId, context.RequestAborted);
+
+                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status200OK);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, operationId, exception, logger);
+            }
+        }
+
+        /// <summary>
+        /// Handles <c>PUT /projects/{projectId}</c>: <c>ProjectService::updateProject</c> (Systems Modeling API and Services 1.0 §7.2.1).
+        /// </summary>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="body">The <c>ProjectRequest</c> from the request body.</param>
+        /// <param name="projectService">The <see cref="IProjectService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// §8.1.3 (pp. 50–56) composes this endpoint into <c>getDefaultBranch</c>: the project returned
-        /// here carries <c>Project.defaultBranch</c>, the id of the project's default branch, which
-        /// <c>getHeadCommit</c> falls back to when no branch is supplied. Not yet implemented — answers
-        /// <c>500</c> with an RFC 7807 payload.
+        /// Also realizes <c>setDefaultBranch</c> through <c>ProjectRequest.defaultBranch</c> (§8.1.3).
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task GetProjectById(HttpContext context, Guid projectId, ILogger<ProjectApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task PutProjectById(HttpContext context, Guid projectId, RequestBody<ProjectRequest> body, [FromServices] IProjectService projectService,
+            ILogger<ProjectApi> logger)
         {
+            const string operationId = "putProjectById";
+
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getProjectById invoked for project {ProjectId}", projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
-            return NotYetImplemented(context, "getProjectById");
+            if (projectService == null)
+            {
+                await NotYetImplemented(context, operationId);
+
+                return;
+            }
+
+            try
+            {
+                if (body.Content.IsError)
+                {
+                    await Failed(context, operationId, body.Content.Errors);
+
+                    return;
+                }
+
+                var request = body.Content.Value;
+
+                var outcome = await projectService.UpdateProjectAsync(projectId, request.Name, request.Description, request.DefaultBranch, context.RequestAborted);
+
+                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status200OK);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, operationId, exception, logger);
+            }
         }
 
         /// <summary>
-        /// Handles <c>PUT /projects/{projectId}</c>, the REST/HTTP binding of
-        /// <c>ProjectService::updateProject</c> — "Update the project with the given id (projectId)."
+        /// Handles <c>DELETE /projects/{projectId}</c>: <c>ProjectService::deleteProject</c> (Systems Modeling API and Services 1.0 §7.2.1).
         /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project that is updated.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
+        /// <param name="context">The <see cref="HttpContext"/> of the request.</param>
+        /// <param name="projectId">The project identifier.</param>
+        /// <param name="projectService">The <see cref="IProjectService"/>, or <c>null</c> when none is registered.</param>
+        /// <param name="logger">The logger of the module.</param>
+        /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// The request body is a <c>ProjectRequest</c>. Per §8.1.3 (pp. 50–56) this single endpoint also
-        /// realizes <c>ProjectDataVersioningService::setDefaultBranch</c> — "Set the branch with the given
-        /// branchId as the default branch of the given project" — by setting the id of the new default
-        /// branch as <c>ProjectRequest.defaultBranch</c> in the body. Not yet implemented — answers
-        /// <c>500</c> with an RFC 7807 payload.
-        /// </remarks>
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task PutProjectById(HttpContext context, Guid projectId, ILogger<ProjectApi> logger)
-        {
-            if (logger.IsEnabled(LogLevel.Information))
-            {
-                logger.LogInformation("putProjectById invoked for project {ProjectId}", projectId);
-            }
-
-            return NotYetImplemented(context, "putProjectById");
-        }
-
-        /// <summary>
-        /// Handles <c>DELETE /projects/{projectId}</c>, the REST/HTTP binding of
-        /// <c>ProjectService::deleteProject</c> — "Delete the project with the given id (projectId)."
-        /// </summary>
-        /// <param name="context">The <see cref="HttpContext"/> of the request being handled.</param>
-        /// <param name="projectId">The identifier of the project that is deleted.</param>
-        /// <param name="logger">The <see cref="ILogger"/> resolved from the request services.</param>
-        /// <returns>A <see cref="Task"/> that completes once the response has been written.</returns>
-        /// <remarks>
-        /// §7.2.1 (pp. 39–40) states the pre-condition that the project with the given <c>projectId</c>
-        /// exists, and the post-condition that "all operations of all services where projectId (Id of the
-        /// deleted project) is an input argument will return null".
-        /// <para>
-        /// Elements owned by a deleted project may still be referenced from other projects through project
-        /// usages. The specification deliberately leaves the detection of, and the response to, that
-        /// condition to the API and Service provider, and offers three example behaviours: delete
-        /// unconditionally while guaranteeing that operations on the using projects keep working; delete
-        /// only when no element in a pre-specified set of commits is used by another project; or delete
-        /// only when no commit of the project is referenced by a project usage in any commit of any other
-        /// project. Which of these Fabric adopts is an open design decision.
-        /// </para>
-        /// Not yet implemented — answers <c>500</c> with an RFC 7807 payload.
+        /// Answers <c>200</c> with the deleted project, or <c>204</c> when the request carries <c>Prefer: return=minimal</c> (RFC 7240 §4.2).
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
-        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        public static Task DeleteProjectById(HttpContext context, Guid projectId, ILogger<ProjectApi> logger)
+        [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
+        private static async Task DeleteProjectById(HttpContext context, Guid projectId, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "deleteProjectById";
+
+            ArgumentNullException.ThrowIfNull(context);
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("deleteProjectById invoked for project {ProjectId}", projectId);
+                logger.LogInformation(ProjectInvokedLogTemplate, operationId, projectId);
             }
 
-            return NotYetImplemented(context, "deleteProjectById");
+            if (projectService == null)
+            {
+                await NotYetImplemented(context, operationId);
+
+                return;
+            }
+
+            try
+            {
+                var outcome = await projectService.DeleteProjectAsync(projectId, context.RequestAborted);
+
+                await DeletedAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome);
+            }
+            catch (Exception exception)
+            {
+                await Failure(context, operationId, exception, logger);
+            }
         }
     }
 }
