@@ -119,6 +119,12 @@ namespace Mycelium.Fabric.Mcp.Changes
         private readonly Dictionary<string, Guid> temporaryNames = [];
 
         /// <summary>
+        /// The <c>Id</c> of the elements created by the previous batches, indexed by their temporary name. A name of the batch
+        /// designates the element of the batch first.
+        /// </summary>
+        private readonly IReadOnlyDictionary<string, Guid> earlierTemporaryNames;
+
+        /// <summary>
         /// The temporary names of the elements whose creation failed, to explain why later changes cannot use them.
         /// </summary>
         private readonly HashSet<string> failedTemporaryNames = [];
@@ -137,10 +143,27 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Initializes a new instance of the <see cref="ModelChangeBatch"/> class.
         /// </summary>
         /// <param name="workingCopy">The DTOs of the model to modify, which must not be shared with the current model.</param>
-        public ModelChangeBatch(IEnumerable<IElement> workingCopy)
+        /// <param name="earlierTemporaryNames">
+        /// The <c>Id</c> of the elements created by the previous batches, indexed by their temporary name.
+        /// </param>
+        public ModelChangeBatch(IEnumerable<IElement> workingCopy, IReadOnlyDictionary<string, Guid> earlierTemporaryNames)
         {
             this.elementsById = workingCopy.ToDictionary(element => element.Id);
             this.originalIds = [.. this.elementsById.Keys];
+            this.earlierTemporaryNames = earlierTemporaryNames;
+        }
+
+        /// <summary>
+        /// Adds the temporary names that the batch has given to its elements to the given names, replacing the names that were
+        /// already there: a name designates the last element that has received it.
+        /// </summary>
+        /// <param name="temporaryNames">The temporary names to complete, indexed by name.</param>
+        public void AddTemporaryNamesTo(Dictionary<string, Guid> temporaryNames)
+        {
+            foreach (var (temporaryName, elementId) in this.temporaryNames)
+            {
+                temporaryNames[temporaryName] = elementId;
+            }
         }
 
         /// <summary>
@@ -726,16 +749,25 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException($"The {role} is missing.");
             }
 
+            var isEarlierName = false;
+
             if (!Guid.TryParse(reference, out var elementId) && !this.temporaryNames.TryGetValue(reference, out elementId))
             {
-                throw new InvalidChangeException(this.failedTemporaryNames.Contains(reference)
-                    ? $"The {role} '{reference}' has not been created, because the change that creates it has failed."
-                    : $"The {role} '{reference}' is neither the identifier of an element nor the temporary name of an element created by a previous change of this batch. Temporary names only live in their own batch: to refer to an element created by an earlier batch, use its identifier from createdElements.");
+                isEarlierName = this.earlierTemporaryNames.TryGetValue(reference, out elementId);
+
+                if (!isEarlierName)
+                {
+                    throw new InvalidChangeException(this.failedTemporaryNames.Contains(reference)
+                        ? $"The {role} '{reference}' has not been created, because the change that creates it has failed."
+                        : $"The {role} '{reference}' is neither the identifier of an element nor the temporary name of an element created so far. Use the identifier of the element: find_elements_by_name or the createdElements of a previous batch give it.");
+                }
             }
 
             if (!this.elementsById.TryGetValue(elementId, out var element))
             {
-                throw new InvalidChangeException($"No element has the identifier '{reference}'. Use find_elements_by_name or list_children to get a valid identifier.");
+                throw new InvalidChangeException(isEarlierName
+                    ? $"The {role} '{reference}' is the temporary name of an element that no longer exists. Use find_elements_by_name or list_children to get the identifier of the element."
+                    : $"No element has the identifier '{reference}'. Use find_elements_by_name or list_children to get a valid identifier.");
             }
 
             if (this.IsMarkedForDeletion(element))

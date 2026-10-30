@@ -82,7 +82,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "Create: a payload with a type (the SysML v2 metaclass: Package, PartDefinition, PartUsage, AttributeUsage, RequirementUsage...), a name, an owner (none for the top level) "
             + "and, if needed, a definition (for a part), a value and a unit (for an attribute: 38 with kg, true, 'S-band'), a text (required for a requirement), a reqId and a constraint (for a requirement: "
             + "an attribute or path of the subject, an operator, a limit with an optional unit or a limitAttribute, a margin, and kind Assumption for an assumption); "
-            + "the identity is then an optional temporary name, that later changes of the same batch use instead of an identifier. "
+            + "the identity is then an optional temporary name, that later changes of this batch and of the next batches use instead of an identifier. "
             + "A SatisfyRequirementUsage (satisfy link) takes a satisfiedRequirement and a satisfyingPart (a part, an action or an interface) instead of a name; one per element that satisfies the requirement. "
             + "A definition or a usage takes specializes for :> (part def Camera :> Equipment). A PerformActionUsage takes an owner (the performer) and a performed action usage. "
             + "Ports: a PortDefinition owns the attributes or items that cross the port, with a direction (In, Out, Inout); a PortUsage takes it as definition, with conjugated true on the receiving side. "

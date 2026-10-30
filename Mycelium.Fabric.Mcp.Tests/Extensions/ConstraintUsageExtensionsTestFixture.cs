@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.Mcp.Tests.Extensions
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
 
     using ErrorOr;
@@ -50,7 +51,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             [
                 new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Identity = EclipseEnergyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 } } }
-            ]);
+            ], new Dictionary<string, Guid>());
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);
             var builtConstraints = result.Value.Change.Select(dataVersion => dataVersion.Payload).OfType<ConstraintUsageDto>().ToList();

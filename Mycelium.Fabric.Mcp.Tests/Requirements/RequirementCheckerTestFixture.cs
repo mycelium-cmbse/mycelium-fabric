@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.Mcp.Tests.Requirements
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
 
     using Mycelium.Fabric.Mcp.Changes;
@@ -104,7 +105,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 40 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "cameraMass", SatisfyingPart = CameraId.ToString() } },
                 new ModelChange { Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId, Name = "untracedRequirement", Text = "A requirement without identifier." } }
-            ]);
+            ], new Dictionary<string, Guid>());
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);
             var satisfyLinks = result.Value.Change.Select(dataVersion => dataVersion.Payload).OfType<SatisfyRequirementUsage>().ToList();
@@ -199,7 +200,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 new ModelChange { Identity = RequirementIds[3], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 100 } } },
                 .. RequirementIds.Where(id => id != RequirementIds[1]).Select(id =>
                     new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = id, SatisfyingPart = Eosat1Id } })
-            ]);
+            ], new Dictionary<string, Guid>());
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);
             var builder = new ConstraintDtoBuilder(dtos);
@@ -326,7 +327,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                     new ModelChange { Identity = $"requirement{index}", Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId, Name = $"requirement{index}", ReqId = $"REQ-X-{index:D2}", Text = "Any expression." } },
                     new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = $"requirement{index}", SatisfyingPart = Eosat1Id } }
                 })
-            ]);
+            ], new Dictionary<string, Guid>());
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);
             var builder = new ConstraintDtoBuilder(dtos);
@@ -394,7 +395,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 new ModelChange { Identity = RequirementIds[4], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "temperature", Operator = "<=", Limit = 40 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[4], SatisfyingPart = Eosat1Id } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[5], SatisfyingPart = Eosat1Id } }
-            ]);
+            ], new Dictionary<string, Guid>());
 
             var dtos = CommitRequestHelper.Apply(model, result.Value);
             var builder = new ConstraintDtoBuilder(dtos);
