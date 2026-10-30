@@ -341,7 +341,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         /// <param name="feature">The referencing feature.</param>
         /// <param name="features">The features of the path, the referenced feature being the last one.</param>
-        private void AddReferenceSubsetting(IElement feature, IReadOnlyList<IElement> features)
+        private void AddReferenceSubsetting(IElement feature, List<IElement> features)
         {
             if (features.Count == 1)
             {
