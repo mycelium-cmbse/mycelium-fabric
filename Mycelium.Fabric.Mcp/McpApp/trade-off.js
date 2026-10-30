@@ -3,8 +3,12 @@ const $ = id => document.getElementById(id);
 let study = null;
 let state = null;
 
+// The origin of the host, known from its first message: until then, the messages go to the parent frame whatever its origin.
+// A host that shows the view in a frame without an origin of its own ("null") keeps "*".
+let hostOrigin = "*";
+
 function send(message) {
-    window.parent.postMessage(message, "*");
+    window.parent.postMessage(message, hostOrigin);
 }
 
 function notify(method, params) {
@@ -21,6 +25,7 @@ function request(method, params) {
 }
 
 window.addEventListener("message", event => {
+    if (event.source !== window.parent || !isHostOrigin(event.origin)) return;
     const message = event.data;
     if (!message || message.jsonrpc !== "2.0") return;
 
@@ -36,6 +41,12 @@ window.addEventListener("message", event => {
     if (message.method === "ui/notifications/tool-result") onFirstStudy(message.params);
     if (message.method === "ui/notifications/host-context-changed") applyTheme(message.params);
 });
+
+// Only the host, in the parent frame, talks to the view: the first message gives its origin, and later messages must come from it.
+function isHostOrigin(origin) {
+    if (hostOrigin === "*" && origin !== "null") hostOrigin = origin;
+    return hostOrigin === "*" || origin === hostOrigin;
+}
 
 function applyTheme(context) {
     if (!context) return;
