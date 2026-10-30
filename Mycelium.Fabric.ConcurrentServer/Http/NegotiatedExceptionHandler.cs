@@ -29,6 +29,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
         private readonly ILogger<NegotiatedExceptionHandler> logger;
 
         /// <summary>
+        /// The endpoint logged for a request that failed before routing selected one.
+        /// </summary>
+        private const string UnroutedEndpoint = "Unrouted request";
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="NegotiatedExceptionHandler"/> class.
         /// </summary>
         /// <param name="logger">The (injected) logger the exception is recorded with.</param>
@@ -62,7 +67,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
                     return true;
 
                 default:
-                    this.logger.LogError(exception, "{Method} {Path} failed unexpectedly", httpContext.Request.Method, httpContext.Request.Path);
+                    this.logger.LogError(exception, "{Endpoint} failed unexpectedly (trace {TraceIdentifier})", httpContext.GetEndpoint()?.DisplayName ?? UnroutedEndpoint,
+                        httpContext.TraceIdentifier);
 
                     await httpContext.Response.NegotiateErrorAsync(StatusCodes.Status500InternalServerError, "The server did not complete the request.");
 

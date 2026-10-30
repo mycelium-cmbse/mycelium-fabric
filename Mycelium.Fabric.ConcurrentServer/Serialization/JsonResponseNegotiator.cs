@@ -84,7 +84,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>A <see cref="Task"/> that completes once the payload is written.</returns>
         /// <exception cref="NotSupportedException">Thrown when the model is not a REST/HTTP PSM payload.</exception>
-        public Task Handle<T>(HttpRequest req, HttpResponse res, T model, CancellationToken cancellationToken = default)
+        public Task Handle<T>(HttpRequest req, HttpResponse res, T model, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(res);
             ArgumentNullException.ThrowIfNull(model);

@@ -75,16 +75,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task Merge(HttpContext context, Guid projectId, Guid targetBranchId, DataBody resolution,
             [FromServices] IProjectDataVersioningService versioningService, ILogger<DiffMergeApi> logger)
         {
+            const string operationId = "merge";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("merge invoked for project {ProjectId} and target branch {TargetBranchId}", projectId, targetBranchId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and target branch {TargetBranchId}", operationId, projectId, targetBranchId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "merge");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -95,21 +97,21 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (commitsToMerge.IsError)
                 {
-                    await Failed(context, "merge", commitsToMerge.Errors);
+                    await Failed(context, operationId, commitsToMerge.Errors);
 
                     return;
                 }
 
                 if (commitsToMerge.Value.Count == 0)
                 {
-                    await Invalid(context, "merge", $"{SourceCommitIdParameter}.missing", $"The '{SourceCommitIdParameter}' query parameter is required.");
+                    await Invalid(context, operationId, $"{SourceCommitIdParameter}.missing", $"The '{SourceCommitIdParameter}' query parameter is required.");
 
                     return;
                 }
 
                 if (resolution.Content.IsError)
                 {
-                    await Failed(context, "merge", resolution.Content.Errors);
+                    await Failed(context, operationId, resolution.Content.Errors);
 
                     return;
                 }
@@ -118,7 +120,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (scope.IsError)
                 {
-                    await Failed(context, "merge", scope.Errors);
+                    await Failed(context, operationId, scope.Errors);
 
                     return;
                 }
@@ -128,7 +130,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (outcome.IsError)
                 {
-                    await Failed(context, "merge", outcome.Errors);
+                    await Failed(context, operationId, outcome.Errors);
 
                     return;
                 }
@@ -138,7 +140,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             }
             catch (Exception exception)
             {
-                await Failure(context, "merge", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -161,16 +163,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task Diff(HttpContext context, Guid projectId, Guid compareCommitId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<DiffMergeApi> logger)
         {
+            const string operationId = "diff";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("diff invoked for project {ProjectId} and compare commit {CompareCommitId}", projectId, compareCommitId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and compare commit {CompareCommitId}", operationId, projectId, compareCommitId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "diff");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -181,7 +185,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (baseCommitId.IsError)
                 {
-                    await Failed(context, "diff", baseCommitId.Errors);
+                    await Failed(context, operationId, baseCommitId.Errors);
 
                     return;
                 }
@@ -190,7 +194,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (changeTypes.IsError)
                 {
-                    await Failed(context, "diff", changeTypes.Errors);
+                    await Failed(context, operationId, changeTypes.Errors);
 
                     return;
                 }
@@ -199,17 +203,17 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (scope.IsError)
                 {
-                    await Failed(context, "diff", scope.Errors);
+                    await Failed(context, operationId, scope.Errors);
 
                     return;
                 }
 
-                await PagedAsync<DataDifference, SysML2.NET.PIM.DTO.DataDifference>(context, "diff",
+                await PagedAsync<DataDifference, SysML2.NET.PIM.DTO.DataDifference>(context, operationId,
                     queryParameters => versioningService.DiffCommitsAsync(baseCommitId.Value, compareCommitId, changeTypes.Value, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "diff", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 

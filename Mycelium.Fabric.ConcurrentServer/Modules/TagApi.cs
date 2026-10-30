@@ -42,28 +42,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task GetTagsByProject(HttpContext context, Guid projectId, [FromServices] IProjectDataVersioningService versioningService, ILogger<TagApi> logger)
         {
+            const string operationId = "getTagsByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getTagsByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getTagsByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, "getTagsByProject",
+                await PagedAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, operationId,
                     queryParameters => versioningService.GetTagsAsync(projectId, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getTagsByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -81,16 +83,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task PostTagByProject(HttpContext context, Guid projectId, RequestBody<TagRequest> body, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<TagApi> logger)
         {
+            const string operationId = "postTagByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("postTagByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "postTagByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -99,7 +103,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "postTagByProject", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -108,11 +112,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await versioningService.CreateTagAsync(projectId, request.Name, request.TaggedCommit, context.RequestAborted);
 
-                await WriteAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, "postTagByProject", outcome, StatusCodes.Status201Created);
+                await WriteAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, operationId, outcome, StatusCodes.Status201Created);
             }
             catch (Exception exception)
             {
-                await Failure(context, "postTagByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -131,16 +135,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetTagByProjectAndId(HttpContext context, Guid projectId, Guid tagId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<TagApi> logger)
         {
+            const string operationId = "getTagByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getTagByProjectAndId invoked for project {ProjectId} and tag {TagId}", projectId, tagId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and tag {TagId}", operationId, projectId, tagId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getTagByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -149,11 +155,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await versioningService.GetTagByIdAsync(projectId, tagId, context.RequestAborted);
 
-                await WriteAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, "getTagByProjectAndId", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getTagByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -176,16 +182,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task DeleteTagByProjectAndId(HttpContext context, Guid projectId, Guid tagId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<TagApi> logger)
         {
+            const string operationId = "deleteTagByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("deleteTagByProjectAndId invoked for project {ProjectId} and tag {TagId}", projectId, tagId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and tag {TagId}", operationId, projectId, tagId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "deleteTagByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -194,11 +202,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await versioningService.DeleteTagAsync(projectId, tagId, context.RequestAborted);
 
-                await DeletedAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, "deleteTagByProjectAndId", outcome);
+                await DeletedAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, operationId, outcome);
             }
             catch (Exception exception)
             {
-                await Failure(context, "deleteTagByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
     }

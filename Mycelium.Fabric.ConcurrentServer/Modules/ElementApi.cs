@@ -43,28 +43,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetElementsByProjectCommit(HttpContext context, Guid projectId, Guid commitId, [FromServices] IElementNavigationService navigationService,
             ILogger<ElementApi> logger)
         {
+            const string operationId = "getElementsByProjectCommit";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getElementsByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and commit {CommitId}", operationId, projectId, commitId);
             }
 
             if (navigationService == null)
             {
-                await NotYetImplemented(context, "getElementsByProjectCommit");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync(context, "getElementsByProjectCommit",
+                await PagedAsync(context, operationId,
                     queryParameters => navigationService.GetElementsAsync(projectId, commitId, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getElementsByProjectCommit", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -84,16 +86,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetElementByProjectCommitId(HttpContext context, Guid projectId, Guid commitId, Guid elementId,
             [FromServices] IElementNavigationService navigationService, ILogger<ElementApi> logger)
         {
+            const string operationId = "getElementByProjectCommitId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getElementByProjectCommitId invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", projectId, commitId, elementId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", operationId, projectId, commitId, elementId);
             }
 
             if (navigationService == null)
             {
-                await NotYetImplemented(context, "getElementByProjectCommitId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -102,11 +106,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await navigationService.GetElementByIdAsync(projectId, commitId, elementId, context.RequestAborted);
 
-                await WriteAsync(context, "getElementByProjectCommitId", outcome, StatusCodes.Status200OK);
+                await WriteAsync(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getElementByProjectCommitId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -127,13 +131,15 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static Task GetProjectUsageByProjectCommitElement(HttpContext context, Guid projectId, Guid commitId, Guid elementId, ILogger<ElementApi> logger)
         {
+            const string operationId = "getProjectUsageByProjectCommitElement";
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getProjectUsageByProjectCommitElement invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", projectId, commitId,
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}, commit {CommitId} and element {ElementId}", operationId, projectId, commitId,
                     elementId);
             }
 
-            return NotYetImplemented(context, "getProjectUsageByProjectCommitElement");
+            return NotYetImplemented(context, operationId);
         }
 
         /// <summary>
@@ -151,28 +157,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetRootsByProjectCommit(HttpContext context, Guid projectId, Guid commitId, [FromServices] IElementNavigationService navigationService,
             ILogger<ElementApi> logger)
         {
+            const string operationId = "getRootsByProjectCommit";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getRootsByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and commit {CommitId}", operationId, projectId, commitId);
             }
 
             if (navigationService == null)
             {
-                await NotYetImplemented(context, "getRootsByProjectCommit");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync(context, "getRootsByProjectCommit",
+                await PagedAsync(context, operationId,
                     queryParameters => navigationService.GetRootElementsAsync(projectId, commitId, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getRootsByProjectCommit", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
     }

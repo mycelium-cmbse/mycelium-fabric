@@ -43,28 +43,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetBranchesByProject(HttpContext context, Guid projectId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<BranchApi> logger)
         {
+            const string operationId = "getBranchesByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getBranchesByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getBranchesByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "getBranchesByProject",
+                await PagedAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, operationId,
                     queryParameters => versioningService.GetBranchesAsync(projectId, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getBranchesByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -82,16 +84,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task PostBranchByProject(HttpContext context, Guid projectId, RequestBody<BranchRequest> body,
             [FromServices] IProjectDataVersioningService versioningService, ILogger<BranchApi> logger)
         {
+            const string operationId = "postBranchByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("postBranchByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "postBranchByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -100,7 +104,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "postBranchByProject", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -109,11 +113,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await versioningService.CreateBranchAsync(projectId, request.Name, request.Head.Value, context.RequestAborted);
 
-                await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "postBranchByProject", outcome, StatusCodes.Status201Created);
+                await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, operationId, outcome, StatusCodes.Status201Created);
             }
             catch (Exception exception)
             {
-                await Failure(context, "postBranchByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -132,16 +136,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetBranchesByProjectAndId(HttpContext context, Guid projectId, Guid branchId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<BranchApi> logger)
         {
+            const string operationId = "getBranchesByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getBranchesByProjectAndId invoked for project {ProjectId} and branch {BranchId}", projectId, branchId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and branch {BranchId}", operationId, projectId, branchId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getBranchesByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -150,11 +156,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await versioningService.GetBranchByIdAsync(projectId, branchId, context.RequestAborted);
 
-                await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "getBranchesByProjectAndId", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getBranchesByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -177,16 +183,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task DeleteBranchByProjectAndId(HttpContext context, Guid projectId, Guid branchId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<BranchApi> logger)
         {
+            const string operationId = "deleteBranchByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("deleteBranchByProjectAndId invoked for project {ProjectId} and branch {BranchId}", projectId, branchId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and branch {BranchId}", operationId, projectId, branchId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "deleteBranchByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -195,11 +203,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await versioningService.DeleteBranchAsync(projectId, branchId, context.RequestAborted);
 
-                await DeletedAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, "deleteBranchByProjectAndId", outcome);
+                await DeletedAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, operationId, outcome);
             }
             catch (Exception exception)
             {
-                await Failure(context, "deleteBranchByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
     }

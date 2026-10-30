@@ -264,7 +264,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
         /// </summary>
         /// <param name="value">The raw value.</param>
         /// <returns>The non-empty values.</returns>
-        private static IEnumerable<string> Split(string value)
+        private static string[] Split(string value)
         {
             return (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }

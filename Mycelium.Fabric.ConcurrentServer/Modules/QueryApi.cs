@@ -49,28 +49,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task GetQueriesByProject(HttpContext context, Guid projectId, [FromServices] IQueryService queryService, ILogger<QueryApi> logger)
         {
+            const string operationId = "getQueriesByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getQueriesByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "getQueriesByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync<Query, SysML2.NET.PIM.DTO.Query>(context, "getQueriesByProject",
+                await PagedAsync<Query, SysML2.NET.PIM.DTO.Query>(context, operationId,
                     queryParameters => queryService.GetQueriesAsync(projectId, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getQueriesByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -91,16 +93,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task PostQueryByProject(HttpContext context, Guid projectId, RequestBody<QueryRequest> body, [FromServices] IQueryService queryService,
             ILogger<QueryApi> logger)
         {
+            const string operationId = "postQueryByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("postQueryByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "postQueryByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -109,7 +113,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "postQueryByProject", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -118,11 +122,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await queryService.CreateQueryAsync(query.Name, projectId, query.Select, [], query.Where, [], context.RequestAborted);
 
-                await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, "postQueryByProject", outcome, StatusCodes.Status201Created);
+                await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, operationId, outcome, StatusCodes.Status201Created);
             }
             catch (Exception exception)
             {
-                await Failure(context, "postQueryByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -140,16 +144,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task GetQueryByProjectAndId(HttpContext context, Guid projectId, Guid queryId, [FromServices] IQueryService queryService, ILogger<QueryApi> logger)
         {
+            const string operationId = "getQueryByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "getQueryByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -158,11 +164,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await queryService.GetQueryByIdAsync(projectId, queryId, context.RequestAborted);
 
-                await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, "getQueryByProjectAndId", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getQueryByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -185,16 +191,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task PutQueryByProjectAndId(HttpContext context, Guid projectId, Guid queryId, RequestBody<QueryRequest> body,
             [FromServices] IQueryService queryService, ILogger<QueryApi> logger)
         {
+            const string operationId = "putQueryByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("putQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "putQueryByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -203,7 +211,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "putQueryByProjectAndId", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -214,11 +222,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await queryService.UpdateQueryAsync(projectId, query, context.RequestAborted);
 
-                await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, "putQueryByProjectAndId", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "putQueryByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -240,16 +248,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task DeleteQueryByProjectAndId(HttpContext context, Guid projectId, Guid queryId, [FromServices] IQueryService queryService, ILogger<QueryApi> logger)
         {
+            const string operationId = "deleteQueryByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("deleteQueryByProjectAndId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "deleteQueryByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -258,11 +268,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await queryService.DeleteQueryAsync(projectId, queryId, context.RequestAborted);
 
-                await DeletedAsync<Query, SysML2.NET.PIM.DTO.Query>(context, "deleteQueryByProjectAndId", outcome);
+                await DeletedAsync<Query, SysML2.NET.PIM.DTO.Query>(context, operationId, outcome);
             }
             catch (Exception exception)
             {
-                await Failure(context, "deleteQueryByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -285,16 +295,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetQueryResultsByProjectIdQueryId(HttpContext context, Guid projectId, Guid queryId, [FromServices] IQueryService queryService,
             ILogger<QueryApi> logger)
         {
+            const string operationId = "getQueryResultsByProjectIdQueryId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getQueryResultsByProjectIdQueryId invoked for project {ProjectId} and query {QueryId}", projectId, queryId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and query {QueryId}", operationId, projectId, queryId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "getQueryResultsByProjectIdQueryId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -305,7 +317,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (commitId.IsError)
                 {
-                    await Failed(context, "getQueryResultsByProjectIdQueryId", commitId.Errors);
+                    await Failed(context, operationId, commitId.Errors);
 
                     return;
                 }
@@ -314,17 +326,17 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (query.IsError)
                 {
-                    await Failed(context, "getQueryResultsByProjectIdQueryId", query.Errors);
+                    await Failed(context, operationId, query.Errors);
 
                     return;
                 }
 
-                await PagedAsync(context, "getQueryResultsByProjectIdQueryId",
+                await PagedAsync(context, operationId,
                     queryParameters => queryService.ExecuteQueryByIdAsync(queryId, commitId.Value, queryParameters, context.RequestAborted), ToResponse);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getQueryResultsByProjectIdQueryId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -346,27 +358,29 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetQueryResultsByProjectIdQuery(HttpContext context, Guid projectId, RequestBody<QueryRequest> body, [FromServices] IQueryService queryService,
             ILogger<QueryApi> logger)
         {
+            const string operationId = "getQueryResultsByProjectIdQuery";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getQueryResultsByProjectIdQuery invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "getQueryResultsByProjectIdQuery");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await ExecuteSuppliedQueryAsync(context, "getQueryResultsByProjectIdQuery", body, projectId, queryService);
+                await ExecuteSuppliedQueryAsync(context, operationId, body, projectId, queryService);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getQueryResultsByProjectIdQuery", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -388,27 +402,29 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetQueryResultsByProjectIdQueryPost(HttpContext context, Guid projectId, RequestBody<QueryRequest> body, [FromServices] IQueryService queryService,
             ILogger<QueryApi> logger)
         {
+            const string operationId = "getQueryResultsByProjectIdQueryPost";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getQueryResultsByProjectIdQueryPost invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (queryService == null)
             {
-                await NotYetImplemented(context, "getQueryResultsByProjectIdQueryPost");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await ExecuteSuppliedQueryAsync(context, "getQueryResultsByProjectIdQueryPost", body, projectId, queryService);
+                await ExecuteSuppliedQueryAsync(context, operationId, body, projectId, queryService);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getQueryResultsByProjectIdQueryPost", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 

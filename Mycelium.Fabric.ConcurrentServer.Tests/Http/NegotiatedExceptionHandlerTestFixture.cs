@@ -92,7 +92,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
                 Assert.That(error.GetProperty("description").GetString(), Does.Not.Contain("the store is unreachable"));
             }
 
-            this.logger.Verify(log => log.Log(LogLevel.Error, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("/projects")), exception,
+            this.logger.Verify(log => log.Log(LogLevel.Error, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("Unrouted request")), exception,
                 It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
 
             // A rejected request keeps its own status and is not an unexpected failure.

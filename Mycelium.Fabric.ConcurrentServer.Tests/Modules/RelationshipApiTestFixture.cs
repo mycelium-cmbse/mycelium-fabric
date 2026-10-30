@@ -53,7 +53,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             this.navigationService = EndpointHost.NavigationService;
         }
 
-        private static IRelationship Record()
+        private static FeatureTyping Record()
         {
             return new FeatureTyping { Id = RelationshipId };
         }

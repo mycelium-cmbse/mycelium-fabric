@@ -40,28 +40,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task GetProjects(HttpContext context, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "getProjects";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getProjects invoked");
+                logger.LogInformation("{OperationId} invoked", operationId);
             }
 
             if (projectService == null)
             {
-                await NotYetImplemented(context, "getProjects");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync<Project, SysML2.NET.PIM.DTO.Project>(context, "getProjects",
+                await PagedAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId,
                     queryParameters => projectService.GetProjectsAsync(queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getProjects", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -80,16 +82,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task PostProject(HttpContext context, RequestBody<ProjectRequest> body, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "postProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("postProject invoked");
+                logger.LogInformation("{OperationId} invoked", operationId);
             }
 
             if (projectService == null)
             {
-                await NotYetImplemented(context, "postProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -98,7 +102,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "postProject", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -107,11 +111,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await projectService.CreateProjectAsync(request.Name, request.Description, context.RequestAborted);
 
-                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, "postProject", outcome, StatusCodes.Status201Created);
+                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status201Created);
             }
             catch (Exception exception)
             {
-                await Failure(context, "postProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -128,16 +132,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task GetProjectById(HttpContext context, Guid projectId, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "getProjectById";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getProjectById invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (projectService == null)
             {
-                await NotYetImplemented(context, "getProjectById");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -146,11 +152,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await projectService.GetProjectByIdAsync(projectId, context.RequestAborted);
 
-                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, "getProjectById", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getProjectById", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -172,16 +178,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task PutProjectById(HttpContext context, Guid projectId, RequestBody<ProjectRequest> body, [FromServices] IProjectService projectService,
             ILogger<ProjectApi> logger)
         {
+            const string operationId = "putProjectById";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("putProjectById invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (projectService == null)
             {
-                await NotYetImplemented(context, "putProjectById");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -190,7 +198,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "putProjectById", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -199,11 +207,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await projectService.UpdateProjectAsync(projectId, request.Name, request.Description, request.DefaultBranch, context.RequestAborted);
 
-                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, "putProjectById", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "putProjectById", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -223,16 +231,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task DeleteProjectById(HttpContext context, Guid projectId, [FromServices] IProjectService projectService, ILogger<ProjectApi> logger)
         {
+            const string operationId = "deleteProjectById";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("deleteProjectById invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (projectService == null)
             {
-                await NotYetImplemented(context, "deleteProjectById");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -241,11 +251,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await projectService.DeleteProjectAsync(projectId, context.RequestAborted);
 
-                await DeletedAsync<Project, SysML2.NET.PIM.DTO.Project>(context, "deleteProjectById", outcome);
+                await DeletedAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome);
             }
             catch (Exception exception)
             {
-                await Failure(context, "deleteProjectById", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
     }

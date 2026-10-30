@@ -98,7 +98,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
             {
                 IReadOnlyList<IData> none = [];
 
-                return ErrorOrFactory.From(none);
+                return await ErrorOrFactory.FromAsync(none);
             }
 
             var deserializer = this.Select(request);
@@ -110,7 +110,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
 
             try
             {
-                return ErrorOrFactory.From(await deserializer.Value.ReadDataAsync(request.Body, request.HttpContext.RequestAborted));
+                return await ErrorOrFactory.FromAsync(await deserializer.Value.ReadDataAsync(request.Body, request.HttpContext.RequestAborted));
             }
             catch (InvalidDataException exception)
             {

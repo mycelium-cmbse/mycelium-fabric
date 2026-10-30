@@ -53,28 +53,30 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
         private static async Task GetCommitsByProject(HttpContext context, Guid projectId, [FromServices] IProjectDataVersioningService versioningService, ILogger<CommitApi> logger)
         {
+            const string operationId = "getCommitsByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getCommitsByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getCommitsByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
 
             try
             {
-                await PagedAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, "getCommitsByProject",
+                await PagedAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, operationId,
                     queryParameters => versioningService.GetCommitsAsync(projectId, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getCommitsByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -95,16 +97,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task PostCommitByProject(HttpContext context, Guid projectId, RequestBody<CommitRequest> body,
             [FromServices] IProjectDataVersioningService versioningService, ILogger<CommitApi> logger)
         {
+            const string operationId = "postCommitByProject";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("postCommitByProject invoked for project {ProjectId}", projectId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}", operationId, projectId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "postCommitByProject");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -115,14 +119,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (branchId.IsError)
                 {
-                    await Failed(context, "postCommitByProject", branchId.Errors);
+                    await Failed(context, operationId, branchId.Errors);
 
                     return;
                 }
 
                 if (body.Content.IsError)
                 {
-                    await Failed(context, "postCommitByProject", body.Content.Errors);
+                    await Failed(context, operationId, body.Content.Errors);
 
                     return;
                 }
@@ -131,11 +135,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 var outcome = await versioningService.CreateCommitAsync(change, branchId.Value, [], projectId, context.RequestAborted);
 
-                await WriteAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, "postCommitByProject", outcome, StatusCodes.Status201Created);
+                await WriteAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, operationId, outcome, StatusCodes.Status201Created);
             }
             catch (Exception exception)
             {
-                await Failure(context, "postCommitByProject", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -154,16 +158,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetCommitByProjectAndId(HttpContext context, Guid projectId, Guid commitId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<CommitApi> logger)
         {
+            const string operationId = "getCommitByProjectAndId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getCommitByProjectAndId invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and commit {CommitId}", operationId, projectId, commitId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getCommitByProjectAndId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -172,11 +178,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await versioningService.GetCommitByIdAsync(projectId, commitId, context.RequestAborted);
 
-                await WriteAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, "getCommitByProjectAndId", outcome, StatusCodes.Status200OK);
+                await WriteAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getCommitByProjectAndId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -198,16 +204,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetChangesByProjectCommit(HttpContext context, Guid projectId, Guid commitId, [FromServices] IProjectDataVersioningService versioningService,
             ILogger<CommitApi> logger)
         {
+            const string operationId = "getChangesByProjectCommit";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getChangesByProjectCommit invoked for project {ProjectId} and commit {CommitId}", projectId, commitId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId} and commit {CommitId}", operationId, projectId, commitId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getChangesByProjectCommit");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -218,17 +226,17 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (changeTypes.IsError)
                 {
-                    await Failed(context, "getChangesByProjectCommit", changeTypes.Errors);
+                    await Failed(context, operationId, changeTypes.Errors);
 
                     return;
                 }
 
-                await PagedAsync<DataVersion, SysML2.NET.PIM.DTO.DataVersion>(context, "getChangesByProjectCommit",
+                await PagedAsync<DataVersion, SysML2.NET.PIM.DTO.DataVersion>(context, operationId,
                     queryParameters => versioningService.GetCommitChangeAsync(projectId, commitId, changeTypes.Value, queryParameters, context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getChangesByProjectCommit", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
 
@@ -248,16 +256,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetChangeByProjectCommitId(HttpContext context, Guid projectId, Guid commitId, Guid changeId,
             [FromServices] IProjectDataVersioningService versioningService, ILogger<CommitApi> logger)
         {
+            const string operationId = "getChangeByProjectCommitId";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getChangeByProjectCommitId invoked for project {ProjectId}, commit {CommitId} and change {ChangeId}", projectId, commitId, changeId);
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}, commit {CommitId} and change {ChangeId}", operationId, projectId, commitId, changeId);
             }
 
             if (versioningService == null)
             {
-                await NotYetImplemented(context, "getChangeByProjectCommitId");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -266,11 +276,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
             {
                 var outcome = await versioningService.GetCommitChangeByIdAsync(projectId, commitId, changeId, context.RequestAborted);
 
-                await WriteAsync<DataVersion, SysML2.NET.PIM.DTO.DataVersion>(context, "getChangeByProjectCommitId", outcome, StatusCodes.Status200OK);
+                await WriteAsync<DataVersion, SysML2.NET.PIM.DTO.DataVersion>(context, operationId, outcome, StatusCodes.Status200OK);
             }
             catch (Exception exception)
             {
-                await Failure(context, "getChangeByProjectCommitId", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
     }

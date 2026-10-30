@@ -48,17 +48,19 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         private static async Task GetRelationshipsByProjectCommitRelatedElement(HttpContext context, Guid projectId, Guid commitId, Guid relatedElementId,
             [FromServices] IElementNavigationService navigationService, ILogger<RelationshipApi> logger)
         {
+            const string operationId = "getRelationshipsByProjectCommitRelatedElement";
+
             ArgumentNullException.ThrowIfNull(context);
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("getRelationshipsByProjectCommitRelatedElement invoked for project {ProjectId}, commit {CommitId} and related element {RelatedElementId}",
+                logger.LogInformation("{OperationId} invoked for project {ProjectId}, commit {CommitId} and related element {RelatedElementId}", operationId,
                     projectId, commitId, relatedElementId);
             }
 
             if (navigationService == null)
             {
-                await NotYetImplemented(context, "getRelationshipsByProjectCommitRelatedElement");
+                await NotYetImplemented(context, operationId);
 
                 return;
             }
@@ -69,18 +71,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
 
                 if (direction.IsError)
                 {
-                    await Failed(context, "getRelationshipsByProjectCommitRelatedElement", direction.Errors);
+                    await Failed(context, operationId, direction.Errors);
 
                     return;
                 }
 
-                await PagedAsync(context, "getRelationshipsByProjectCommitRelatedElement",
+                await PagedAsync(context, operationId,
                     queryParameters => navigationService.GetRelationshipsByRelatedElementAsync(projectId, commitId, relatedElementId, direction.Value, queryParameters,
                         context.RequestAborted));
             }
             catch (Exception exception)
             {
-                await Failure(context, "getRelationshipsByProjectCommitRelatedElement", exception, logger);
+                await Failure(context, operationId, exception, logger);
             }
         }
     }
