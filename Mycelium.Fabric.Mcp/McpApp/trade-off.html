@@ -16,17 +16,20 @@
     <div class="tr-error" id="error" hidden></div>
     <div class="tr-grid">
         <section class="tr-card" id="setup">
-            <h2>Set-up</h2>
-            <div id="choices"></div>
-            <div id="objectives"></div>
-            <div id="constraints"></div>
+            <h2><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Set-up</h2>
+            <div class="tr-body">
+                <div id="choices"></div>
+                <div id="objectives"></div>
+                <div id="constraints"></div>
+            </div>
         </section>
         <section class="tr-card">
-            <h2>Every combination</h2>
+            <h2><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"/></svg>Every combination<small>Click a numbered point to select it</small></h2>
             <div id="chart"></div>
+            <div class="tr-legend" id="legend"></div>
         </section>
         <section class="tr-card">
-            <h2>Best options</h2>
+            <h2><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Best options<small id="today"></small></h2>
             <div id="options"></div>
             <div id="excluded"></div>
             <div class="tr-pick" id="pick" hidden></div>
