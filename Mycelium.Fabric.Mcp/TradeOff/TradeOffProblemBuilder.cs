@@ -16,6 +16,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
     using ModelContextProtocol;
 
+    using Mycelium.Fabric.Mcp.Expressions;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
@@ -102,11 +103,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 throw new McpException($"No part under '{root.DeclaredName}' and no variant has a value for '{unknownAttribute}'. Use get_attribute_values to get the attribute names.");
             }
 
-            var units = ReadUnits(root, attributes, choices, request.Constraints ?? [], limits);
+            var libraryUnits = LibraryUnits.Read(modelProvider.Elements);
+            var units = ReadUnits(root, attributes, choices, request.Constraints ?? [], limits, libraryUnits);
 
-            limits = limits.Select((limit, index) => ConvertLimit(limit, request.Constraints[index], index, units)).ToList();
+            limits = limits.Select((limit, index) => ConvertLimit(limit, request.Constraints[index], index, units, libraryUnits)).ToList();
 
-            var decisions = choices.Select((choice, index) => ReadDecision(choice, names[index], parts[index], attributes, units)).ToList();
+            var decisions = choices.Select((choice, index) => ReadDecision(choice, names[index], parts[index], attributes, units, libraryUnits)).ToList();
             var fixedTotals = attributes.ToDictionary(attribute => attribute, attribute => GetFixedTotal(root, attribute, parts, units[attribute]));
             var dependencies = (request.Rules ?? []).Select((rule, index) => ReadDependency(rule, index, decisions)).ToList();
             int? compareDecisionIndex = null;
@@ -133,15 +135,16 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
         /// <param name="constraints">The <see cref="TradeOffConstraint"/>s of the request.</param>
         /// <param name="limits">The checked <see cref="TradeOffLimit"/>s, in the order of the constraints.</param>
+        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
         /// <returns>The unit of each attribute by name, <c>null</c> for an attribute without unit.</returns>
         /// <exception cref="McpException">
         /// Thrown when a unit is unknown or has an offset, or when two attributes that are compared have units of different
         /// dimensions or that cannot be put in the same unit.
         /// </exception>
         private static Dictionary<string, Unit> ReadUnits(IElement root, IReadOnlyList<string> attributes, IReadOnlyList<TradeOffChoice> choices,
-            IReadOnlyList<TradeOffConstraint> constraints, IReadOnlyList<TradeOffLimit> limits)
+            IReadOnlyList<TradeOffConstraint> constraints, IReadOnlyList<TradeOffLimit> limits, LibraryUnits libraryUnits)
         {
-            var units = attributes.ToDictionary(attribute => attribute, attribute => FindUnit(root, attribute, choices, constraints));
+            var units = attributes.ToDictionary(attribute => attribute, attribute => FindUnit(root, attribute, choices, constraints, libraryUnits));
 
             foreach (var limit in limits.Where(limit => limit.LimitAttribute != null))
             {
@@ -177,19 +180,21 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="attribute">The name of the attribute.</param>
         /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
         /// <param name="constraints">The <see cref="TradeOffConstraint"/>s of the request.</param>
+        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
         /// <returns>The unit of the attribute, or <c>null</c> when nothing gives one.</returns>
         /// <exception cref="McpException">
         /// Thrown when a unit is unknown or has an offset.
         /// </exception>
-        private static Unit FindUnit(IElement root, string attribute, IReadOnlyList<TradeOffChoice> choices, IReadOnlyList<TradeOffConstraint> constraints)
+        private static Unit FindUnit(IElement root, string attribute, IReadOnlyList<TradeOffChoice> choices, IReadOnlyList<TradeOffConstraint> constraints,
+            LibraryUnits libraryUnits)
         {
             var unit = root.CollectContributions(attribute).Select(contribution => contribution.Unit).FirstOrDefault(contributionUnit => contributionUnit != null)
                 ?? choices.SelectMany(choice => choice.Variants ?? [])
                     .Select(variant => variant?.Units?.FirstOrDefault(pair => pair.Key?.Trim() == attribute).Value)
-                    .Select(text => ParseUnit(text, $"The unit of '{attribute}' in a variant"))
+                    .Select(text => ParseUnit(text, $"The unit of '{attribute}' in a variant", libraryUnits))
                     .FirstOrDefault(variantUnit => variantUnit != null)
                 ?? constraints.Where(constraint => constraint?.Attribute?.Trim() == attribute)
-                    .Select(constraint => ParseUnit(constraint.Unit, $"The unit of the limit of '{attribute}'"))
+                    .Select(constraint => ParseUnit(constraint.Unit, $"The unit of the limit of '{attribute}'", libraryUnits))
                     .FirstOrDefault(constraintUnit => constraintUnit != null);
 
             return unit is { Offset: not 0 }
@@ -198,22 +203,23 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Finds a unit from its symbol or its name.
+        /// Finds a unit from its symbol or its name: a unit that the server knows or a unit of a library of the model.
         /// </summary>
         /// <param name="text">The symbol or name of the unit, or <c>null</c> or empty for none.</param>
         /// <param name="label">What the unit belongs to, for the messages.</param>
+        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
         /// <returns>The unit, or <c>null</c> when <paramref name="text"/> is empty.</returns>
         /// <exception cref="McpException">
         /// Thrown when the unit is not known.
         /// </exception>
-        private static Unit ParseUnit(string text, string label)
+        private static Unit ParseUnit(string text, string label, LibraryUnits libraryUnits)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
                 return null;
             }
 
-            return UnitCatalog.TryParse(text, out var unit)
+            return libraryUnits.TryParse(text, out var unit)
                 ? unit
                 : throw new McpException($"{label} is '{text}', which the server does not know: give a symbol (kg, g, W, km/h) or a name (kilogram).");
         }
@@ -264,11 +270,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="constraint">The <see cref="TradeOffConstraint"/> that it comes from.</param>
         /// <param name="index">The index of the constraint in the request.</param>
         /// <param name="units">The unit of each attribute.</param>
+        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
         /// <returns>The limit, in the unit of its attribute.</returns>
         /// <exception cref="McpException">
         /// Thrown when the unit of the limit is not known or has a different dimension from the attribute.
         /// </exception>
-        private static TradeOffLimit ConvertLimit(TradeOffLimit limit, TradeOffConstraint constraint, int index, Dictionary<string, Unit> units)
+        private static TradeOffLimit ConvertLimit(TradeOffLimit limit, TradeOffConstraint constraint, int index, Dictionary<string, Unit> units, LibraryUnits libraryUnits)
         {
             var label = $"Constraint {index + 1}";
             var reference = units[limit.Attribute];
@@ -278,7 +285,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 return limit with { Unit = reference };
             }
 
-            var converted = ConvertValue(value, ParseUnit(constraint.Unit, $"The unit of the limit of {label}"), reference, $"The limit of {label}", limit.Attribute);
+            var converted = ConvertValue(value, ParseUnit(constraint.Unit, $"The unit of the limit of {label}", libraryUnits), reference, $"The limit of {label}", limit.Attribute);
 
             return IsAllowedValue(converted)
                 ? limit with { Limit = converted, Unit = reference }
@@ -291,14 +298,16 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="variant">The <see cref="TradeOffVariant"/> to read.</param>
         /// <param name="choiceName">The name of the choice.</param>
         /// <param name="units">The unit of each attribute of the problem.</param>
+        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
         /// <returns>The values of the variant, in the unit of their attribute.</returns>
         /// <exception cref="McpException">
         /// Thrown when a unit is not known, has a different dimension from the attribute, or gives a value that is too large.
         /// </exception>
-        private static Dictionary<string, double> ReadValues(TradeOffVariant variant, string choiceName, Dictionary<string, Unit> units)
+        private static Dictionary<string, double> ReadValues(TradeOffVariant variant, string choiceName, Dictionary<string, Unit> units, LibraryUnits libraryUnits)
         {
             var label = $"The variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'";
-            var variantUnits = (variant.Units ?? new Dictionary<string, string>()).ToDictionary(pair => pair.Key.Trim(), pair => ParseUnit(pair.Value, $"{label} gives the unit of '{pair.Key.Trim()}', which"));
+            var variantUnits = (variant.Units ?? new Dictionary<string, string>())
+                .ToDictionary(pair => pair.Key.Trim(), pair => ParseUnit(pair.Value, $"{label} gives the unit of '{pair.Key.Trim()}', which", libraryUnits));
 
             return (variant.Values ?? new Dictionary<string, double>()).ToDictionary(pair => pair.Key.Trim(), pair =>
             {
@@ -509,11 +518,13 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
         /// <param name="attributes">The attributes of the problem.</param>
         /// <param name="units">The unit of each attribute of the problem.</param>
+        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
         /// <returns>The <see cref="TradeOffDecision"/> of the choice.</returns>
         /// <exception cref="McpException">
         /// Thrown when a variant is invalid.
         /// </exception>
-        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, Dictionary<string, Unit> units)
+        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, Dictionary<string, Unit> units,
+            LibraryUnits libraryUnits)
         {
             var variants = choice.Variants ?? [];
 
@@ -535,7 +546,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             var givenCurrent = variants.FirstOrDefault(variant => variant.Name.Trim() == TradeOffVariant.CurrentName);
-            var givenValues = givenCurrent == null ? [] : ReadValues(givenCurrent, name, units);
+            var givenValues = givenCurrent == null ? [] : ReadValues(givenCurrent, name, units, libraryUnits);
             var currentValues = attributes.ToDictionary(attribute => attribute, attribute => GetCurrentValue(part, givenValues, attribute, name, units[attribute]));
 
             List<TradeOffOption> options = part == null
@@ -543,7 +554,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 : [new TradeOffOption(TradeOffVariant.CurrentName, 1, true, currentValues)];
 
             var others = variants.Where(variant => variant.Name.Trim() is not (TradeOffVariant.CurrentName or TradeOffVariant.NoneName));
-            options.AddRange(others.SelectMany(variant => ExpandVariant(variant, ReadValues(variant, name, units), currentValues, attributes)));
+            options.AddRange(others.SelectMany(variant => ExpandVariant(variant, ReadValues(variant, name, units, libraryUnits), currentValues, attributes)));
 
             if (part != null && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
             {

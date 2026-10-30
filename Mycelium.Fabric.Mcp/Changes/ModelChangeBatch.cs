@@ -393,7 +393,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             var definition = payload.Definition == null ? null : this.ResolveDefinition(member, payload.Definition);
             var general = payload.Specializes == null ? null : this.ResolveGeneral(member, payload.Specializes);
 
-            CheckValue(payload.Value, payload.Unit);
+            this.CheckValue(payload.Value, payload.Unit);
 
             if (payload.Value != null)
             {
@@ -509,7 +509,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("An update cannot change the owner of an element: delete the element and create it again in its new owner.");
             }
 
-            CheckValue(payload.Value, payload.Unit);
+            this.CheckValue(payload.Value, payload.Unit);
 
             if (payload.Performed != null)
             {

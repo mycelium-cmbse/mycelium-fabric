@@ -782,7 +782,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             string[] expectedProblems =
             [
                 "Change 1 (create): The unit 'kg' only applies to a numeric value.",
-                "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, or a name such as kilogram.",
+                "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, a name such as kilogram, or a unit declared in a library of the model.",
                 "Change 3 (create): The value is empty: give a number, a Boolean or a text.",
                 "Change 4 (create): 'nominal' names several enumeration values: write 'EOSat1::Requirements::ModeA::nominal' or 'EOSat1::Requirements::ModeB::nominal'.",
                 "Change 5 (update): The unit 'kg' only applies to a numeric value.",

@@ -14,6 +14,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using System.Security.Cryptography;
     using System.Text;
 
+    using Mycelium.Fabric.Mcp.Expressions;
     using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.DTO.Kernel.Expressions;
@@ -42,6 +43,11 @@ namespace Mycelium.Fabric.Mcp.Changes
         private const string QualifiedNameSeparator = "::";
 
         /// <summary>
+        /// The units that the libraries of the model declare, read the first time that a unit is written.
+        /// </summary>
+        private LibraryUnits libraryUnits;
+
+        /// <summary>
         /// Checks a value and its unit before they are written.
         /// </summary>
         /// <param name="value">The value, or <c>null</c>.</param>
@@ -49,7 +55,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">
         /// Thrown when a unit is given without a numeric value, when the unit is not known, or when a text value is empty.
         /// </exception>
-        private static void CheckValue(PayloadValue? value, string unit)
+        private void CheckValue(PayloadValue? value, string unit)
         {
             if (unit != null)
             {
@@ -58,7 +64,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                     throw new InvalidChangeException($"The unit '{unit}' only applies to a numeric value.");
                 }
 
-                ParseUnit(unit);
+                this.ParseUnit(unit);
             }
 
             if (value is { Number: null, Boolean: null } && string.IsNullOrWhiteSpace(value.Value.Text))
@@ -68,16 +74,28 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Finds a unit from its symbol or name.
+        /// Finds a unit from its symbol or name: a unit of <see cref="UnitCatalog"/>, simple or compound, or a unit declared
+        /// in a library of the model.
         /// </summary>
         /// <param name="unit">The symbol or name of the unit, for example <c>kg</c>.</param>
         /// <returns>The <see cref="Unit"/>.</returns>
-        /// <exception cref="InvalidChangeException">Thrown when the unit is not known.</exception>
-        private static Unit ParseUnit(string unit)
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when the unit is not known, or when it combines a unit of a library with other units, which cannot be
+        /// written as one reference.
+        /// </exception>
+        private Unit ParseUnit(string unit)
         {
-            return UnitCatalog.TryParse(unit, out var parsedUnit)
+            this.libraryUnits ??= LibraryUnits.Read(this.AssembleElements());
+
+            if (!this.libraryUnits.TryParse(unit, out var parsedUnit))
+            {
+                throw new InvalidChangeException($"The unit '{unit}' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, a name such as kilogram, "
+                    + "or a unit declared in a library of the model.");
+            }
+
+            return UnitCatalog.TryParse(unit, out _) || this.libraryUnits.FindDeclaration(unit) != null
                 ? parsedUnit
-                : throw new InvalidChangeException($"The unit '{unit}' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, or a name such as kilogram.");
+                : throw new InvalidChangeException($"The unit '{unit}' combines a unit of a library of the model with other units: declare it as one unit in a library.");
         }
 
         /// <summary>
@@ -118,7 +136,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 var literal = this.Add(new LiteralRational { Value = number });
 
-                return unit == null ? literal : this.CreateOperation(QuantityOperator, literal, this.CreateUnitReference(ParseUnit(unit)));
+                return unit == null ? literal : this.CreateOperation(QuantityOperator, literal, this.CreateUnitReference(unit));
             }
 
             if (value.Boolean is { } boolean)
@@ -133,20 +151,17 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates a reference to a unit, as <c>kg</c> in <c>38 [kg]</c>: a <c>FeatureReferenceExpression</c> whose membership
-        /// names the unit. It designates the unit that has this short name in a unit package of the library (<c>SI</c>) when
-        /// the model contains it, or else the unit of the SI library by a stable identifier. An element of the user that has
-        /// the same short name elsewhere is not a unit.
+        /// names the unit. It designates the unit that a library of the model declares (<c>SI</c>, or a library of the
+        /// project), or else the unit of the SI library by a stable identifier. An element of the user that has the same short
+        /// name outside a library is not a unit.
         /// </summary>
-        /// <param name="unit">The unit.</param>
+        /// <param name="unitText">The symbol or name of the unit, already checked by <see cref="CheckValue"/>.</param>
         /// <returns>The new expression.</returns>
-        private FeatureReferenceExpression CreateUnitReference(Unit unit)
+        private FeatureReferenceExpression CreateUnitReference(string unitText)
         {
-            var candidates = this.elementsById.Values
-                .OfType<IAttributeUsage>()
-                .Where(candidate => candidate.DeclaredShortName == unit.Symbol && !this.IsMarkedForDeletion(candidate));
-
-            var unitElement = this.AssembleElements(candidates)
-                .FirstOrDefault(candidate => UnitCatalog.LibraryPackages.Contains(candidate.owningNamespace?.qualifiedName));
+            var unit = this.ParseUnit(unitText);
+            var declaration = this.libraryUnits.FindDeclaration(unitText) ?? this.libraryUnits.FindDeclaration(unit.Symbol);
+            var unitElement = declaration == null || this.IsMarkedForDeletion(this.elementsById[declaration.Id]) ? null : declaration;
 
             var reference = this.Add(new FeatureReferenceExpression());
             var unitId = unitElement?.Id ?? CreateUnitId(unit.Symbol);

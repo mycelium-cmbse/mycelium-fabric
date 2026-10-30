@@ -73,6 +73,42 @@ namespace Mycelium.Fabric.Mcp.Tests.Values
             }
         }
 
+        [Test]
+        public void VerifyTryParseWithUnitsOfTheCaller()
+        {
+            var slug = new Unit("slug", new Dimension { Mass = 1 }, 14.5939);
+
+            Unit FindUnit(string text) => text == "slug" ? slug : null;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(UnitCatalog.TryParse("slug", FindUnit, out var unit), Is.True);
+                Assert.That(unit, Is.EqualTo(slug));
+                Assert.That(UnitCatalog.TryParse("slug/s", FindUnit, out unit), Is.True);
+                Assert.That(unit.Dimension, Is.EqualTo(new Dimension { Mass = 1, Time = -1 }));
+                Assert.That(UnitCatalog.TryParse("(slug*m)^2", FindUnit, out unit), Is.True);
+                Assert.That(unit.Factor, Is.EqualTo(14.5939 * 14.5939).Within(1e-9));
+                Assert.That(UnitCatalog.TryParse("kg", FindUnit, out unit), Is.True);
+                Assert.That(unit.Factor, Is.EqualTo(1));
+                Assert.That(UnitCatalog.TryParse("slugs", FindUnit, out _), Is.False);
+                Assert.That(UnitCatalog.TryParse("slug", null, out _), Is.False);
+            }
+        }
+
+        [Test]
+        public void VerifyTryGetPrefixFactor()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(UnitCatalog.TryGetPrefixFactor("kilo", out var factor), Is.True);
+                Assert.That(factor, Is.EqualTo(1e3));
+                Assert.That(UnitCatalog.TryGetPrefixFactor("Milli", out factor), Is.True);
+                Assert.That(factor, Is.EqualTo(1e-3));
+                Assert.That(UnitCatalog.TryGetPrefixFactor("k", out _), Is.False);
+                Assert.That(UnitCatalog.TryGetPrefixFactor(null, out _), Is.False);
+            }
+        }
+
         /// <summary>
         /// Parses a unit that must be known.
         /// </summary>

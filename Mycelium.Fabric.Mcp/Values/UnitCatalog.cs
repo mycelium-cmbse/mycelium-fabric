@@ -18,14 +18,14 @@ namespace Mycelium.Fabric.Mcp.Values
     /// The units that the server knows, found from their symbol (<c>kg</c>, <c>km/h</c>, <c>m/s²</c>, <c>kWh</c>) or their
     /// name (<c>kilogram</c>): the SI units with their prefixes, the units accepted with the SI (minute, hour, degree, litre,
     /// tonne...), information units (bit, byte) and the usual imperial units (pound, foot, mile...). It replaces the SI and
-    /// ISQ libraries of SysML v2, which the model does not contain.
+    /// ISQ libraries of SysML v2, which the model does not contain. The units that the libraries of a model declare are
+    /// added by <c>LibraryUnits</c>.
     /// </summary>
     public static class UnitCatalog
     {
         /// <summary>
-        /// The qualified names of the packages of the SysML v2 library that declare units: a unit of the model is read only
-        /// when it is declared in one of them, so that an element of the user that has the short name <c>kg</c> is not taken
-        /// for the kilogram.
+        /// The qualified names of the packages of the SysML v2 library that declare the units of this catalog: a unit declared
+        /// in one of them is read from its short name, even when the package is not a library package in the model.
         /// </summary>
         public static readonly IReadOnlyList<string> LibraryPackages = ["SI", "USCustomaryUnits"];
 
@@ -66,6 +66,19 @@ namespace Mycelium.Fabric.Mcp.Values
         /// <returns><c>true</c> when the unit is known.</returns>
         public static bool TryParse(string text, out Unit unit)
         {
+            return TryParse(text, null, out unit);
+        }
+
+        /// <summary>
+        /// Finds a unit from its symbol or its name, simple or compound, where a simple unit can also be one that the caller
+        /// knows, such as a unit declared in a library of the model (<c>gr/s</c>). The units of this catalog come first.
+        /// </summary>
+        /// <param name="text">The symbol or name, for example <c>kg</c>, <c>km/h</c>, <c>m/s^2</c>, <c>W*h</c> or <c>kilogram</c>.</param>
+        /// <param name="findUnit">Finds a simple unit that this catalog does not know, or <c>null</c> for none.</param>
+        /// <param name="unit">The unit, or <c>null</c> when it is not known.</param>
+        /// <returns><c>true</c> when the unit is known.</returns>
+        public static bool TryParse(string text, Func<string, Unit> findUnit, out Unit unit)
+        {
             unit = null;
 
             if (string.IsNullOrWhiteSpace(text))
@@ -75,7 +88,7 @@ namespace Mycelium.Fabric.Mcp.Values
 
             var trimmedText = text.Trim();
 
-            if (TryParseSimple(trimmedText, out unit))
+            if (TryParseSimple(trimmedText, findUnit, out unit))
             {
                 return true;
             }
@@ -83,19 +96,34 @@ namespace Mycelium.Fabric.Mcp.Values
             var normalizedText = trimmedText.Replace('·', '*').Replace('⋅', '*');
             var position = 0;
 
-            return TryParseProduct(normalizedText, ref position, out unit) && position == normalizedText.Length;
+            return TryParseProduct(normalizedText, findUnit, ref position, out unit) && position == normalizedText.Length;
+        }
+
+        /// <summary>
+        /// Finds the factor of an SI prefix from its name, such as <c>kilo</c>, as a unit of a library refers to it.
+        /// </summary>
+        /// <param name="name">The name of the prefix.</param>
+        /// <param name="factor">The factor of the prefix, for example 1000 for <c>kilo</c>.</param>
+        /// <returns><c>true</c> when the prefix is known.</returns>
+        public static bool TryGetPrefixFactor(string name, out double factor)
+        {
+            var prefix = Prefixes.FirstOrDefault(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
+            factor = prefix.Factor;
+
+            return prefix.Name != null;
         }
 
         /// <summary>
         /// Parses a product or quotient of units, such as <c>kg*m/s^2</c>.
         /// </summary>
         /// <param name="text">The text to parse.</param>
+        /// <param name="findUnit">Finds a simple unit that this catalog does not know, or <c>null</c>.</param>
         /// <param name="position">The position of the first character to parse, moved after the parsed text.</param>
         /// <param name="unit">The parsed unit.</param>
         /// <returns><c>true</c> when the text is a unit.</returns>
-        private static bool TryParseProduct(string text, ref int position, out Unit unit)
+        private static bool TryParseProduct(string text, Func<string, Unit> findUnit, ref int position, out Unit unit)
         {
-            if (!TryParsePower(text, ref position, out unit))
+            if (!TryParsePower(text, findUnit, ref position, out unit))
             {
                 return false;
             }
@@ -105,7 +133,7 @@ namespace Mycelium.Fabric.Mcp.Values
                 var isDivision = text[position] == '/';
                 position++;
 
-                if (!TryParsePower(text, ref position, out var nextUnit))
+                if (!TryParsePower(text, findUnit, ref position, out var nextUnit))
                 {
                     return false;
                 }
@@ -120,10 +148,11 @@ namespace Mycelium.Fabric.Mcp.Values
         /// Parses a unit with an optional exponent, such as <c>m^2</c>, <c>m²</c>, <c>s⁻¹</c> or <c>(m/s)^2</c>.
         /// </summary>
         /// <param name="text">The text to parse.</param>
+        /// <param name="findUnit">Finds a simple unit that this catalog does not know, or <c>null</c>.</param>
         /// <param name="position">The position of the first character to parse, moved after the parsed text.</param>
         /// <param name="unit">The parsed unit.</param>
         /// <returns><c>true</c> when the text is a unit.</returns>
-        private static bool TryParsePower(string text, ref int position, out Unit unit)
+        private static bool TryParsePower(string text, Func<string, Unit> findUnit, ref int position, out Unit unit)
         {
             unit = null;
 
@@ -131,7 +160,7 @@ namespace Mycelium.Fabric.Mcp.Values
             {
                 position++;
 
-                if (!TryParseProduct(text, ref position, out unit) || position >= text.Length || text[position] != ')')
+                if (!TryParseProduct(text, findUnit, ref position, out unit) || position >= text.Length || text[position] != ')')
                 {
                     return false;
                 }
@@ -147,7 +176,7 @@ namespace Mycelium.Fabric.Mcp.Values
                     position++;
                 }
 
-                if (!TryParseSimple(text[start..position], out unit))
+                if (!TryParseSimple(text[start..position], findUnit, out unit))
                 {
                     return false;
                 }
@@ -201,14 +230,16 @@ namespace Mycelium.Fabric.Mcp.Values
         }
 
         /// <summary>
-        /// Finds a simple unit: a known symbol (<c>kg</c> is <c>k</c> + <c>g</c>), or a known name (<c>kilogram</c>).
+        /// Finds a simple unit: a known symbol (<c>kg</c> is <c>k</c> + <c>g</c>), a known name (<c>kilogram</c>), or a unit
+        /// that the caller knows.
         /// </summary>
         /// <param name="text">The symbol or name.</param>
+        /// <param name="findUnit">Finds a simple unit that this catalog does not know, or <c>null</c>.</param>
         /// <param name="unit">The unit, or <c>null</c>.</param>
         /// <returns><c>true</c> when the unit is known.</returns>
-        private static bool TryParseSimple(string text, out Unit unit)
+        private static bool TryParseSimple(string text, Func<string, Unit> findUnit, out Unit unit)
         {
-            unit = FindBySymbol(text) ?? FindByName(text);
+            unit = FindBySymbol(text) ?? FindByName(text) ?? findUnit?.Invoke(text);
 
             return unit != null;
         }
