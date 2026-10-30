@@ -20,7 +20,7 @@ namespace Mycelium.Fabric.Mcp.Resources
     /// result of apply_changes, and in which the user applies or rejects the batch.
     /// </summary>
     [McpServerResourceType]
-    public class BatchReviewResource
+    public static class BatchReviewResource
     {
         /// <summary>
         /// The URI of the view, which apply_changes and decide_batch declare in their <c>_meta.ui</c>.

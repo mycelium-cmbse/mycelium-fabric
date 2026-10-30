@@ -224,19 +224,16 @@ namespace Mycelium.Fabric.Mcp.Services
 
                     var element = change.Payload == null ? this.elementsById[elementId] : candidateElementsById[elementId];
                     var changedElements = change.Payload == null ? deletedElements : modifiedElements;
-
-                    if (changedElements.TrueForAll(changedElement => changedElement.Id != elementId))
-                    {
-                        changedElements.Add(new ChangedElement(elementId, element.qualifiedName, element.GetType().Name));
-                    }
+                    changedElements.Add(new ChangedElement(elementId, element.qualifiedName, element.GetType().Name));
                 }
 
+                // An element that several changes of the batch modify is listed once.
                 return new ModelPreview([])
                 {
                     Elements = candidateElements,
                     CreatedElements = GetCreatedElements(commitRequest.Value, previousElementIds, candidateElementsById),
-                    ModifiedElements = modifiedElements,
-                    DeletedElements = deletedElements
+                    ModifiedElements = [.. modifiedElements.DistinctBy(changedElement => changedElement.Id)],
+                    DeletedElements = [.. deletedElements.DistinctBy(changedElement => changedElement.Id)]
                 };
             }
         }

@@ -9,6 +9,10 @@ const target_note = document.getElementById('note');
 let batchId = null;
 let token = null;
 
+// The origin of the host, known from its first message: until then, the messages go to the parent frame whatever its origin.
+// A host that shows the view in a frame without an origin of its own ("null") keeps "*".
+let hostOrigin = "*";
+
 const STATUS_TEXT = {
     Pending: "Waiting for your decision",
     Refused: "Refused by Fabric: the assistant will correct it",
@@ -27,8 +31,12 @@ const REQUIREMENT_TEXT = {
 const DOMAIN_COLORS = { SYS: "#2B66C9", PAY: "#EC4899", AOC: "#06B6D4", POW: "#EAB308", COM: "#8B5CF6", THE: "#EA580C", DAT: "#4F46E5", STR: "#6B7280" };
 const OTHER_DOMAIN_COLORS = ["#0F9E8C", "#D946EF", "#84CC16", "#F97316", "#14B8A6", "#A855F7"];
 
+// The kind of check shown for a requirement after the batch, and for a new issue of validate_model; any other value is "info".
+const REQUIREMENT_KIND = { NotSatisfied: "bad", Satisfied: "ok" };
+const ISSUE_KIND = { Error: "bad", Warning: "warn" };
+
 // The attributes that the server adds up to give the value of a part.
-const BUDGET_ATTRIBUTES = ["mass", "power"];
+const BUDGET_ATTRIBUTES = new Set(["mass", "power"]);
 
 const ICONS = {
     ok: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/>',
@@ -76,7 +84,7 @@ for (const tab of document.querySelectorAll(".seg button")) {
 
 const $ = id => document.getElementById(id);
 
-function send(message) { window.parent.postMessage(message, "*"); }
+function send(message) { window.parent.postMessage(message, hostOrigin); }
 
 function sendMessage(text) {
     send({
@@ -88,55 +96,64 @@ function sendMessage(text) {
 }
 
 window.addEventListener("message", e => {
+    if (e.source !== window.parent || !isHostOrigin(e.origin)) return;
     const msg = e.data;
-    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg?.jsonrpc !== "2.0") return;
 
-    if (msg.id === 1 && !msg.method) {
-        applyTheme(msg.result?.hostContext);
-        send({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} });
-    }
-
-    if (msg.id !== undefined && msg.method && msg.method !== "ui/notifications/tool-result") {
+    if (!msg.method) {
+        onResponse(msg);
+    } else if (msg.method === "ui/notifications/tool-result") {
+        showToolResult(msg.params);
+    } else if (msg.id !== undefined) {
+        // A request of the host that the view has nothing to do for: it answers with an empty result.
         send({ jsonrpc: "2.0", id: msg.id, result: {} });
-        return;
-    }
-
-    if (msg.method === "ui/notifications/host-context-changed") {
+    } else if (msg.method === "ui/notifications/host-context-changed") {
         applyTheme(msg.params);
     }
+});
 
-    if (msg.method === "ui/notifications/tool-result") {
-        const review = msg.params.structuredContent;
-        if (!review) {
-            hideDecision();
-            target_state.textContent = "The batch could not be read";
-            setNote(msg.params.content?.[0]?.text ?? "", "note err");
-            return;
-        }
-        setStatus(review.status);
+// Only the host, in the parent frame, talks to the view: the first message gives its origin, and later messages must come from it.
+function isHostOrigin(origin) {
+    if (hostOrigin === "*" && origin !== "null") hostOrigin = origin;
+    return hostOrigin === "*" || origin === hostOrigin;
+}
 
-        if (review.preview) {
-            batchId = review.preview.batchId;
-            token = review.preview.token ?? null;
-            try {
-                showPreview(review.preview);
-            } catch (error) {
-                target_state.textContent = "The view could not show the batch: " + error.message;
-            }
-            if (!token) target_state.textContent = "The batch has no token: the buttons cannot decide it.";
-        } else {
-            hideDecision();
-            if (review.status === "Refused") {
-                showProblems(review.result);
-                setNote("Nothing was applied: the assistant has the problems and corrects the batch.");
-            }
-        }
-    }
-
-    if ((msg.id == 2 || msg.id == 3) && !msg.method) {
+function onResponse(msg) {
+    if (msg.id === 1) {
+        applyTheme(msg.result?.hostContext);
+        send({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} });
+    } else if (msg.id === 2 || msg.id === 3) {
         showDecision(msg.result);
     }
-});
+}
+
+function showToolResult(result) {
+    const review = result.structuredContent;
+    if (!review) {
+        hideDecision();
+        target_state.textContent = "The batch could not be read";
+        setNote(result.content?.[0]?.text ?? "", "note err");
+        return;
+    }
+    setStatus(review.status);
+
+    if (review.preview) {
+        batchId = review.preview.batchId;
+        token = review.preview.token ?? null;
+        try {
+            showPreview(review.preview);
+        } catch (error) {
+            target_state.textContent = "The view could not show the batch: " + error.message;
+        }
+        if (!token) target_state.textContent = "The batch has no token: the buttons cannot decide it.";
+    } else {
+        hideDecision();
+        if (review.status === "Refused") {
+            showProblems(review.result);
+            setNote("Nothing was applied: the assistant has the problems and corrects the batch.");
+        }
+    }
+}
 
 function showDecision(result) {
     if (result?.isError || !result?.structuredContent) {
@@ -202,6 +219,7 @@ function icon(name, size) {
     svg.setAttribute("stroke-width", "1.75");
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
     svg.innerHTML = ICONS[name];
     return svg;
 }
@@ -260,7 +278,7 @@ function addRows(kind, elements) {
     const folded = [...definitions.values()].filter(definition => used.has(definition) || children.get(definition).length === 0);
 
     // As in the mock-up, the mass and power of a part are not repeated on rows of their own: the row of the part shows them.
-    const shown = (element, child) => !(element.value && element.type === "PartUsage" && child.type === "AttributeUsage" && BUDGET_ATTRIBUTES.includes(shortName(child.qualifiedName)));
+    const shown = (element, child) => !(element.value && element.type === "PartUsage" && child.type === "AttributeUsage" && BUDGET_ATTRIBUTES.has(shortName(child.qualifiedName)));
 
     const visit = (element, depth, parentDomain, path) => {
         addRow(kind, element, depth, parentDomain);
@@ -317,7 +335,7 @@ function findParent(element, byName) {
 
 function domainColor(domain) {
     if (DOMAIN_COLORS[domain]) return DOMAIN_COLORS[domain];
-    const hash = [...domain].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+    const hash = [...domain].reduce((sum, character) => sum + character.codePointAt(0), 0);
     return OTHER_DOMAIN_COLORS[hash % OTHER_DOMAIN_COLORS.length];
 }
 
@@ -377,7 +395,8 @@ function addTag(target, kind, text) {
 // "fails" when the batch breaks the requirement, "worse" when it moves a value already beyond the limit further away, "met" when it satisfies it.
 function requirementTrend(change) {
     if (change.statusAfter === "NotSatisfied") {
-        return change.statusBefore !== "NotSatisfied" ? "fails" : change.gapChange < 0 ? "worse" : null;
+        if (change.statusBefore !== "NotSatisfied") return "fails";
+        return change.gapChange < 0 ? "worse" : null;
     }
     return change.statusAfter === "Satisfied" && change.statusBefore === "NotSatisfied" ? "met" : null;
 }
@@ -446,9 +465,9 @@ function setStatus(status) {
     target_state.textContent = STATUS_TEXT[status] ?? status;
 }
 
-function setNote(text, className = "note", iconName) {
+function setNote(text, className, iconName) {
     target_note.hidden = false;
-    target_note.className = className;
+    target_note.className = className ?? "note";
     target_note.replaceChildren();
     if (iconName) target_note.appendChild(icon(iconName, 15));
     target_note.append(text);
@@ -470,18 +489,25 @@ function showPreview(preview) {
     addImpactRows(preview.budgetImpacts ?? []);
     showImpacts(preview);
 
-    for (const r of preview.requirementChanges) {
-        const kind = r.statusAfter === "NotSatisfied" ? "bad" : r.statusAfter === "Satisfied" ? "ok" : "info";
+    addRequirementChecks(preview.requirementChanges);
+    addIssueChecks(preview);
+    updateCheckCount();
+    showTab("chg");
+}
+
+function addRequirementChecks(requirementChanges) {
+    for (const r of requirementChanges) {
         const title = r.reqId && r.name ? `${r.reqId} · ${r.name}` : r.reqId ?? r.name;
         const before = REQUIREMENT_TEXT[r.statusBefore] ?? r.statusBefore ?? "new";
         const after = REQUIREMENT_TEXT[r.statusAfter] ?? r.statusAfter ?? "deleted";
         const status = r.statusBefore === r.statusAfter ? after : `${before} → ${after}`;
-        addCheck(kind, title, [r.satisfiedBy ? shortName(r.satisfiedBy) : null, r.value, status].filter(Boolean).join(" · "));
+        addCheck(REQUIREMENT_KIND[r.statusAfter] ?? "info", title, [r.satisfiedBy ? shortName(r.satisfiedBy) : null, r.value, status].filter(Boolean).join(" · "));
     }
+}
 
+function addIssueChecks(preview) {
     for (const issue of preview.newIssues) {
-        const kind = issue.severity === "Error" ? "bad" : issue.severity === "Warning" ? "warn" : "info";
-        addCheck(kind, issue.message, [issue.element, issue.rule].filter(Boolean).join(" · "));
+        addCheck(ISSUE_KIND[issue.severity] ?? "info", issue.message, [issue.element, issue.rule].filter(Boolean).join(" · "));
     }
 
     if (preview.newIssueCount > preview.newIssues.length) {
@@ -494,9 +520,6 @@ function showPreview(preview) {
     } else if (resolved) {
         addCheck("ok", resolved);
     }
-
-    updateCheckCount();
-    showTab("chg");
 }
 
 function hideDecision() {

@@ -115,7 +115,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<DocumentTools>()
                     // A static class cannot be a type argument: the prompts are registered by their type.
                     .WithPrompts([typeof(GenerationPrompts), typeof(RequirementPrompts)])
-                    .WithResources<BatchReviewResource>()
+                    .WithResources([typeof(BatchReviewResource)])
                     // Last, so that the MCP Apps metadata of every tool registered above is written.
                     .WithMcpApps();
             }
