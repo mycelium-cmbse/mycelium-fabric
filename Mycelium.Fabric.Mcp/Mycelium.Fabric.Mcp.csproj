@@ -14,6 +14,8 @@
         <ImplicitUsings>false</ImplicitUsings>
         <Nullable>disable</Nullable>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- The MCP Apps of the C# SDK are experimental (MCPEXP003): the review of a batch by the user relies on them. -->
+        <NoWarn>$(NoWarn);MCPEXP003</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -22,8 +24,13 @@
       <PackageReference Include="Google.OrTools" />
       <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
       <PackageReference Include="ModelContextProtocol" />
+      <PackageReference Include="ModelContextProtocol.Extensions.Apps" />
       <PackageReference Include="SysML2.NET.Dal" />
       <PackageReference Include="SysML2.NET.Serializer.Json" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Include="McpApp\*.html;McpApp\*.css;McpApp\*.js" LogicalName="Mycelium.Fabric.Mcp.McpApp.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>
