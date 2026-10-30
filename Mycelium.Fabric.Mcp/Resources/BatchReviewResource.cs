@@ -38,6 +38,7 @@ namespace Mycelium.Fabric.Mcp.Resources
         /// <returns>The HTML page.</returns>
         [McpServerResource(UriTemplate = Uri, Name = "review_batch", MimeType = McpApps.HtmlMimeType)]
         [Description("The view in which the user applies or rejects a batch of changes sent to apply_changes.")]
+        [return: Description("The HTML page of the view, with its style sheet and script inside.")]
         public static string GetPage()
         {
             return Page.Value;

@@ -153,7 +153,8 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "Then send no other batch and wait for the user's message, which tells whether it has been applied, with the identifiers, or rejected, with a comment.")]
         [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage, the errors and warnings that the batch has introduced "
             + "and the number of issues it has resolved; if not, the problems, each with the number of its change. Or a message telling that the batch waits for the decision of the user.")]
-        public CallToolResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes, McpServer server = null)
+        public CallToolResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes,
+            [Description("Bound by the SDK to the server that receives the call, not part of the tool schema.")] McpServer server = null)
         {
             if (changes == null || changes.Count == 0)
             {
@@ -213,6 +214,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         [McpServerTool(Name = "decide_batch", ReadOnly = false, Destructive = true, UseStructuredContent = true)]
         [McpAppUi(ResourceUri = BatchReviewResource.Uri, Visibility = [McpUiToolVisibility.App])]
         [Description("Applies or rejects the batch of changes that waits for the decision of the user. Called by the view of the batch only.")]
+        [return: Description("The status of the batch (Applied, Refused or Rejected), the message for the AI assistant and, unless rejected, the result of apply_changes.")]
         public BatchReview DecideBatch([Description("The identifier of the waiting batch (batchId of the preview).")] Guid batchId,
             [Description("The secret token of the waiting batch (token of the preview).")] string token,
             [Description("True to apply the batch, false to reject it.")] bool apply,
