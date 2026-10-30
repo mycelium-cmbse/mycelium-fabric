@@ -110,7 +110,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<ConstructionTools>()
                     .WithTools<RequirementTools>()
                     .WithTools<ExportTools>()
-                    .WithTools<TradeOffTools>()
+                    .WithTools<TradeOffTools>(TradeOffTools.StudySerializerOptions)
                     .WithTools<ValidationTools>()
                     .WithTools<DocumentTools>()
                     // A static class cannot be a type argument: the prompts are registered by their type.

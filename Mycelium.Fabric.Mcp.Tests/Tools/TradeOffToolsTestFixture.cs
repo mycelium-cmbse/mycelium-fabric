@@ -316,6 +316,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(withView.StructuredContent?.GetProperty("title").GetString(), Is.EqualTo("Camera and X-band transmitter"));
                 Assert.That(withView.StructuredContent?.GetProperty("points").GetArrayLength(), Is.EqualTo(6));
                 Assert.That(withView.StructuredContent?.GetProperty("request").GetProperty("excluded").GetArrayLength(), Is.Zero);
+                Assert.That(withView.StructuredContent?.GetProperty("request").GetProperty("compareBy").ValueKind, Is.EqualTo(JsonValueKind.Null));
             }
         }
 

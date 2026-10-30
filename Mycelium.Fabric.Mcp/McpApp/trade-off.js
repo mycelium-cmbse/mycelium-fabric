@@ -1,12 +1,7 @@
-// View of a trade-off (issue #67): it draws the study sent by solve_trade_off, asks explore_trade_off for a new study
-// when the user changes a setting, and sends the chosen option back to the conversation.
-
 const $ = id => document.getElementById(id);
 
-let study = null;   // the last answer of the solver: what the chart and the lists show
-let state = null;   // what the user set in the view: what we send to explore_trade_off
-
-// ---------- 1. Talking to the host ----------
+let study = null;
+let state = null;
 
 function send(message) {
     window.parent.postMessage(message, "*");
@@ -29,7 +24,6 @@ window.addEventListener("message", event => {
     const message = event.data;
     if (!message || message.jsonrpc !== "2.0") return;
 
-    // A response to one of our requests: an id, no method.
     if (message.id !== undefined && !message.method) {
         const call = pending.get(message.id);
         pending.delete(message.id);
@@ -37,7 +31,6 @@ window.addEventListener("message", event => {
         return;
     }
 
-    // A request from the host: an id and a method. Always answer, even with nothing.
     if (message.id !== undefined) send({ jsonrpc: "2.0", id: message.id, result: {} });
 
     if (message.method === "ui/notifications/tool-result") onFirstStudy(message.params);
@@ -71,13 +64,22 @@ async function start() {
     notify("ui/notifications/initialized", {});
 }
 
-// ---------- 2. Small helpers ----------
-
 function el(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
     if (text !== undefined) element.textContent = text;
     return element;
+}
+
+const ICONS = {
+    grip: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+    excluded: '<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>'
+};
+
+function icon(name, size) {
+    const image = svg("svg", { class: "ic", width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.75", "stroke-linecap": "round", "stroke-linejoin": "round" });
+    image.innerHTML = ICONS[name];
+    return image;
 }
 
 function formatNumber(number) {
@@ -108,8 +110,6 @@ function describe(choices) {
 function titleOf(study) {
     return study.title ?? "Trade-off · " + study.choices.map(choice => choice.name).join(", ");
 }
-
-// ---------- 3. Drawing the answer of the solver ----------
 
 const STATUS_TEXT = {
     Optimal: "best options found",
@@ -160,18 +160,17 @@ function drawHeader(study) {
 function drawOptions(study) {
     const target = $("options");
     target.replaceChildren();
-    const today = study.current.totals.map(total => withUnit(total.total, total.attribute)).join(" · ");
-    target.append(el("div", "tr-note", "Today: " + today));
+    $("today").textContent = "vs today: " + study.current.totals.map(total => withUnit(total.total, total.attribute)).join(" · ");
 
     for (const option of study.best) {
         const card = el("div", option.rank === state.selected ? "tr-option on" : "tr-option");
         card.dataset.rank = option.rank;
         const body = el("div");
         body.append(el("div", "tr-name", describe(option.choices)), drawTotals(option.totals), drawChecks(option.constraints));
-        card.append(el("span", "tr-rank", option.rank), body);
+        card.append(el("span", "tr-rank n" + option.rank, option.rank), body);
         target.append(card);
     }
-    if (study.best.length === 0) target.append(el("div", "tr-note", "No combination meets the constraints."));
+    if (study.best.length === 0) target.append(el("div", "tr-empty", "No combination meets the constraints."));
 }
 
 function drawTotals(totals) {
@@ -206,15 +205,22 @@ function drawExcluded(study) {
     const rejected = study.points.filter(point => !point.feasible);
     if (rejected.length > 0) {
         target.append(el("h3", null, "Excluded (" + rejected.length + ")"));
-        for (const point of rejected) target.append(el("div", "tr-rejected", "✗ " + describe(point.choices) + " · " + point.broken.join(" · ")));
+        for (const point of rejected) target.append(drawRejected(describe(point.choices), point.broken.join(" · ")));
     }
     if (study.conflicts.length > 0) {
         target.append(el("h3", null, "Why no combination works"));
-        for (const conflict of study.conflicts) target.append(el("div", "tr-rejected", conflict));
+        for (const conflict of study.conflicts) target.append(drawRejected(null, conflict));
     }
 }
 
-// ---------- 4. The chart ----------
+function drawRejected(name, reason) {
+    const text = el("span");
+    if (name) text.append(el("b", null, name), " · ");
+    text.append(reason);
+    const line = el("div", "tr-rejected");
+    line.append(icon("excluded", 13), text);
+    return line;
+}
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const BOX = { width: 560, height: 320, left: 56, right: 544, top: 16, bottom: 276 };
@@ -265,6 +271,7 @@ function drawChart(study) {
     const [xName, yName] = names;
     if (!yName) {
         target.append(el("div", "tr-note", "One attribute only: see the list of best options."));
+        $("legend").replaceChildren();
         return;
     }
 
@@ -300,6 +307,17 @@ function drawChart(study) {
 
     chart.append(svg("text", { x: todayX, y: todayY - 16, "text-anchor": "middle" }, "today"));
     target.append(chart);
+    drawLegend(limits);
+}
+
+function drawLegend(limits) {
+    const item = (className, text) => {
+        const span = el("span");
+        span.append(el("i", className), text);
+        return span;
+    };
+    $("legend").replaceChildren(item("best", "Best options"), item("ok", "Meets the constraints"), item("bad", "Breaks a constraint"));
+    for (const limit of limits) $("legend").append(item("limit", (limit.name ?? limit.attribute) + " limit"));
 }
 
 function drawLimit(chart, limit, onX, scale) {
@@ -333,8 +351,6 @@ function drawPoint(study, point, cx, cy) {
     return group;
 }
 
-// ---------- 5. The set-up: what the user changes ----------
-
 function drawSetup(state) {
     drawChoices(state);
     drawObjectives(state);
@@ -345,10 +361,13 @@ function drawChoices(state) {
     const target = $("choices");
     target.replaceChildren(el("h3", null, "Choices"));
     for (const choice of state.choices) {
-        target.append(el("div", "tr-choice", choice.name));
+        const heading = el("div", "tr-choice", choice.name);
+        const owner = choice.qualifiedName?.split("::").at(-2);
+        if (owner) heading.append(el("small", null, owner));
+        target.append(heading);
         for (const variant of choice.variants) {
             const key = choice.name + "." + variant.name;
-            const box = el("input");
+            const box = el("input", "tr-check");
             box.type = "checkbox";
             box.checked = !state.excluded.has(key);
             box.dataset.kind = "variant";
@@ -361,42 +380,48 @@ function drawChoices(state) {
 }
 
 function drawObjectives(state) {
-    const target = $("objectives");
-    target.replaceChildren(el("h3", null, "Objectives, in order"));
+    const list = el("div", state.objectives.length > 1 ? "tr-objectives" : "tr-objectives single");
     state.objectives.forEach((objective, index) => {
         const line = el("div", "tr-objective");
         const way = objective.direction === "Maximize" ? "highest first" : "lowest first";
         line.append(el("span", "tr-rank", index + 1), el("span", null, objective.attribute + ", " + way));
-        if (index > 0) {
-            const up = el("button", "btn", "↑");
-            up.title = "Move up";
-            up.dataset.up = index;
-            line.append(up);
+        if (state.objectives.length > 1) {
+            line.tabIndex = 0;
+            line.title = "Drag to change the order, or use the ↑ and ↓ keys";
+            line.dataset.index = index;
+            line.append(icon("grip", 14));
         }
-        target.append(line);
+        list.append(line);
     });
+    $("objectives").replaceChildren(el("h3", null, "Objectives, in order"), list);
 }
+
+const OPERATORS = { "<=": "≤", ">=": "≥", "==": "=" };
 
 function drawConstraints(state) {
     const target = $("constraints");
     target.replaceChildren(el("h3", null, "Constraints"));
     state.constraints.forEach((constraint, index) => {
-        const toggle = el("input");
+        const toggle = el("input", "tr-switch");
         toggle.type = "checkbox";
+        toggle.role = "switch";
         toggle.checked = constraint.enabled;
         toggle.dataset.kind = "enabled";
         toggle.dataset.key = index;
+        const name = (constraint.name ?? "Constraint " + (index + 1)) + " · " + constraint.attribute + " " + (OPERATORS[constraint.operator] ?? constraint.operator);
         const label = el("label");
-        label.append(toggle, " " + (constraint.name ?? "Constraint " + (index + 1)) + " · " + constraint.attribute + " " + constraint.operator);
+        label.append(toggle, el("span", null, name));
+
+        const limits = el("div", "tr-limits");
+        if (constraint.limitAttribute == null) {
+            limits.append(numberInput("limit", index, constraint.limit), constraint.unit ?? unitOf(constraint.attribute) ?? "");
+        } else {
+            limits.append(constraint.limitAttribute);
+        }
+        limits.append(" · margin", numberInput("margin", index, constraint.margin ?? 0), "%");
 
         const line = el("div", "tr-constraint");
-        line.append(label);
-        if (constraint.limitAttribute == null) {
-            line.append(numberInput("limit", index, constraint.limit), el("span", null, constraint.unit ?? unitOf(constraint.attribute) ?? ""));
-        } else {
-            line.append(el("span", null, constraint.limitAttribute));
-        }
-        line.append(el("span", null, "margin"), numberInput("margin", index, constraint.margin ?? 0), el("span", null, "%"));
+        line.append(label, limits);
         target.append(line);
     });
     if (state.constraints.length === 0) target.append(el("div", "tr-note", "No constraint."));
@@ -409,6 +434,7 @@ function numberInput(kind, index, value) {
     input.value = value;
     input.dataset.kind = kind;
     input.dataset.key = index;
+    input.ariaLabel = kind;
     return input;
 }
 
@@ -429,17 +455,65 @@ function onSetupChange(event) {
     solve();
 }
 
-function onObjectiveClick(event) {
-    const button = event.target.closest("[data-up]");
-    if (!button) return;
-    const index = Number(button.dataset.up);
-    const objectives = state.objectives;
-    [objectives[index - 1], objectives[index]] = [objectives[index], objectives[index - 1]];
+function moveObjective(from, to) {
+    const [objective] = state.objectives.splice(from, 1);
+    state.objectives.splice(to, 0, objective);
     drawObjectives(state);
     solve();
 }
 
-// ---------- 6. Asking the solver again ----------
+let drag = null;
+
+function onObjectiveGrab(event) {
+    const line = event.target.closest(".tr-objective[data-index]");
+    if (!line || event.button !== 0) return;
+    line.setPointerCapture(event.pointerId);
+    line.classList.add("dragging");
+    drag = { line, from: Number(line.dataset.index), offset: event.clientY - line.getBoundingClientRect().top };
+}
+
+function onObjectiveDrag(event) {
+    if (!drag) return;
+    const lines = [...drag.line.parentElement.children];
+    const current = lines.indexOf(drag.line);
+    const index = lines.filter(line => line !== drag.line && event.clientY > middleOf(line)).length;
+    if (index < current) drag.line.after(...lines.slice(index, current));
+    if (index > current) drag.line.before(...lines.slice(current + 1, index + 1));
+    [...drag.line.parentElement.children].forEach((line, position) => line.querySelector(".tr-rank").textContent = position + 1);
+
+    drag.line.style.transform = "";
+    const top = drag.line.getBoundingClientRect().top;
+    drag.line.style.transform = `translateY(${event.clientY - drag.offset - top}px)`;
+}
+
+function middleOf(element) {
+    const box = element.getBoundingClientRect();
+    return box.top + box.height / 2;
+}
+
+function onObjectiveDrop(event) {
+    if (!drag) return;
+    const { line, from } = drag;
+    const to = [...line.parentElement.children].indexOf(line);
+    drag = null;
+    line.classList.remove("dragging");
+    line.style.transform = "";
+    if (to === from) return;
+    if (event.type === "pointerup") moveObjective(from, to);
+    else drawObjectives(state);
+}
+
+function onObjectiveKey(event) {
+    const line = event.target.closest(".tr-objective[data-index]");
+    const step = { ArrowUp: -1, ArrowDown: 1 }[event.key];
+    if (!line || !step) return;
+    const from = Number(line.dataset.index);
+    const to = from + step;
+    if (to < 0 || to >= state.objectives.length) return;
+    event.preventDefault();
+    moveObjective(from, to);
+    $("objectives").querySelector(`[data-index="${to}"]`).focus();
+}
 
 function buildArguments(state) {
     return {
@@ -474,8 +548,6 @@ function showError(text) {
     $("error").textContent = text;
     $("error").hidden = false;
 }
-
-// ---------- 7. Choosing an option and sending it to the conversation ----------
 
 function select(rank) {
     state.selected = rank;
@@ -552,10 +624,12 @@ async function sendChoice(option, button, note) {
     button.textContent = "Sent";
 }
 
-// ---------- 8. Start ----------
-
 $("setup").addEventListener("change", onSetupChange);
-$("objectives").addEventListener("click", onObjectiveClick);
+$("objectives").addEventListener("pointerdown", onObjectiveGrab);
+$("objectives").addEventListener("pointermove", onObjectiveDrag);
+$("objectives").addEventListener("pointerup", onObjectiveDrop);
+$("objectives").addEventListener("pointercancel", onObjectiveDrop);
+$("objectives").addEventListener("keydown", onObjectiveKey);
 $("options").addEventListener("click", onOptionClick);
 $("chart").addEventListener("click", onOptionClick);
 new ResizeObserver(sendSize).observe(document.body);

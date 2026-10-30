@@ -13,6 +13,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.Text.Json;
+    using System.Text.Json.Serialization;
 
     using ModelContextProtocol;
     using ModelContextProtocol.Extensions.Apps;
@@ -30,6 +31,13 @@ namespace Mycelium.Fabric.Mcp.Tools
     [McpServerToolType]
     public class TradeOffTools
     {
+        /// <summary>
+        /// The <see cref="JsonSerializerOptions"/> of the <see cref="TradeOffStudy"/> sent to the view: a key whose value is
+        /// <c>null</c> is still written, because the output schema of explore_trade_off requires every key of the study and
+        /// hosts check the result against it.
+        /// </summary>
+        public static readonly JsonSerializerOptions StudySerializerOptions = new(McpJsonUtilities.DefaultOptions) { DefaultIgnoreCondition = JsonIgnoreCondition.Never };
+
         /// <summary>
         /// The <see cref="IModelProvider"/> that gives access to the model.
         /// </summary>
@@ -121,7 +129,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             if (this.appHostDetector.ShowsApps(server?.ClientCapabilities))
             {
-                toolResult.StructuredContent = JsonSerializer.SerializeToElement(study, McpJsonUtilities.DefaultOptions);
+                toolResult.StructuredContent = JsonSerializer.SerializeToElement(study, StudySerializerOptions);
             }
 
             return toolResult;
