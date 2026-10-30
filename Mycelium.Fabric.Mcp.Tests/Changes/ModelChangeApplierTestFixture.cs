@@ -23,6 +23,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
+    using Mycelium.Fabric.Mcp.Validation;
+    using Mycelium.Fabric.Mcp.Validation.Rules;
     using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Common;
@@ -36,13 +38,19 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.POCO.Systems.Allocations;
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Connections;
+    using SysML2.NET.Core.POCO.Kernel.Expressions;
+    using SysML2.NET.Core.POCO.Kernel.Interactions;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.POCO.Systems.Flows;
     using SysML2.NET.Core.POCO.Systems.Interfaces;
+    using SysML2.NET.Core.POCO.Systems.Items;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Core.POCO.Systems.Ports;
     using SysML2.NET.Core.POCO.Systems.Requirements;
+    using SysML2.NET.Core.POCO.Systems.States;
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Core.Systems.Requirements;
+    using SysML2.NET.Core.Systems.States;
     using SysML2.NET.Dal;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -52,6 +60,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using DtoMembership = SysML2.NET.Core.DTO.Root.Namespaces.Membership;
     using DtoRelationship = SysML2.NET.Core.DTO.Root.Elements.IRelationship;
     using DtoSatisfyRequirementUsage = SysML2.NET.Core.DTO.Systems.Requirements.ISatisfyRequirementUsage;
+    using DtoTransitionUsage = SysML2.NET.Core.DTO.Systems.States.ITransitionUsage;
 
     /// <summary>
     /// Suite of tests for the <see cref="ModelChangeApplier"/> class.
@@ -936,7 +945,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = ids["DataInterface"], Name = "latency", IsEnd = true } },
                 new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "commandIn", Definition = opticalCamera } },
                 new ModelChange { Payload = new ElementPayload { Type = "ConjugatedPortDefinition", Owner = ConnectionChangesHelper.PackageId, Name = "~CommandPort" } },
-                new ModelChange { Payload = new ElementPayload { Type = "FlowUsage", Owner = eosat1, Ends = validEnds } },
+                new ModelChange { Payload = new ElementPayload { Type = "FlowUsage", Owner = eosat1, Definition = ids["DataInterface"], Ends = validEnds } },
                 new ModelChange { Identity = ids["imageLink"], Payload = new ElementPayload { Ends = validEnds } },
                 new ModelChange { Identity = ids["dataOut"], Payload = new ElementPayload { IsEnd = true } },
                 new ModelChange { Identity = "bare", Payload = new ElementPayload { Type = "PortUsage", Owner = payloadSubsystem, Name = "bare" } },
@@ -967,7 +976,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 13 (create): The ends of an interface definition are ports, not the AttributeUsage 'latency'.",
                 "Change 14 (create): The definition must be a port definition, not the PartDefinition 'OpticalCamera'.",
                 "Change 15 (create): 'ConjugatedPortDefinition' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server.",
-                "Change 16 (create): 'FlowUsage' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server.",
+                "Change 16 (create): The definition must be a flow definition, not the InterfaceDefinition 'DataInterface'.",
                 "Change 17 (update): The ends of a connector cannot change: delete the connector and create it again.",
                 "Change 18 (update): isEnd only applies to the creation of a feature: delete the feature and create it again.",
                 "Change 20 (update): The PortUsage 'bare' has no port definition to conjugate: give its definition.",
@@ -1113,6 +1122,180 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(result.IsError, Is.True);
                 Assert.That(problems, Is.EqualTo(expectedProblems));
             }
+        }
+
+        [Test]
+        public void Apply_WithBehaviour_BuildsItAsTheTextualNotation()
+        {
+            var model = ReadSatelliteWithPorts();
+            var result = this.Apply(model, BehaviourChangesHelper.CreateChanges());
+
+            var elements = Assemble(CommitRequestHelper.Apply(model, result.Value));
+            var byQualifiedName = elements.Values.Where(element => element.qualifiedName != null).ToDictionary(element => element.qualifiedName);
+            var modes = (IStateUsage)byQualifiedName["EOSat1::Architecture::eosat1::modes"];
+            var transitions = modes.ownedFeature.OfType<ITransitionUsage>().ToList();
+            var launchToSafe = transitions[0];
+            var safeToNominal = transitions[1];
+            var nominalToSafe = transitions[2];
+            var safe = (IStateUsage)byQualifiedName["EOSat1::Architecture::eosat1::modes::safe"];
+            var nominal = (IStateUsage)byQualifiedName["EOSat1::Architecture::eosat1::modes::nominal"];
+            var flows = elements.Values.OfType<IFlowUsage>().ToList();
+            var acquireImage = (IActionDefinition)byQualifiedName["EOSat1::AcquireImage"];
+            var storeImage = (IActionDefinition)byQualifiedName["EOSat1::StoreImage"];
+
+            IValidationRule[] rules = [new BrokenReferenceRule(), new OrphanElementRule(), new DuplicateQualifiedNameRule(), new UntypedUsageRule(), new PartOutsideSystemRule()];
+            var issuesOfTheBatch = new ModelValidator(rules).Validate([.. elements.Values]).Where(issue => model.TrueForAll(dto => dto.Id != issue.ElementId));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(issuesOfTheBatch.Select(issue => $"{issue.Rule}: {issue.Element}"), Is.Empty);
+                Assert.That(result.IsError, Is.False);
+                Assert.That(transitions, Has.Count.EqualTo(3));
+                Assert.That(launchToSafe.source, Is.SameAs(byQualifiedName["EOSat1::Architecture::eosat1::modes::launch"]));
+                Assert.That(launchToSafe.target, Is.SameAs(safe));
+                Assert.That(launchToSafe.triggerAction.Single().payloadParameter.type, Is.EqualTo([byQualifiedName["EOSat1::SeparationDetected"]]));
+                Assert.That(launchToSafe.parameter, Has.Count.EqualTo(2));
+                Assert.That(launchToSafe.guardExpression, Is.Empty);
+                Assert.That(safeToNominal.DeclaredName, Is.EqualTo("safeToNominal"));
+                Assert.That(safeToNominal.source, Is.SameAs(safe));
+                Assert.That(safeToNominal.target, Is.SameAs(nominal));
+                Assert.That(safeToNominal.parameter, Has.Count.EqualTo(1));
+                Assert.That(safeToNominal.triggerAction, Is.Empty);
+                Assert.That(safeToNominal.guardExpression.Single(), Is.InstanceOf<IOperatorExpression>().With.Property("Operator").EqualTo(">="));
+                Assert.That(((IPerformActionUsage)safeToNominal.effectAction.Single()).performedAction, Is.SameAs(byQualifiedName["EOSat1::Architecture::eosat1::deploySolarArrays"]));
+                Assert.That(safeToNominal.GetDocumentationBodies(), Is.EqualTo("Once the battery is charged."));
+                Assert.That(nominalToSafe.source, Is.SameAs(nominal));
+                Assert.That(nominalToSafe.target, Is.SameAs(safe));
+                Assert.That(nominalToSafe.triggerAction.Single().payloadParameter.type, Is.EqualTo([byQualifiedName["EOSat1::LowBattery"]]));
+                Assert.That(safe.entryAction, Is.InstanceOf<IPerformActionUsage>().With.Property("DeclaredName").EqualTo("pointToSun").And.Property("IsComposite").False);
+                Assert.That(((IPerformActionUsage)nominal.doAction).performedAction, Is.SameAs(byQualifiedName["EOSat1::Architecture::eosat1::imaging"]));
+                Assert.That(nominal.exitAction.DeclaredName, Is.EqualTo("stopImaging"));
+                Assert.That(nominal.exitAction.GetDocumentationBodies(), Is.EqualTo("The camera stops."));
+                Assert.That(acquireImage.parameter.Single(), Is.InstanceOf<IReferenceUsage>().With.Property("Direction").EqualTo(FeatureDirectionKind.Out));
+                Assert.That(storeImage.parameter.Single(), Is.InstanceOf<IItemUsage>().With.Property("Direction").EqualTo(FeatureDirectionKind.In).And.Property("IsComposite").False);
+                Assert.That(flows.Select(flow => string.Join(" to ", flow.GetEndPaths())),
+                    Is.EquivalentTo(["acquire.image to store.image", $"{ConnectionChangesHelper.CameraDataOut} to {ConnectionChangesHelper.ComputerDataIn}"]));
+                Assert.That(flows.Select(flow => flow.payloadType.Single()), Has.All.SameAs(byQualifiedName["EOSat1::Image"]));
+                Assert.That(flows.SelectMany(flow => flow.ownedEndFeature), Has.All.InstanceOf<IFlowEnd>().And.Property("IsEnd").True);
+            }
+        }
+
+        [Test]
+        public void Apply_WithBehaviourUpdatesAndDeletions_RefusesThemWhileStillReferenced()
+        {
+            var withPorts = ReadSatelliteWithPorts();
+            var model = CommitRequestHelper.Apply(withPorts, this.Apply(withPorts, BehaviourChangesHelper.CreateChanges()).Value);
+            var ids = model.Where(dto => dto.DeclaredName is "safe" or "launch" or "deploySolarArrays" or "safeToNominal" or "SeparationDetected").ToDictionary(dto => dto.DeclaredName, dto => dto.Id);
+
+            var launchToSafe = model.OfType<DtoTransitionUsage>()
+                .Single(transition => model.OfType<DtoMembership>().Any(membership => membership.OwningRelatedElement == transition.Id && membership.MemberElement == ids["launch"]));
+
+            var update = this.Apply(model, [new ModelChange { Identity = ids["safeToNominal"].ToString(), Payload = new ElementPayload { Trigger = ids["SeparationDetected"].ToString() } }]);
+            var safeDeletion = this.Apply(model, [new ModelChange { Identity = ids["safe"].ToString() }]);
+            var effectDeletion = this.Apply(model, [new ModelChange { Identity = ids["deploySolarArrays"].ToString() }]);
+            var triggerDeletion = this.Apply(model, [new ModelChange { Identity = ids["SeparationDetected"].ToString() }]);
+
+            var deletion = this.Apply(model,
+                [new ModelChange { Identity = launchToSafe.Id.ToString() }, new ModelChange { Identity = ids["launch"].ToString() }, new ModelChange { Identity = ids["SeparationDetected"].ToString() }]);
+
+            var afterDeletion = CommitRequestHelper.Apply(model, deletion.Value);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(update.Errors.Single().Description,
+                    Is.EqualTo("Change 1 (update): trigger, guard, effect, stateAction and item cannot change: delete the TransitionUsage 'safeToNominal' and create it again."));
+
+                Assert.That(safeDeletion.Errors.Single().Description,
+                    Does.StartWith("Change 1 (delete): the StateUsage 'safe' is still referenced by ")
+                        .And.Contain($"the TransitionUsage {launchToSafe.Id}").And.Contain("'EOSat1::Architecture::eosat1::modes::safeToNominal'"));
+
+                Assert.That(effectDeletion.Errors.Single().Description, Does.EndWith("is still referenced by 'EOSat1::Architecture::eosat1::modes::safeToNominal'. Change or delete these elements first."));
+                Assert.That(triggerDeletion.Errors.Single().Description, Does.Contain($"is still referenced by the TransitionUsage {launchToSafe.Id}."));
+                Assert.That(deletion.IsError, Is.False);
+                Assert.That(afterDeletion.Where(dto => dto.Id == launchToSafe.Id || dto.DeclaredName is "launch" or "SeparationDetected"), Is.Empty);
+                Assert.That(afterDeletion.OfType<DtoRelationship>().Where(relationship => relationship.OwningRelatedElement == launchToSafe.Id), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidBehaviour_ReturnsEveryProblem()
+        {
+            var withPorts = ReadSatelliteWithPorts();
+            var model = CommitRequestHelper.Apply(withPorts, this.Apply(withPorts, BehaviourChangesHelper.CreateChanges()).Value);
+            var ids = model.Where(dto => dto.DeclaredName is "modes" or "safe" or "imaging" or "acquire" or "deploySolarArrays" or "OperatingModes" or "Image").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+            var modes = ids["modes"];
+            var eosat1 = Eosat1Id.ToString();
+
+            var result = this.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Ends = ["launch", "safe"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = eosat1, Ends = ["launch", "safe"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["launch", "orbit"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = ids["imaging"], Ends = ["acquire", "acquire.image"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe", "launch"], Trigger = ids["deploySolarArrays"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe", "launch"], Guard = new GuardPayload { Attribute = "temperature", Operator = ">", Limit = 50 } } },
+                new ModelChange
+                {
+                    Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe", "launch"], Guard = new GuardPayload { Attribute = "powerSubsystem.battery.voltage", Operator = ">", Limit = 28 } }
+                },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe", "launch"], Guard = new GuardPayload { Attribute = "batteryCharge", Operator = "=>", Limit = 50 } } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe", "launch"], Effect = ids["OperatingModes"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "TransitionUsage", Owner = modes, Ends = ["safe", "launch"], Value = 1 } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = eosat1, Name = "lens", Trigger = ids["Image"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = ids["safe"], Name = "lens", StateAction = StateSubactionKind.Entry } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = ids["imaging"], Name = "prepare", StateAction = StateSubactionKind.Entry } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = ids["safe"], Name = "warmUp", StateAction = StateSubactionKind.Entry } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = ids["safe"], StateAction = StateSubactionKind.Do } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = ids["safe"], Name = "warmUp", StateAction = StateSubactionKind.Do, Ends = ["launch", "safe"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = ids["safe"], Name = "warmUp", StateAction = (StateSubactionKind)9 } },
+                new ModelChange { Payload = new ElementPayload { Type = "FlowUsage", Owner = ids["imaging"], Ends = ["acquire", "store.image"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "FlowUsage", Owner = ids["imaging"], Ends = ["acquire.image", "store.image"], Item = ids["acquire"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "ConnectionUsage", Owner = ids["imaging"], Ends = ["acquire", "store"], Item = ids["Image"] } }
+            ]);
+
+            string[] expectedProblems =
+            [
+                "Change 1 (create): The owner is missing.",
+                "Change 2 (create): The owner must be a state or an action, for example the StateDefinition or the StateUsage that holds the states it links, not the PartUsage 'eosat1'.",
+                "Change 3 (create): A transition goes from a source to a target: give them as two ends, paths of names from its owner, for example ['launch', 'cruise'].",
+                "Change 4 (create): The end 'orbit' is not valid: the StateUsage 'modes' and its definitions have no feature named 'orbit'. Use list_children to read their features.",
+                "Change 5 (create): The end 'acquire.image' of a TransitionUsage must be a state or an action, not the ReferenceUsage 'image'.",
+                "Change 6 (create): The trigger must be the definition of the event, for example an item definition, not the ActionUsage 'deploySolarArrays'.",
+                "Change 7 (create): The name 'temperature' of 'temperature' is not valid: neither the StateUsage 'modes' nor its owners have a feature with this name. Use list_children to read their features.",
+                "Change 8 (create): The name 'voltage' of 'powerSubsystem.battery.voltage' is not valid: the PartUsage 'battery' and its definitions have no feature with this name. Use list_children to read their features.",
+                "Change 9 (create): The guard is written like a constraint: the operator '=>' is not supported. Use '<', '<=', '>', '>=', '==', '!='.",
+                "Change 10 (create): The effect must be an action usage, not the StateDefinition 'OperatingModes'.",
+                "Change 11 (create): A TransitionUsage takes an owner and two ends, and optionally a name, a trigger, a guard, an effect and a text.",
+                "Change 12 (create): Only a TransitionUsage has a trigger, a guard or an effect, not a PartUsage.",
+                "Change 13 (create): Only an ActionUsage or a PerformActionUsage is the entry, do or exit action of a state, not a PartUsage.",
+                "Change 14 (create): The owner must be a StateUsage or a StateDefinition, not the ActionUsage 'imaging'.",
+                "Change 15 (create): The StateUsage 'safe' already has an entry action: a state has at most one action of each kind.",
+                "Change 16 (create): An entry, do or exit action needs a name (do action operate;) or a performed action (do operate;).",
+                "Change 17 (create): An entry, do or exit action takes an owner state and a name or a performed action, and optionally a definition, specializes and a text.",
+                "Change 18 (create): The stateAction must be Entry, Do or Exit.",
+                "Change 19 (create): The end 'acquire' of a FlowUsage must be a feature of a usage, for example 'camera.dataOut' or 'takeImage.image': give the path through the usage that holds it.",
+                "Change 20 (create): The item must be a definition, for example an item definition, not the ActionUsage 'acquire'.",
+                "Change 21 (create): Only a FlowUsage has an item, not a ConnectionUsage."
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(result.Errors.Select(error => error.Description), Is.EqualTo(expectedProblems));
+            }
+        }
+
+        /// <summary>
+        /// Reads the DTOs of the <c>Satellite.json</c> test model with the ports and connectors of
+        /// <see cref="ConnectionChangesHelper"/>.
+        /// </summary>
+        /// <returns>The DTOs of the elements of the model.</returns>
+        private List<DtoElement> ReadSatelliteWithPorts()
+        {
+            var dtos = ReadSatelliteDtos();
+
+            return [.. CommitRequestHelper.Apply(dtos, this.Apply(dtos, ConnectionChangesHelper.CreateChanges()).Value)];
         }
 
         /// <summary>

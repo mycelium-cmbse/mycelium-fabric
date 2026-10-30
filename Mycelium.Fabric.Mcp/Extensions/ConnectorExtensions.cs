@@ -15,6 +15,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Kernel.Connectors;
+    using SysML2.NET.Core.POCO.Kernel.Interactions;
     using SysML2.NET.Core.POCO.Root.Elements;
 
     /// <summary>
@@ -60,14 +61,23 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
             /// <summary>
             /// Gets, for each end of the connector, the features of its path: the chaining features of a feature chain such as
-            /// <c>camera.dataOut</c>, or the connected feature alone.
+            /// <c>camera.dataOut</c>, or the connected feature alone. The end of a flow adds the feature that the item leaves or
+            /// enters, which its own feature redefines (<c>dataOut</c> in <c>flow from camera.dataOut to obc.dataIn</c>).
             /// </summary>
             /// <returns>The features of the path of each end.</returns>
             private IEnumerable<IReadOnlyList<IFeature>> GetConnectedPaths()
             {
-                return (connector.relatedFeature ?? [])
-                    .Where(feature => feature != null)
-                    .Select(feature => feature.chainingFeature is { Count: > 0 } chainingFeatures ? chainingFeatures : [feature]);
+                return (connector.connectorEnd ?? [])
+                    .Where(end => end?.ownedReferenceSubsetting?.ReferencedFeature != null)
+                    .Select(end =>
+                    {
+                        var feature = end.ownedReferenceSubsetting.ReferencedFeature;
+                        IReadOnlyList<IFeature> path = feature.chainingFeature is { Count: > 0 } chainingFeatures ? chainingFeatures : [feature];
+
+                        return end is IFlowEnd && end.ownedFeature?.FirstOrDefault()?.ownedRedefinition?.FirstOrDefault()?.RedefinedFeature is { } flowFeature
+                            ? [.. path, flowFeature]
+                            : path;
+                    });
             }
         }
     }

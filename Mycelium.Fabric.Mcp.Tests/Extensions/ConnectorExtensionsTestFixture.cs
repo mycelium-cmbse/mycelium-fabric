@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
     using SysML2.NET.Core.POCO.Kernel.Connectors;
     using SysML2.NET.Core.POCO.Systems.Connections;
+    using SysML2.NET.Core.POCO.Systems.Flows;
     using SysML2.NET.Core.POCO.Systems.Interfaces;
     using SysML2.NET.Serializer.Json;
 
@@ -61,6 +62,15 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(new ConnectionUsage().GetEndPaths(), Is.Empty);
                 Assert.That(imageLink.GetEndPaths(), Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
                 Assert.That(connection.GetEndPaths(), Is.EqualTo(["camera", "massMemory"]));
+            }
+
+            Assert.That(this.modelProvider.ApplyChanges(BehaviourChangesHelper.CreateChanges()).Problems, Is.Empty);
+            var flows = this.modelProvider.Elements.OfType<IFlowUsage>().ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(flows.Single(flow => flow.DeclaredName == "imageFlow").GetEndPaths(), Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
+                Assert.That(flows.Single(flow => flow.DeclaredName == null).GetEndPaths(), Is.EqualTo(["acquire.image", "store.image"]));
             }
         }
 

@@ -22,12 +22,14 @@ namespace Mycelium.Fabric.Mcp.Services
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Kernel.Connectors;
+    using SysML2.NET.Core.POCO.Kernel.Interactions;
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Connections;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Ports;
+    using SysML2.NET.Core.POCO.Systems.States;
     using SysML2.NET.Dal;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -48,11 +50,12 @@ namespace Mycelium.Fabric.Mcp.Services
     {
         /// <summary>
         /// The kinds of membership through which a change owns the element it creates: an <c>OwningMembership</c>, a
-        /// <c>FeatureMembership</c> for a feature of a type, or an <c>EndFeatureMembership</c> for an end of a connection
-        /// definition. The server owns the elements it builds around them, such as the subject of a requirement, through other
+        /// <c>FeatureMembership</c> for a feature of a type, an <c>EndFeatureMembership</c> for an end of a connection
+        /// definition, or a <c>StateSubactionMembership</c> for the entry, do or exit action of a state. The server owns the
+        /// elements it builds around them, such as the subject of a requirement or the trigger of a transition, through other
         /// kinds of membership.
         /// </summary>
-        private static readonly System.Type[] MemberMembershipTypes = [typeof(OwningMembership), typeof(FeatureMembership), typeof(EndFeatureMembership)];
+        private static readonly System.Type[] MemberMembershipTypes = [typeof(OwningMembership), typeof(FeatureMembership), typeof(EndFeatureMembership), typeof(StateSubactionMembership)];
 
         /// <summary>
         /// The <see cref="IModelChangeApplier"/> that turns a batch of changes into the change of a commit.
@@ -254,8 +257,8 @@ namespace Mycelium.Fabric.Mcp.Services
 
         /// <summary>
         /// Tells whether an element is of a kind that a change creates: a package, a definition, a usage that is not a
-        /// relationship, a connection definition or a connector. The conjugate of a port definition and the ends of a
-        /// connector are built by the server.
+        /// relationship, a connection definition or a connector. The conjugate of a port definition, the ends of a
+        /// connector and the features of the ends of a flow are built by the server.
         /// </summary>
         /// <param name="element">The element.</param>
         /// <returns><c>true</c> when a change creates elements of this kind.</returns>
@@ -263,7 +266,7 @@ namespace Mycelium.Fabric.Mcp.Services
         {
             return element switch
             {
-                IConjugatedPortDefinition or { owner: IConnector } => false,
+                IConjugatedPortDefinition or { owner: IConnector or IFlowEnd } => false,
                 IConnectionDefinition or IConnectorAsUsage => true,
                 IPackage or IDefinition or IUsage => element is not IRelationship,
                 _ => false

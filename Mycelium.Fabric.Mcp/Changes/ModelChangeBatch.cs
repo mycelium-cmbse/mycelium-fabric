@@ -32,6 +32,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Systems.Occurrences;
     using SysML2.NET.Core.DTO.Systems.Ports;
     using SysML2.NET.Core.DTO.Systems.Requirements;
+    using SysML2.NET.Core.DTO.Systems.States;
     using SysML2.NET.Core.Root.Namespaces;
     using SysML2.NET.Dal;
     using SysML2.NET.PIM;
@@ -41,6 +42,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using PocoElement = SysML2.NET.Core.POCO.Root.Elements.IElement;
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
     using PocoSatisfyRequirementUsage = SysML2.NET.Core.POCO.Systems.Requirements.ISatisfyRequirementUsage;
+    using PocoTransitionUsage = SysML2.NET.Core.POCO.Systems.States.ITransitionUsage;
 
     /// <summary>
     /// A batch of <see cref="ModelChange"/>s applied, in order, to a working copy of a SysML v2 model made of DTOs. The batch
@@ -76,13 +78,13 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// from paths for a connector. Interface definitions and usages are connection definitions and usages, and so are
         /// allocation usages.
         /// </summary>
-        private static readonly System.Type[] ConnectionMetaclasses = [typeof(IConnectionDefinition), typeof(IConnectionUsage), typeof(IBindingConnectorAsUsage), typeof(ISuccessionAsUsage)];
+        private static readonly System.Type[] ConnectionMetaclasses = [typeof(IConnectionDefinition), typeof(IConnectionUsage), typeof(IBindingConnectorAsUsage), typeof(ISuccessionAsUsage), typeof(IFlowUsage)];
 
         /// <summary>
-        /// The interfaces of the connection definitions and usages that a change cannot create yet, because the server does
-        /// not build their ends: allocation definitions and flows.
+        /// The interfaces of the connection definitions that a change cannot create yet, because the server does not build
+        /// their ends: allocation definitions.
         /// </summary>
-        private static readonly System.Type[] UnsupportedConnectionMetaclasses = [typeof(IAllocationDefinition), typeof(IFlowUsage)];
+        private static readonly System.Type[] UnsupportedConnectionMetaclasses = [typeof(IAllocationDefinition)];
 
         /// <summary>
         /// The metaclasses that a change can create, indexed by their name: the concrete DTO classes of SysML2.NET that are
@@ -355,6 +357,18 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var member = CreateElement(payload.Type);
 
+            if (payload.StateAction != null)
+            {
+                this.CreateStateAction(member, change);
+                return;
+            }
+
+            if (member is ITransitionUsage)
+            {
+                this.CreateTransition(member, change);
+                return;
+            }
+
             if (member is ISatisfyRequirementUsage)
             {
                 this.CreateSatisfy(member, change);
@@ -402,6 +416,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             this.CheckRequirementProperties(member, payload);
             CheckFeatureProperties(member, owner, payload);
+            CheckBehaviourProperties(member, payload);
             SetFeatureFlags(member, owner, payload);
             this.AddOwnedMember(owner, member, change.Identity);
 
@@ -473,7 +488,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (payload.Direction != null)
             {
-                ((IFeature)element).Direction = payload.Direction;
+                SetDirection((IFeature)element, payload.Direction);
                 this.MarkModified(element);
             }
 
@@ -515,6 +530,8 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 throw new InvalidChangeException("The performed action of a PerformActionUsage cannot change: delete the element and create it again.");
             }
+
+            CheckNoBehaviourUpdate(element, payload);
 
             if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
                 && string.IsNullOrWhiteSpace(payload.ReqId))
@@ -659,28 +676,32 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Describes, in a message, the element that holds a reference: the nearest owner of the referencing relationship
+        /// Describes, in a message, the element that holds a reference: the transition that contains the referencing
+        /// relationship, since its source, target, trigger, guard and effect are deleted with it, or else the nearest owner
         /// that has a qualified name (for example the part typed by a definition), or the satisfy link or the unnamed
-        /// connector that contains it, designated by its identifier so that it can be deleted. A connector, owned through a
-        /// membership, is itself the referencing relationship.
+        /// connector that contains it. An unnamed element is designated by its identifier, so that it can be deleted. A
+        /// connector, owned through a membership, is itself the referencing relationship.
         /// </summary>
         /// <param name="relationship">The referencing relationship.</param>
         /// <returns>The description of the referencing element.</returns>
         private static string DescribeReferencingElement(PocoRelationship relationship)
         {
+            var owners = new List<PocoElement>();
+
             for (var element = relationship.OwningRelatedElement ?? relationship; element != null; element = element.owner)
             {
-                switch (element)
-                {
-                    case PocoSatisfyRequirementUsage:
-                    case PocoConnector { qualifiedName: null }:
-                        return $"the {element.GetType().Name} {element.Id}";
-                    case { qualifiedName: { } qualifiedName }:
-                        return $"'{qualifiedName}'";
-                }
+                owners.Add(element);
             }
 
-            return $"'{relationship.Id}'";
+            var holder = owners.OfType<PocoTransitionUsage>().FirstOrDefault<PocoElement>()
+                ?? owners.FirstOrDefault(element => element is PocoSatisfyRequirementUsage or PocoConnector { qualifiedName: null } || element.qualifiedName != null);
+
+            return holder switch
+            {
+                null => $"'{relationship.Id}'",
+                { qualifiedName: { } qualifiedName } and not PocoSatisfyRequirementUsage => $"'{qualifiedName}'",
+                _ => $"the {holder.GetType().Name} {holder.Id}"
+            };
         }
 
         /// <summary>
@@ -832,9 +853,12 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="owner">The owner of the new element.</param>
         /// <param name="member">The new element, whose name is set.</param>
         /// <param name="temporaryName">The temporary name of the new element, or <c>null</c> when it has none.</param>
-        private void AddOwnedMember(IElement owner, IElement member, string temporaryName)
+        /// <param name="membership">
+        /// The membership through which the owner owns the element, or <c>null</c> for the one of <see cref="CreateMembership"/>.
+        /// </param>
+        private void AddOwnedMember(IElement owner, IElement member, string temporaryName, IMembership membership = null)
         {
-            this.AddOwnedRelationship(owner, CreateMembership(owner, member), this.Add(member));
+            this.AddOwnedRelationship(owner, membership ?? CreateMembership(owner, member), this.Add(member));
 
             if (!string.IsNullOrWhiteSpace(temporaryName))
             {
@@ -1087,7 +1111,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates an element of the given metaclass. An occurrence usage, such as a part, is composite, as it is when it is
-        /// declared without <c>ref</c>.
+        /// declared without <c>ref</c>, except an event occurrence, such as a <c>PerformActionUsage</c>, which is always
+        /// referential.
         /// </summary>
         /// <param name="type">The name of the metaclass, for example <c>PartUsage</c>.</param>
         /// <returns>The new element, which has no identifier yet.</returns>
@@ -1101,7 +1126,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var element = (IElement)Activator.CreateInstance(metaclass);
 
-            if (element is IOccurrenceUsage occurrenceUsage)
+            if (element is IOccurrenceUsage occurrenceUsage and not IEventOccurrenceUsage)
             {
                 occurrenceUsage.IsComposite = true;
             }
