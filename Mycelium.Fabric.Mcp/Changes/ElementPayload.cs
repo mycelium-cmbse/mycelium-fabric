@@ -79,8 +79,20 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the constraint that makes the requirement verifiable.
         /// </summary>
-        [Description("Create or update, for a RequirementUsage: a constraint that makes it verifiable (a required constraint, or an assumption with kind Assumption), on an attribute of its subject. It replaces the current constraints of the same kind.")]
+        [Description("Create or update, for a RequirementUsage: a constraint that makes it verifiable (a required constraint, or an assumption with kind Assumption), on an attribute of its subject. It replaces the current constraints of the same kind. For several limits, give constraints instead.")]
         public ConstraintPayload Constraint { get; init; }
+
+        /// <summary>
+        /// Gets the constraints that make the requirement verifiable, when it has several.
+        /// </summary>
+        [Description("Create or update, for a RequirementUsage, instead of constraint: several constraints that must all hold, for example a mass limit and a power limit. They replace the current constraints of the kinds they have.")]
+        public IReadOnlyList<ConstraintPayload> Constraints { get; init; }
+
+        /// <summary>
+        /// Gets the multiplicity of the usage: how many there are, as the textual notation writes it between brackets.
+        /// </summary>
+        [Description("Create or update, for a usage such as a part, a port, an item or an attribute: how many there are, as written between brackets: '4' (part wheels : Wheel[4]), '1..4' or '0..*'. sum_attribute and check_requirements count a part 4 times for '4'; a number that is not fixed ('1..4', '0..*') cannot be counted. An update replaces it.")]
+        public string Multiplicity { get; init; }
 
         /// <summary>
         /// Gets the requirement that the created <c>SatisfyRequirementUsage</c> satisfies.
@@ -97,7 +109,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the two ends of the created connector, as paths of names from its owner.
         /// </summary>
-        [Description("Create, for a ConnectionUsage, an InterfaceUsage, a BindingConnectorAsUsage, an AllocationUsage (from the allocated element to its target), a SuccessionAsUsage (from the action that comes first to the one that follows), a TransitionUsage (from the state or action that it leaves to the one that it enters) or a FlowUsage (from the feature that the item leaves to the one that it enters, each through the usage that holds it, for example 'takeImage.image' or 'camera.dataOut'): its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. The ends of an interface are ports. They cannot be updated: delete the element and create it again.")]
+        [Description("Create, for a ConnectionUsage, an InterfaceUsage, a BindingConnectorAsUsage, an AllocationUsage (from the allocated element to its target), a SuccessionAsUsage (from the action that comes first to the one that follows), a TransitionUsage (from the state or action that it leaves to the one that it enters) or a FlowUsage (from the feature that the item leaves to the one that it enters, each through the usage that holds it, for example 'takeImage.image' or 'camera.dataOut'): its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. An end that is not a feature of the owner is given by its identifier (Id), its temporary name or its qualified name, followed by '.' and names when needed ('<Id>.dataOut'). The ends of an interface are ports. They cannot be updated: delete the element and create it again.")]
         public IReadOnlyList<string> Ends { get; init; }
 
         /// <summary>
@@ -115,7 +127,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the direction of the element, which must be a feature.
         /// </summary>
-        [Description("Create or update, for a feature such as a port, an attribute of a port definition or a parameter of an action (a ReferenceUsage, an ItemUsage or an AttributeUsage owned by an ActionDefinition or an ActionUsage: in currentStatus : VehicleStatus;): its direction, In, Out or Inout.")]
+        [Description("Create or update, for a feature such as a port, an attribute of a port definition or a parameter of an action (a ReferenceUsage, an ItemUsage or an AttributeUsage owned by an ActionDefinition or an ActionUsage: in currentStatus : VehicleStatus;): its direction, In, Out or Inout. A port definition has none: give it to what flows through it, an item or attribute that it owns (port def FuelPort { out item fuel : Fuel; }).")]
         [JsonConverter(typeof(JsonStringEnumConverter<FeatureDirectionKind>))]
         public FeatureDirectionKind? Direction { get; init; }
 

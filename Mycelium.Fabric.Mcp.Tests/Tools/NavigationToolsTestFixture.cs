@@ -170,6 +170,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(camera.Documentation, Is.Null);
                 Assert.That(camera.Ends, Is.Null);
                 Assert.That(camera.Connections, Is.Null);
+                Assert.That(camera.Multiplicity, Is.Null);
                 Assert.That(payloadSubsystem.Documentation, Is.EqualTo("Payload: the imaging instrument and its data storage."));
             }
 
@@ -230,6 +231,19 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(safeToNominal.Ends, Is.EqualTo(["safe", "nominal"]));
                 Assert.That(imageFlow.Ends, Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
                 Assert.That(tools.GetElementDetails(CameraId).Connections.Select(connection => connection.Name), Does.Contain("imageFlow"));
+            }
+
+            // A usage gives its multiplicity.
+            var rover = MultiplicityChangesHelper.CreateModel(withUncountedPart: true);
+            tools = new NavigationTools(rover);
+
+            ElementDetails GetDetails(string name) => tools.GetElementDetails(rover.Elements.Single(element => element.DeclaredName == name).Id);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(GetDetails("bogies").Multiplicity, Is.EqualTo("2"));
+                Assert.That(GetDetails("heaters").Multiplicity, Is.EqualTo("1..4"));
+                Assert.That(GetDetails("battery").Multiplicity, Is.Null);
             }
         }
 

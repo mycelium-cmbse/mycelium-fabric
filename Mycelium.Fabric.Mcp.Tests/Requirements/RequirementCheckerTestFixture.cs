@@ -188,6 +188,24 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         }
 
         [Test]
+        public void CheckRequirements_WithSeveralConstraintsAndMultiplicities_ChecksEachConstraint()
+        {
+            var counted = new RequirementChecker(MultiplicityChangesHelper.CreateModel(withUncountedPart: false).Elements).CheckRequirements().Single();
+            var uncounted = new RequirementChecker(MultiplicityChangesHelper.CreateModel(withUncountedPart: true).Elements).CheckRequirements().Single();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(counted.Status, Is.EqualTo(RequirementStatus.NotSatisfied));
+                Assert.That(counted.Constraint, Is.EqualTo("subj.mass <= 30 [kg] and subj.power <= 15 [W]"));
+                Assert.That(counted.Value, Is.Null);
+                Assert.That(counted.Explanation, Is.EqualTo("require subj.mass <= 30 [kg]: 24 [kg] <= 30 [kg]; require subj.power <= 15 [W]: 20 [W] > 15 [W]"));
+                Assert.That(uncounted.Status, Is.EqualTo(RequirementStatus.NotEvaluated));
+                Assert.That(uncounted.Explanation, Does.StartWith("require subj.mass <= 30 [kg]: The number of units of Rover::rover::heaters [1..4] under 'Rover::rover' is not fixed, "
+                    + "so its 'mass' cannot be counted. Give a single number as multiplicity, such as 4, to check the requirement."));
+            }
+        }
+
+        [Test]
         public void VerifyCheckRequirementsWithAssumptionsAndOtherComparisons()
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();

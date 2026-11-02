@@ -192,7 +192,8 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <summary>
         /// Computes the value of an attribute of a part as <c>sum_attribute</c> does, with the simulated value of one part
         /// if any, and records it. The value includes the margins that the model gives for the values of the parts; it is
-        /// not computed while the value of a part is missing ("to be defined"), since the total would be incomplete.
+        /// not computed while the value of a part is missing ("to be defined"), or while the number of units of a part is not
+        /// fixed (<c>[1..4]</c>), since the total would be incomplete.
         /// </summary>
         /// <param name="part">The part.</param>
         /// <param name="attributeName">The name of the attribute.</param>
@@ -201,10 +202,19 @@ namespace Mycelium.Fabric.Mcp.Expressions
         {
             var values = part.CollectValues(attributeName);
 
-            if (values.MissingValues.Count > 0)
+            var missingValues = values.MissingValues.Where(missingValue => missingValue.Multiplicity == null).ToList();
+            var uncountedParts = values.MissingValues.Where(missingValue => missingValue.Multiplicity != null).ToList();
+
+            if (missingValues.Count > 0)
             {
-                return Error.Validation(description: $"The value of '{attributeName}' is missing (to be defined) for {values.MissingValues.Count} {(values.MissingValues.Count == 1 ? "part" : "parts")} under '{part.qualifiedName}': "
-                    + $"{MissingValue.Describe(values.MissingValues)}. Give {(values.MissingValues.Count == 1 ? "it" : "them")} a value to check the requirement.");
+                return Error.Validation(description: $"The value of '{attributeName}' is missing (to be defined) for {missingValues.Count} {(missingValues.Count == 1 ? "part" : "parts")} under '{part.qualifiedName}': "
+                    + $"{MissingValue.Describe(missingValues)}. Give {(missingValues.Count == 1 ? "it" : "them")} a value to check the requirement.");
+            }
+
+            if (uncountedParts.Count > 0)
+            {
+                return Error.Validation(description: $"The number of units of {MissingValue.Describe(uncountedParts)} under '{part.qualifiedName}' is not fixed, so its '{attributeName}' cannot be counted. "
+                    + "Give a single number as multiplicity, such as 4, to check the requirement.");
             }
 
             var contributions = values.Contributions
@@ -218,7 +228,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 return Error.Validation(description: $"No part under '{part.qualifiedName}' has a numeric value for '{attributeName}'.");
             }
 
-            var total = NumberValue.Sum(contributions.Select(contribution => contribution.GetValueWithMargin()));
+            var total = NumberValue.Sum(contributions.Select(contribution => contribution.GetTotalWithMargin()));
 
             if (total.IsError)
             {
@@ -226,7 +236,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
             }
 
             var totalWithoutMargins = contributions.Exists(contribution => contribution.Margin != null)
-                ? NumberValue.Sum(contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit))).Value
+                ? NumberValue.Sum(contributions.Select(contribution => contribution.GetTotal())).Value
                 : null;
 
             this.rollUps.Add(new RollUp(part, attributeName, total.Value, contributions, totalWithoutMargins));

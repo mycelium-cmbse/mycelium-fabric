@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.TradeOff;
 
     using SysML2.NET.Core.POCO.Core.Types;
@@ -289,6 +290,40 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", 1, null, null) with { Unit = "parsec" }]), "'parsec', which the server does not know");
                 AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", null, "heat", null) with { Unit = "GB" }]), "gives a unit with a limitAttribute");
                 AssertRejected(Request(VolumeVariant("big", 1, null), [Constraint("dataVolume", "<=", null, "heat", null)]), "they have different dimensions and cannot be compared");
+            }
+        }
+
+        [Test]
+        public void VerifyBuildWithMultiplicities()
+        {
+            // 6 lenses of 1 kg: 2 in each of the 3 cameras of the rover, which also has 2 bogies of 7 kg and a battery of 10 kg.
+            var rover = MultiplicityChangesHelper.CreateModel(withUncountedPart: true);
+            var roverId = rover.Elements.Single(element => element.DeclaredName == MultiplicityChangesHelper.RoverName).Id;
+
+            var result = rover.ApplyChanges(
+            [
+                new ModelChange { Identity = "cameras", Payload = new ElementPayload { Type = "PartUsage", Owner = roverId.ToString(), Name = "cameras", Multiplicity = "3" } },
+                new ModelChange { Identity = "lens", Payload = new ElementPayload { Type = "PartUsage", Owner = "cameras", Name = "lens", Multiplicity = "2" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "lens", Name = "mass", Value = 1, Unit = "kg" } }
+            ]);
+
+            Guid Get(string name) => rover.Elements.Single(element => element.DeclaredName == name).Id;
+
+            var request = new TradeOffRequest(roverId, [Choice(Get("bogies"), Variant("light", ("mass", 5))), Choice(Get("lens"), Variant("plastic", ("mass", 0.5)))],
+                [new TradeOffObjective { Attribute = "mass" }], null, null, 1, null);
+
+            var problem = TradeOffProblemBuilder.Build(rover, request);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True);
+                Assert.That(problem.Decisions[0].Options.Select(option => option.Values["mass"]), Is.EqualTo([14, 10]));
+                Assert.That(problem.Decisions[1].Options.Select(option => option.Values["mass"]), Is.EqualTo([6, 3]));
+                Assert.That(problem.FixedTotals["mass"], Is.EqualTo(10).Within(1e-9));
+
+                Assert.That(() => TradeOffProblemBuilder.Build(rover, request with { Choices = [Choice(Get("heaters"), Variant("small", ("mass", 0.2)))] }),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("The number of units of 'heaters' is not fixed (1..4), so 'heaters' cannot be counted: "
+                        + "give it a single number as multiplicity first."));
             }
         }
 

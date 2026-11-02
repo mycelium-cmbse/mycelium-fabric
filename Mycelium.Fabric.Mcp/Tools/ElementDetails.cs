@@ -28,6 +28,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Connections">The connectors that connect the element or one of its features, or <c>null</c> when there are none.</param>
     /// <param name="Specializes">The qualified names of the elements that the element specializes (<c>:></c>), or <c>null</c> when there are none.</param>
     /// <param name="Performed">The qualified name of the action that the element performs when it is a <c>PerformActionUsage</c>, or <c>null</c>.</param>
+    /// <param name="Multiplicity">The multiplicity of the element as written between brackets, for example <c>4</c> or <c>0..*</c>, or <c>null</c> when it has none.</param>
     public sealed record ElementDetails(Guid Id, string Name, string ShortName, string Type, string QualifiedName, Guid? OwnerId, string OwnerName, int ChildCount,
-        string Documentation, IReadOnlyList<string> Ends, IReadOnlyList<ConnectionSummary> Connections, IReadOnlyList<string> Specializes, string Performed);
+        string Documentation, IReadOnlyList<string> Ends, IReadOnlyList<ConnectionSummary> Connections, IReadOnlyList<string> Specializes, string Performed, string Multiplicity = null);
 }

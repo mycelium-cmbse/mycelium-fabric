@@ -249,7 +249,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Adds contributions, each converted to the unit of the attribute.
+        /// Adds contributions, each converted to the unit of the attribute and counted for each unit of its part.
         /// </summary>
         /// <param name="contributions">The <see cref="Contribution"/>s to add.</param>
         /// <param name="reference">The unit of the attribute, or <c>null</c> when it has none.</param>
@@ -260,7 +260,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// </exception>
         private static double SumContributions(IEnumerable<Contribution> contributions, Unit reference, string attribute)
         {
-            return contributions.Sum(contribution => ConvertValue(contribution.Value, contribution.Unit, reference, $"The '{attribute}' of '{contribution.QualifiedName}'", attribute));
+            return contributions.Sum(contribution =>
+                ConvertValue(contribution.Value, contribution.Unit, reference, $"The '{attribute}' of '{contribution.QualifiedName}'", attribute) * (contribution.Count ?? 1));
         }
 
         /// <summary>
@@ -450,7 +451,17 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     + "Use list_children to find the parts, or give the equipment a name instead of a partId to add it.");
             }
 
-            return new ChosenPart(part, owners);
+            // The part counts once for each unit of itself and of its owners under the root (wheels[4] in bogies[2] counts 8 times).
+            var unitCount = 1;
+
+            foreach (var countedPart in owners.SkipLast(1).Prepend(part).Cast<IPartUsage>())
+            {
+                unitCount *= countedPart.GetUnitCount()
+                    ?? throw new McpException($"The number of units of '{countedPart.DeclaredName}' is not fixed ({countedPart.DescribeMultiplicity()}), so '{part.DeclaredName}' cannot be counted: "
+                        + "give it a single number as multiplicity first.");
+            }
+
+            return new ChosenPart(part, owners, unitCount);
         }
 
         /// <summary>
@@ -564,6 +575,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             if (part == null && choice.Required && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
             {
                 throw new McpException($"The equipment '{name}' is required, so it cannot take the variant '{TradeOffVariant.NoneName}'.");
+            }
+
+            // A choice on a part that counts several times (wheels[4]) applies to each of its units.
+            if (part is { UnitCount: not 1 })
+            {
+                options = [.. options.Select(option => option with { Values = option.Values.ToDictionary(pair => pair.Key, pair => pair.Value * part.UnitCount) })];
             }
 
             return new TradeOffDecision(name, part?.Part.Id, part?.Part.qualifiedName, options, part == null && choice.Required);
@@ -693,7 +710,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         private static double GetFixedTotal(IElement root, string attribute, IReadOnlyList<ChosenPart> parts, Unit unit)
         {
             var total = SumContributions(root.CollectContributions(attribute), unit, attribute);
-            var chosenTotal = SumContributions(parts.Where(part => part != null).SelectMany(part => part.Part.CollectContributions(attribute)), unit, attribute);
+            var chosenTotal = parts.Where(part => part != null).Sum(part => SumContributions(part.Part.CollectContributions(attribute), unit, attribute) * part.UnitCount);
 
             return total - chosenTotal;
         }
@@ -812,6 +829,10 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// </summary>
         /// <param name="Part">The chosen part.</param>
         /// <param name="Owners">The owners of the part, from its direct owner to the root.</param>
-        private sealed record ChosenPart(IElement Part, IReadOnlyList<IElement> Owners);
+        /// <param name="UnitCount">
+        /// The number of units of the part under the root, from its multiplicity and the ones of its owners, which multiplies
+        /// the values of each option of the choice.
+        /// </param>
+        private sealed record ChosenPart(IElement Part, IReadOnlyList<IElement> Owners, int UnitCount);
     }
 }

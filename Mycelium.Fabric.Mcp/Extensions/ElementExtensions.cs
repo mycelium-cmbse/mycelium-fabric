@@ -140,8 +140,12 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <c>Margin</c>, in %, for example <c>massMargin</c>), and its own sub-parts are not visited, so that no value is
             /// counted twice. The sub-parts of a type are its part features, owned or inherited from its types: the parts
             /// declared in a part definition count for each part that this definition types (<c>part stage : Stage</c>
-            /// counts the engines of <c>Stage</c>). A part without sub-parts and without value misses its value ("to be
-            /// defined") when it declares the attribute without any value, or when it has the type of a contributing part.
+            /// counts the engines of <c>Stage</c>). A part counts as many times as its multiplicity and the ones of the parts
+            /// that hold it under the element say (<c>part wheels : Wheel[4]</c>); the multiplicity of the element itself is
+            /// not counted. A part without sub-parts and without value misses its value ("to be defined") when it declares
+            /// the attribute without any value, or when it has the type of a contributing part. A part that carries the
+            /// attribute but whose number of units is not fixed (<c>[1..4]</c>, <c>[0..*]</c>) is not counted and misses its
+            /// value too.
             /// </summary>
             /// <param name="attributeName">The declared name of the attribute.</param>
             /// <returns>The <see cref="CollectedValues"/>: the contributions, and the parts whose value is missing.</returns>
@@ -153,11 +157,12 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 ArgumentNullException.ThrowIfNull(element);
 
                 var collector = new ValueCollector(attributeName);
-                CollectPartValues(element, collector, []);
+                CollectPartValues(element, collector, [], 1);
 
                 var missingValues = collector.ValuelessParts
                     .Where(part => part.DeclaresAttribute || GetTypeIds(part.Part).Any(collector.ContributingTypeIds.Contains))
                     .Select(part => new MissingValue(part.Part.Id, part.Part.qualifiedName, part.Part.GetTypeNames()))
+                    .Concat(collector.UncountedParts.Select(part => new MissingValue(part.Id, part.qualifiedName, part.GetTypeNames(), part.DescribeMultiplicity())))
                     .ToList();
 
                 return new CollectedValues(collector.Contributions, missingValues);
@@ -172,7 +177,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
         /// <param name="element">The <see cref="IElement"/> to read.</param>
         /// <param name="collector">The <see cref="ValueCollector"/> that receives the values found.</param>
         /// <param name="path">The identifiers of the parts between the first element and this one.</param>
-        private static void CollectPartValues(IElement element, ValueCollector collector, HashSet<Guid> path)
+        /// <param name="count">The number of units of the element under the first element.</param>
+        private static void CollectPartValues(IElement element, ValueCollector collector, HashSet<Guid> path, int count)
         {
             var attribute = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == collector.AttributeName);
             var value = attribute?.GetNumericValue();
@@ -181,7 +187,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
             {
                 var margin = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == collector.AttributeName + MarginSuffix)?.GetNumericValue();
 
-                collector.Contributions.Add(new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit, margin?.Number));
+                collector.Contributions.Add(new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit, margin?.Number, count == 1 ? null : count));
                 collector.ContributingTypeIds.UnionWith(GetTypeIds(element));
 
                 return;
@@ -205,7 +211,20 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
             foreach (var part in parts)
             {
-                CollectPartValues(part, collector, path);
+                if (part.GetUnitCount() is { } unitCount)
+                {
+                    CollectPartValues(part, collector, path, count * unitCount);
+                    continue;
+                }
+
+                // A part whose number of units is not fixed is not counted, and is reported only when it carries the attribute.
+                var uncountedValues = new ValueCollector(collector.AttributeName);
+                CollectPartValues(part, uncountedValues, path, 1);
+
+                if (uncountedValues.Contributions.Count > 0 || uncountedValues.UncountedParts.Count > 0 || uncountedValues.ValuelessParts.Exists(valueless => valueless.DeclaresAttribute))
+                {
+                    collector.UncountedParts.Add(part);
+                }
             }
 
             path.Remove(element.Id);
@@ -241,6 +260,11 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// Gets the parts without sub-parts and without value, and whether each one declares the attribute.
             /// </summary>
             public List<(IElement Part, bool DeclaresAttribute)> ValuelessParts { get; } = [];
+
+            /// <summary>
+            /// Gets the parts that carry the attribute but whose number of units is not fixed, which are not counted.
+            /// </summary>
+            public List<IPartUsage> UncountedParts { get; } = [];
         }
     }
 }

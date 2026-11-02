@@ -180,6 +180,35 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         }
 
         [Test]
+        public void SumAttribute_WithMultiplicities_CountsEachUnitAndListsThePartsThatCannotBeCounted()
+        {
+            var counted = MultiplicityChangesHelper.CreateModel(withUncountedPart: false);
+            var uncounted = MultiplicityChangesHelper.CreateModel(withUncountedPart: true);
+
+            Guid GetRoverId(IModelProvider provider) => provider.Elements.Single(element => element.DeclaredName == MultiplicityChangesHelper.RoverName).Id;
+
+            var tools = new BudgetTools(counted);
+            var mass = tools.SumAttribute(GetRoverId(counted), "mass");
+            var power = tools.SumAttribute(GetRoverId(counted), "power");
+            var wheels = mass.Contributions.Single(contribution => contribution.QualifiedName == "Rover::Bogie::wheels");
+            var whatIf = tools.EvaluateWhatIf(GetRoverId(counted), "mass", wheels.Id, 3);
+            var uncountedMass = new BudgetTools(uncounted).SumAttribute(GetRoverId(uncounted), "mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(mass.Total, Is.EqualTo(24));
+                Assert.That(mass.Contributions.Select(contribution => (contribution.QualifiedName, contribution.Value, contribution.Count)),
+                    Is.EquivalentTo(new (string, double, int?)[] { ("Rover::Bogie::chassis", 3, 2), ("Rover::Bogie::wheels", 2, 4), ("Rover::rover::battery", 10, null) }));
+
+                Assert.That(power.Total, Is.EqualTo(20));
+                Assert.That(whatIf.NewTotal, Is.EqualTo(28));
+                Assert.That(whatIf.Difference, Is.EqualTo(4));
+                Assert.That(uncountedMass.Total, Is.EqualTo(24));
+                Assert.That(uncountedMass.MissingValues.Select(missingValue => (missingValue.QualifiedName, missingValue.Multiplicity)), Is.EqualTo([("Rover::rover::heaters", "1..4")]));
+            }
+        }
+
+        [Test]
         public void VerifyEvaluateWhatIf()
         {
             var tools = CreateSatelliteTools();

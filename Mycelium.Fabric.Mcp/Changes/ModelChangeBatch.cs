@@ -446,6 +446,11 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.AddValue(member, payload.Value.Value, payload.Unit);
             }
 
+            if (payload.Multiplicity != null)
+            {
+                this.SetMultiplicity(member, payload.Multiplicity);
+            }
+
             if (member is IPortDefinition)
             {
                 this.GetOrCreateConjugatedPortDefinition(member);
@@ -456,8 +461,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Updates the properties of an element given by the payload: its name, its definition, its value, its documentation,
-        /// its direction, the conjugation of a port and, for a requirement, its <c>ReqId</c> and its constraint. A new
-        /// definition, value, documentation or constraint replaces the current one.
+        /// its direction, its multiplicity, the conjugation of a port and, for a requirement, its <c>ReqId</c> and its
+        /// constraints. A new definition, value, documentation, multiplicity or constraint replaces the current one.
         /// </summary>
         /// <param name="change">The change that updates the element designated by its identity.</param>
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
@@ -510,6 +515,11 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.AddDocumentation(element, payload.Text);
             }
 
+            if (payload.Multiplicity != null)
+            {
+                this.SetMultiplicity(element, payload.Multiplicity);
+            }
+
             this.SetRequirementProperties(element, payload);
         }
 
@@ -539,10 +549,11 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             CheckNoBehaviourUpdate(element, payload);
 
-            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
-                && string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Constraints: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
+                && payload.Multiplicity == null && string.IsNullOrWhiteSpace(payload.ReqId))
             {
-                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, text, direction, conjugated, reqId or constraint to change, or no payload to delete the element.");
+                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, text, direction, conjugated, multiplicity, reqId or constraint to change, "
+                    + "or no payload to delete the element.");
             }
 
             this.CheckFeatureUpdate(element, payload);

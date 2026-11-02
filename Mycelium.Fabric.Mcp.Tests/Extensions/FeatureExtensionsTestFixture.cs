@@ -16,7 +16,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Core.POCO.Kernel.Expressions;
+    using SysML2.NET.Core.POCO.Kernel.Multiplicities;
+    using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.Core.POCO.Systems.Parts;
+    using SysML2.NET.Extensions;
 
     /// <summary>
     /// Suite of tests for the <see cref="FeatureExtensions"/> class.
@@ -40,6 +45,55 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(Get("wheel1").GetPartsBeside(), Is.Empty);
                 Assert.That(new PartUsage().GetPartsBeside(), Is.Empty);
             }
+        }
+
+        [Test]
+        public void VerifyDescribeMultiplicityAndGetUnitCount()
+        {
+            var parts = MultiplicityChangesHelper.CreateModel(withUncountedPart: true).Elements.OfType<IPartUsage>().ToList();
+
+            IPartUsage Get(string name) => parts.Single(part => part.DeclaredName == name);
+
+            var fixedRange = CreatePart(new LiteralInteger { Value = 4 }, new LiteralInteger { Value = 4 });
+            var unbounded = CreatePart(new LiteralInteger { Value = 0 }, new LiteralInfinity());
+            var computed = CreatePart(new FeatureReferenceExpression());
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IFeature)null).DescribeMultiplicity(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => ((IFeature)null).GetUnitCount(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(Get("bogies").DescribeMultiplicity(), Is.EqualTo("2"));
+                Assert.That(Get("bogies").GetUnitCount(), Is.EqualTo(2));
+                Assert.That(Get("heaters").DescribeMultiplicity(), Is.EqualTo("1..4"));
+                Assert.That(Get("heaters").GetUnitCount(), Is.Null);
+                Assert.That(Get("battery").DescribeMultiplicity(), Is.Null);
+                Assert.That(Get("battery").GetUnitCount(), Is.EqualTo(1));
+                Assert.That(fixedRange.DescribeMultiplicity(), Is.EqualTo("4..4"));
+                Assert.That(fixedRange.GetUnitCount(), Is.EqualTo(4));
+                Assert.That(unbounded.DescribeMultiplicity(), Is.EqualTo("0..*"));
+                Assert.That(unbounded.GetUnitCount(), Is.Null);
+                Assert.That(computed.DescribeMultiplicity(), Is.EqualTo("?"));
+                Assert.That(computed.GetUnitCount(), Is.Null);
+            }
+        }
+
+        /// <summary>
+        /// Creates a part whose multiplicity has the given bounds, as <c>part x[0..*];</c> does.
+        /// </summary>
+        /// <param name="bounds">The bounds of the multiplicity, the lower one first when there are two.</param>
+        /// <returns>The <see cref="PartUsage"/>.</returns>
+        private static PartUsage CreatePart(params IElement[] bounds)
+        {
+            var part = new PartUsage { DeclaredName = "part" };
+            var range = new MultiplicityRange();
+            part.AssignOwnership(new OwningMembership(), range);
+
+            foreach (var bound in bounds)
+            {
+                range.AssignOwnership(new OwningMembership(), bound);
+            }
+
+            return part;
         }
     }
 }

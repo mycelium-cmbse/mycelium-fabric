@@ -31,6 +31,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(MissingValue.Describe([]), Is.Empty);
                 Assert.That(MissingValue.Describe(missingValues[..2]), Is.EqualTo("Demo::part1, Demo::part2"));
                 Assert.That(MissingValue.Describe(missingValues), Is.EqualTo("Demo::part1, Demo::part2, Demo::part3, Demo::part4, Demo::part5 and 2 more"));
+                Assert.That(MissingValue.Describe([new MissingValue(Guid.NewGuid(), "Demo::heaters", [], "1..4"), missingValues[0]]), Is.EqualTo("Demo::heaters [1..4], Demo::part1"));
             }
         }
     }
