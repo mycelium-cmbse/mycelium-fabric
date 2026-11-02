@@ -118,6 +118,18 @@ function describe(choices) {
     return choices.map(c => c.choice + ": " + c.variant + (c.quantity > 1 ? " × " + c.quantity : "")).join(" · ");
 }
 
+function keyOf(choices) {
+    return choices.map(c => c.variant + " × " + c.quantity).join(" | ");
+}
+
+function optionNumber(option) {
+    return study.best.indexOf(option) + 1;
+}
+
+function alternativeName(alternative) {
+    return alternative.replace(".", ": ");
+}
+
 function titleOf(study) {
     return study.title ?? "Trade-off · " + study.choices.map(choice => choice.name).join(", ");
 }
@@ -132,6 +144,8 @@ const STATUS_TEXT = {
 function onFirstStudy(result) {
     const first = result?.structuredContent;
     if (!first) {
+        $("title").textContent = "The trade-off could not be computed";
+        $("grid").hidden = true;
         showError(result?.content?.[0]?.text ?? "The host sent no trade-off to show.");
         return;
     }
@@ -173,14 +187,18 @@ function drawOptions(study) {
     target.replaceChildren();
     $("today").textContent = "vs today: " + study.current.totals.map(total => withUnit(total.total, total.attribute)).join(" · ");
 
-    for (const option of study.best) {
-        const card = el("div", option.rank === state.selected ? "tr-option on" : "tr-option");
-        card.dataset.rank = option.rank;
+    study.best.forEach((option, index) => {
+        const number = index + 1;
+        if (option.alternative && option.alternative !== study.best[index - 1]?.alternative) {
+            target.append(el("h3", "tr-group", "Best for " + alternativeName(option.alternative)));
+        }
+        const card = el("div", number === state.selected ? "tr-option on" : "tr-option");
+        card.dataset.option = number;
         const body = el("div");
         body.append(el("div", "tr-name", describe(option.choices)), drawTotals(option.totals), drawChecks(option.constraints));
-        card.append(el("span", "tr-rank n" + option.rank, option.rank), body);
+        card.append(el("span", "tr-rank n" + option.rank, number), body);
         target.append(card);
-    }
+    });
     if (study.best.length === 0) target.append(el("div", "tr-empty", "No combination meets the constraints."));
 }
 
@@ -216,7 +234,11 @@ function drawExcluded(study) {
     const rejected = study.points.filter(point => !point.feasible);
     if (rejected.length > 0) {
         target.append(el("h3", null, "Excluded (" + rejected.length + ")"));
-        for (const point of rejected) target.append(drawRejected(describe(point.choices), point.broken.join(" · ")));
+        const list = el("div", "tr-scroll");
+        list.tabIndex = 0;
+        list.ariaLabel = "Excluded combinations";
+        for (const point of rejected) list.append(drawRejected(describe(point.choices), point.broken.join(" · ")));
+        target.append(list);
     }
     if (study.conflicts.length > 0) {
         target.append(el("h3", null, "Why no combination works"));
@@ -314,7 +336,13 @@ function drawChart(study) {
     const todayY = y.at(today[yName]);
     chart.append(svg("circle", { cx: todayX, cy: todayY, r: 12, class: "tr-today-dot" }));
 
-    for (const point of study.points) chart.append(drawPoint(study, point, x.at(point.totals[xName]), y.at(point.totals[yName])));
+    const numbers = new Map(study.best.map((option, index) => [keyOf(option.choices), index + 1]));
+    const numberOf = point => numbers.get(keyOf(point.choices));
+    const others = study.points.filter(point => numberOf(point) === undefined);
+    const best = study.points.filter(point => numberOf(point) !== undefined).sort((a, b) => numberOf(b) - numberOf(a));
+    const selected = best.findIndex(point => numberOf(point) === state.selected);
+    if (selected >= 0) best.push(...best.splice(selected, 1));
+    for (const point of [...others, ...best]) chart.append(drawPoint(point, numberOf(point), x.at(point.totals[xName]), y.at(point.totals[yName])));
 
     chart.append(svg("text", { x: todayX, y: todayY - 16, "text-anchor": "middle" }, "today"));
     target.append(chart);
@@ -327,7 +355,7 @@ function drawLegend(limits) {
         span.append(el("i", className), text);
         return span;
     };
-    $("legend").replaceChildren(item("best", "Best options"), item("ok", "Meets the constraints"), item("bad", "Breaks a constraint"));
+    $("legend").replaceChildren(item("best", "Best options"), item("ok", "Meets the constraints"), item("bad", "Breaks a constraint or rule"));
     for (const limit of limits) $("legend").append(item("limit", (limit.name ?? limit.attribute) + " limit"));
 }
 
@@ -348,15 +376,17 @@ function drawLimit(chart, limit, onX, scale) {
     }
 }
 
-function drawPoint(study, point, cx, cy) {
-    const isBest = point.rank != null && point.rank <= study.best.length;
-    const group = svg("g", { class: !point.feasible ? "pt pt-bad" : isBest ? "pt pt-best pt-rank" + point.rank : "pt pt-ok" });
-    group.append(svg("title", {}, describe(point.choices) + " · " + valuesText(point.totals)));
-    if (isBest && point.rank === state.selected) group.append(svg("circle", { cx, cy, r: 13, class: "tr-ring" }));
+function drawPoint(point, number, cx, cy) {
+    const isBest = number !== undefined;
+    const group = svg("g", { class: !point.feasible ? "pt pt-bad" : isBest ? "pt pt-best pt-rank" + study.best[number - 1].rank : "pt pt-ok" });
+    const tooltip = [describe(point.choices), valuesText(point.totals), ...point.broken];
+    if (isBest) tooltip.unshift("Option " + number);
+    group.append(svg("title", {}, tooltip.join(" · ")));
+    if (isBest && number === state.selected) group.append(svg("circle", { cx, cy, r: 13, class: "tr-ring" }));
     group.append(svg("circle", { cx, cy, r: 8 }));
     if (isBest) {
-        group.dataset.rank = point.rank;
-        group.append(svg("text", { x: cx, y: cy + 3.5, "text-anchor": "middle" }, point.rank));
+        group.dataset.option = number;
+        group.append(svg("text", { x: cx, y: cy + 3.5, "text-anchor": "middle" }, number));
     }
     if (!point.feasible) group.append(svg("path", { d: `M${cx - 3} ${cy - 3}l6 6M${cx + 3} ${cy - 3}l-6 6` }));
     return group;
@@ -560,31 +590,36 @@ function showError(text) {
     $("error").hidden = false;
 }
 
-function select(rank) {
-    state.selected = rank;
+function select(number) {
+    state.selected = number;
     drawResults(study);
 }
 
 function onOptionClick(event) {
-    const target = event.target.closest("[data-rank]");
-    if (target) select(Number(target.dataset.rank));
+    const target = event.target.closest("[data-option]");
+    if (target) select(Number(target.dataset.option));
 }
 
 function drawPick(study) {
     const target = $("pick");
     target.replaceChildren();
-    const option = study.best.find(o => o.rank === state.selected) ?? study.best[0];
+    const option = study.best[state.selected - 1] ?? study.best[0];
     target.hidden = !option;
     if (!option) return;
-    const heading = option.rank === 1 ? "Best option for these settings" : "Option " + option.rank + ", chosen by you";
-    const button = el("button", "btn pri", "Use option " + option.rank);
+    const number = optionNumber(option);
+    const button = el("button", "btn pri", "Use option " + number);
     const note = el("div", "tr-note");
     button.addEventListener("click", () => sendChoice(option, button, note));
-    target.append(el("div", "tr-name", heading + ": " + describe(option.choices)), button, note);
+    target.append(el("div", "tr-name", headingOf(option, number) + ": " + describe(option.choices)), button, note);
+}
+
+function headingOf(option, number) {
+    if (option.rank !== 1) return "Option " + number + ", chosen by you";
+    return option.alternative ? "Option " + number + ", best for " + alternativeName(option.alternative) : "Best option for these settings";
 }
 
 function buildMessage(option) {
-    const lines = ["Use option " + option.rank + " of the trade-off \"" + titleOf(study) + "\":"];
+    const lines = ["Use option " + optionNumber(option) + " of the trade-off \"" + titleOf(study) + "\":"];
     for (const choice of option.choices.filter(c => c.changed)) {
         const variant = state.choices.find(c => c.name === choice.choice).variants.find(v => v.name === choice.variant);
         const values = Object.entries(variant.values).map(([attribute, value]) => attribute + " " + withUnit(value, attribute));

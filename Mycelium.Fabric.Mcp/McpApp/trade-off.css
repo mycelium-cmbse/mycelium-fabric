@@ -16,7 +16,12 @@
 
 .tr-grid { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) {
-    .tr-grid { grid-template-columns: 250px minmax(0, 1fr) 290px; }
+    .tr-grid { grid-template-columns: 250px minmax(0, 1fr) 290px; grid-template-rows: minmax(480px, auto); }
+    .tr-fill { contain: size; }
+    .tr-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+    .tr-list .tr-scroll { max-height: none; overflow: visible; }
+    #chart { min-height: 0; }
+    #chart .tr-svg { flex: 1 1 0; min-height: 0; max-height: 440px; }
 }
 
 .tr-card { border: 1px solid var(--border); border-radius: 10px; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -64,15 +69,18 @@
 .tr-better { color: var(--success); }
 .tr-worse { color: var(--danger); }
 .tr-checks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.tr-card h3.tr-group { margin: 0; padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--muted-bg); font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--fg2); }
 
 #excluded { padding: 0 12px; margin-bottom: 12px; }
+.tr-scroll { max-height: 200px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.tr-scroll:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .tr-rejected { display: flex; gap: 7px; font-size: 11.5px; color: var(--fg2); padding: 3px 0; overflow-wrap: anywhere; }
 .tr-rejected .ic { color: var(--danger); margin-top: 1px; }
 .tr-rejected b { font-weight: 600; color: var(--fg); }
 .tr-pick { margin: auto 12px 12px; padding: 10px 12px; border: 1px solid var(--primary); border-radius: 8px; background: var(--primary-50); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; font-size: 12px; }
 .tr-pick .tr-name { color: var(--primary-deep); }
 
-#chart { padding: 6px 10px 4px; }
+#chart { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px 4px; }
 .tr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 12px 12px; font-size: 11px; color: var(--fg2); }
 .tr-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .tr-legend i { width: 10px; height: 10px; border-radius: 50%; }
