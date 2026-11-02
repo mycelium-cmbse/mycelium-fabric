@@ -22,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Systems.Enumerations;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Serializer.Json;
 
@@ -63,6 +64,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(() => ((IElement)null).GetTypeNames(), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(new Package().GetTypeNames(), Is.Empty);
                 Assert.That(new PartUsage().GetTypeNames(), Is.Empty);
+                Assert.That(new EnumerationUsage().GetTypeNames(), Is.Empty);
                 Assert.That(this.camera.GetTypeNames(), Is.EqualTo(["OpticalCamera"]));
             }
         }
@@ -74,6 +76,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             {
                 Assert.That(() => ((IElement)null).DescribeType(), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(new Package().DescribeType(), Is.EqualTo("Package"));
+                Assert.That(new EnumerationUsage().DescribeType(), Is.EqualTo("EnumerationUsage"));
                 Assert.That(this.camera.DescribeType(), Is.EqualTo("PartUsage : OpticalCamera"));
             }
         }

@@ -21,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Parts;
+    using SysML2.NET.Exceptions;
 
     /// <summary>
     /// Extension methods that read, from the <see cref="IElement"/>s of a SysML v2 model, the information returned by the MCP
@@ -41,7 +42,11 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// or <c>~CommandPort</c> for a port typed by the conjugate of <c>CommandPort</c>). Only an <see cref="IFeature"/>
             /// can be typed.
             /// </summary>
-            /// <returns>The names of the types of the element, empty when it is not a typed <see cref="IFeature"/>.</returns>
+            /// <returns>
+            /// The names of the types of the element, empty when it is not a typed <see cref="IFeature"/>, or when SysML2.NET
+            /// cannot compute its types because the model is incomplete (for example an <c>EnumerationUsage</c> that no
+            /// enumeration definition types).
+            /// </returns>
             /// <exception cref="ArgumentNullException">
             /// Thrown when <paramref name="element"/> is <c>null</c>.
             /// </exception>
@@ -49,7 +54,19 @@ namespace Mycelium.Fabric.Mcp.Extensions
             {
                 ArgumentNullException.ThrowIfNull(element);
 
-                return element is IFeature feature ? [.. (feature.type ?? []).Select(type => type.name)] : [];
+                if (element is not IFeature feature)
+                {
+                    return [];
+                }
+
+                try
+                {
+                    return [.. (feature.type ?? []).Select(type => type.name)];
+                }
+                catch (IncompleteModelException)
+                {
+                    return [];
+                }
             }
 
             /// <summary>

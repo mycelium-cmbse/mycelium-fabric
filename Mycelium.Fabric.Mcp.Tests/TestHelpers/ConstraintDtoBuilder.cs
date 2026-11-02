@@ -430,7 +430,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         }
 
         /// <summary>
-        /// Adds an enumeration definition and its values, as <c>enum def OrbitKind { enum sunSynchronous; enum polar; }</c> does.
+        /// Adds an enumeration definition and its values, as <c>enum def OrbitKind { enum sunSynchronous; enum polar; }</c> does:
+        /// each value is a variant of the enumeration, typed by it.
         /// </summary>
         /// <param name="ownerId">The <c>Id</c> of the owner of the definition, for example a package.</param>
         /// <param name="name">The name of the enumeration definition.</param>
@@ -445,6 +446,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
             {
                 var enumerationValue = this.Add(new EnumerationUsage { DeclaredName = valueName });
                 this.AddOwnedRelationship(definition, new VariantMembership(), enumerationValue);
+                this.AddOwnedRelationship(enumerationValue, new FeatureTyping { TypedFeature = enumerationValue.Id, Type = definition.Id });
 
                 return enumerationValue;
             }).ToList();
