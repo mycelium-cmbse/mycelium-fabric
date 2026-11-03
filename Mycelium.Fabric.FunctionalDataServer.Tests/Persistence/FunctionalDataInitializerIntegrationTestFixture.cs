@@ -130,8 +130,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             await this.CreateInitializer().InitializeAsync(CancellationToken.None);
             await this.ExecuteAsync("UPDATE \"Fabric\".\"__InitializationMetadata\" SET fabric_version = '99.0.0'");
 
-            Assert.That(() => this.CreateInitializer().InitializeAsync(CancellationToken.None), Throws.TypeOf<InvalidOperationException>());
-            Assert.That(await this.ScalarAsync<string>("SELECT fabric_version FROM \"Fabric\".\"__InitializationMetadata\""), Is.EqualTo("99.0.0"));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.CreateInitializer().InitializeAsync(CancellationToken.None), Throws.TypeOf<InvalidOperationException>());
+                Assert.That(await this.ScalarAsync<string>("SELECT fabric_version FROM \"Fabric\".\"__InitializationMetadata\""), Is.EqualTo("99.0.0"));
+            }
         }
 
         [Test]
@@ -140,8 +143,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             await this.CreateInitializer().InitializeAsync(CancellationToken.None);
             await this.ExecuteAsync("DELETE FROM \"Fabric\".\"__InitializationMetadata\"");
 
-            Assert.That(() => this.CreateInitializer().InitializeAsync(CancellationToken.None), Throws.TypeOf<InvalidOperationException>());
-            Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"__InitializationMetadata\""), Is.Zero);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.CreateInitializer().InitializeAsync(CancellationToken.None), Throws.TypeOf<InvalidOperationException>());
+                Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"__InitializationMetadata\""), Is.Zero);
+            }
         }
 
         [Test]
@@ -211,8 +217,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             await this.WaitForLockWaitersAsync(1);
             await cancellation.CancelAsync();
 
-            Assert.That(async () => await initialization, Throws.TypeOf<OperationCanceledException>());
-            Assert.That(await this.ScalarAsync<bool>("SELECT to_regnamespace('\"Fabric\"') IS NULL"), Is.True);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(async () => await initialization, Throws.TypeOf<OperationCanceledException>());
+                Assert.That(await this.ScalarAsync<bool>("SELECT to_regnamespace('\"Fabric\"') IS NULL"), Is.True);
+            }
 
             await transaction.CommitAsync();
             await this.CreateInitializer().InitializeAsync(CancellationToken.None);
@@ -271,9 +280,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             await this.ExecuteAsync("INSERT INTO \"Fabric\".\"OrganizationPolicy\" (id) VALUES (@id)", policy);
             await this.ExecuteAsync("INSERT INTO \"Fabric\".\"Organization\" (id, policy) VALUES (@id, @target)", organization, policy);
 
-            Assert.That(() => this.ExecuteAsync("DELETE FROM \"Fabric\".\"OrganizationPolicy\" WHERE id = @id", policy),
-                Throws.TypeOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23503"));
-            Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"Organization\" WHERE id = @id", organization), Is.EqualTo(1));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.ExecuteAsync("DELETE FROM \"Fabric\".\"OrganizationPolicy\" WHERE id = @id", policy),
+                    Throws.TypeOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23503"));
+                Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"Organization\" WHERE id = @id", organization), Is.EqualTo(1));
+            }
 
             await this.ExecuteAsync("DELETE FROM \"Fabric\".\"Organization\" WHERE id = @id", organization);
 
@@ -297,9 +309,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             await this.ExecuteAsync("INSERT INTO \"Fabric\".\"Message\" (id) VALUES (@id)", target);
             await this.ExecuteAsync("INSERT INTO \"Fabric\".\"Message\" (id, quotes) VALUES (@id, @target)", source, target);
 
-            Assert.That(() => this.ExecuteAsync("DELETE FROM \"Fabric\".\"Message\" WHERE id = @id", target),
-                Throws.TypeOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23503"));
-            Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"Message\""), Is.EqualTo(2));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.ExecuteAsync("DELETE FROM \"Fabric\".\"Message\" WHERE id = @id", target),
+                    Throws.TypeOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23503"));
+                Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"Message\""), Is.EqualTo(2));
+            }
 
             await this.ExecuteAsync("DELETE FROM \"Fabric\".\"Message\" WHERE id = @id", source);
             await this.ExecuteAsync("DELETE FROM \"Fabric\".\"Message\" WHERE id = @id", target);

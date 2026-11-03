@@ -15,7 +15,7 @@ namespace Mycelium.Fabric.AppHost
     using Aspire.Hosting.ApplicationModel;
 
     /// <summary>
-    /// Defines and runs PostgreSQL and the independent Concurrent Server and Functional Data microservices.
+    /// Defines and runs the services required by Mycelium Fabric.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public static class Program
