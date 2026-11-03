@@ -15,12 +15,17 @@ namespace Mycelium.Fabric.Mcp.Tools
 
     /// <summary>
     /// A part that should add a value to a sum and has none yet, the value being "to be defined": the part declares the
-    /// attribute without value, or it has the type of a part that has a value.
+    /// attribute without value, or it has the type of a part that has a value. It is also a part that carries the attribute
+    /// but whose number of units is not fixed (<c>[1..4]</c>, <c>[0..*]</c>), so that its values cannot be counted.
     /// </summary>
     /// <param name="Id">The identifier of the part.</param>
     /// <param name="QualifiedName">The qualified name of the part.</param>
     /// <param name="Types">The declared names of the types of the part, empty when it is not typed.</param>
-    public sealed record MissingValue(Guid Id, string QualifiedName, IReadOnlyList<string> Types)
+    /// <param name="Multiplicity">
+    /// The multiplicity of the part when its number of units is not fixed, for example <c>1..4</c>, or <c>null</c> when its
+    /// value is missing.
+    /// </param>
+    public sealed record MissingValue(Guid Id, string QualifiedName, IReadOnlyList<string> Types, string Multiplicity = null)
     {
         /// <summary>
         /// The number of parts named in a message, the others being counted.
@@ -28,11 +33,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         private const int NamedPartCount = 5;
 
         /// <summary>
-        /// Writes, for a message, the parts whose value is missing: their qualified names, the first ones only when there
-        /// are many.
+        /// Writes, for a message, the parts whose value is missing: their qualified names, followed by their multiplicity
+        /// when their number of units is not fixed, the first ones only when there are many.
         /// </summary>
         /// <param name="missingValues">The missing values.</param>
-        /// <returns>The parts, for example <c>EOSat1::eosat1::camera, EOSat1::eosat1::radio and 3 more</c>.</returns>
+        /// <returns>The parts, for example <c>EOSat1::eosat1::camera, EOSat1::eosat1::heaters [1..4] and 3 more</c>.</returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="missingValues"/> is <c>null</c>.
         /// </exception>
@@ -40,7 +45,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         {
             ArgumentNullException.ThrowIfNull(missingValues);
 
-            var names = string.Join(", ", missingValues.Take(NamedPartCount).Select(missingValue => missingValue.QualifiedName));
+            var names = string.Join(", ", missingValues.Take(NamedPartCount)
+                .Select(missingValue => missingValue.Multiplicity == null ? missingValue.QualifiedName : $"{missingValue.QualifiedName} [{missingValue.Multiplicity}]"));
 
             return missingValues.Count > NamedPartCount ? $"{names} and {missingValues.Count - NamedPartCount} more" : names;
         }

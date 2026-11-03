@@ -194,7 +194,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var hasReqId = !string.IsNullOrWhiteSpace(payload.ReqId);
 
-            if (!hasReqId && payload.Constraint == null)
+            if (!hasReqId && payload.Constraint == null && payload.Constraints == null)
             {
                 return;
             }
@@ -209,15 +209,52 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.CheckReqIdIsFree(payload.ReqId, element);
             }
 
+            if (payload.Constraint != null && payload.Constraints != null)
+            {
+                throw new InvalidChangeException("Give either constraint or constraints, not both.");
+            }
+
             if (payload.Constraint != null)
             {
                 this.CheckConstraint(payload.Constraint);
+            }
+
+            if (payload.Constraints != null)
+            {
+                this.CheckConstraints(payload.Constraints);
+            }
+        }
+
+        /// <summary>
+        /// Checks the constraints of a requirement that has several, before they are built.
+        /// </summary>
+        /// <param name="constraints">The constraints to check.</param>
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when there is no constraint, or when a constraint is missing, incomplete or invalid.
+        /// </exception>
+        private void CheckConstraints(IReadOnlyList<ConstraintPayload> constraints)
+        {
+            if (constraints.Count == 0)
+            {
+                throw new InvalidChangeException("The list of constraints is empty: give at least one constraint.");
+            }
+
+            for (var index = 0; index < constraints.Count; index++)
+            {
+                try
+                {
+                    this.CheckConstraint(constraints[index] ?? throw new InvalidChangeException("The constraint is empty."));
+                }
+                catch (InvalidChangeException exception)
+                {
+                    throw new InvalidChangeException($"Constraint {index + 1}: {exception.Message}");
+                }
             }
         }
 
         /// <summary>
         /// Sets the properties of a requirement given by the payload, once they are checked: its <c>ReqId</c>, which SysML v2
-        /// uses as its short name (<c>requirement &lt;'REQ-SYS-001'&gt;</c>), and its constraint.
+        /// uses as its short name (<c>requirement &lt;'REQ-SYS-001'&gt;</c>), and its constraints.
         /// </summary>
         /// <param name="element">The created or updated element.</param>
         /// <param name="payload">The payload of the change.</param>
@@ -232,7 +269,12 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (payload.Constraint != null)
             {
-                this.SetConstraint(element, payload.Constraint);
+                this.SetConstraints(element, [payload.Constraint]);
+            }
+
+            if (payload.Constraints != null)
+            {
+                this.SetConstraints(element, payload.Constraints);
             }
         }
 
@@ -248,8 +290,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Performed: null, Trigger: null, Guard: null, Effect: null, Item: null }
-                || !string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, Constraints: null, Multiplicity: null, Ends: null, Direction: null, Conjugated: null }
+                || payload is not { IsEnd: null, Specializes: null, Performed: null, Trigger: null, Guard: null, Effect: null, Item: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.");
             }
@@ -287,41 +329,64 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Gives a requirement a constraint on an attribute of its subject: a required constraint, or an assumption, which
-        /// replaces its previous constraints of the same kind. The subject (<c>subj</c>) and the attributes of the paths are
-        /// created when the requirement does not have them yet.
+        /// Gives a requirement constraints on attributes of its subject: required constraints, or assumptions, which replace
+        /// its previous constraints of the same kinds. The subject (<c>subj</c>) and the attributes of the paths are created
+        /// when the requirement does not have them yet.
         /// </summary>
         /// <param name="requirement">The requirement.</param>
-        /// <param name="constraint">The constraint, already checked by <see cref="CheckConstraint"/>.</param>
+        /// <param name="constraints">The constraints, already checked by <see cref="CheckConstraint"/>.</param>
         /// <exception cref="InvalidChangeException">
         /// Thrown when the subject or an attribute must be created but a member already has its name, or when a text limit
         /// names several enumeration values.
         /// </exception>
-        private void SetConstraint(IElement requirement, ConstraintPayload constraint)
+        private void SetConstraints(IElement requirement, IReadOnlyList<ConstraintPayload> constraints)
         {
-            var kind = constraint.Kind ?? RequirementConstraintKind.Requirement;
             var subject = this.GetOrCreateSubject(requirement);
+
+            var comparisons = constraints
+                .Select(constraint => (Kind: constraint.Kind ?? RequirementConstraintKind.Requirement, Comparison: this.CreateComparison(subject, constraint)))
+                .ToList();
+
+            foreach (var kind in comparisons.Select(comparison => comparison.Kind).Distinct())
+            {
+                this.RemoveConstraints(requirement, kind);
+            }
+
+            foreach (var (kind, comparison) in comparisons)
+            {
+                var constraintUsage = this.Add(new ConstraintUsage { IsComposite = true });
+                var constraintMembership = new RequirementConstraintMembership { Kind = kind, Visibility = VisibilityKind.Public };
+                this.AddOwnedRelationship(requirement, constraintMembership, constraintUsage);
+                this.AddOwnedRelationship(constraintUsage, new ResultExpressionMembership { Visibility = VisibilityKind.Public }, comparison);
+            }
+        }
+
+        /// <summary>
+        /// Creates the expression of a constraint on an attribute of the subject of a requirement, for example
+        /// <c>subj.mass * 1.2 &lt;= 150</c>.
+        /// </summary>
+        /// <param name="subject">The subject of the requirement.</param>
+        /// <param name="constraint">The constraint, already checked by <see cref="CheckConstraint"/>.</param>
+        /// <returns>The comparison.</returns>
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when an attribute must be created but a member already has its name, or when a text limit names several
+        /// enumeration values.
+        /// </exception>
+        private OperatorExpression CreateComparison(IElement subject, ConstraintPayload constraint)
+        {
             var valueOperand = this.CreateSubjectPath(subject, constraint.Attribute);
 
             var limitOperand = constraint.LimitAttribute == null
                 ? this.CreateValueExpression(constraint.Limit.Value, constraint.Unit)
                 : this.CreateSubjectPath(subject, constraint.LimitAttribute);
 
-            this.RemoveConstraints(requirement, kind);
-
-            var constraintUsage = this.Add(new ConstraintUsage { IsComposite = true });
-            var constraintMembership = new RequirementConstraintMembership { Kind = kind, Visibility = VisibilityKind.Public };
-            this.AddOwnedRelationship(requirement, constraintMembership, constraintUsage);
-
             // The margin always makes the constraint harder to meet: it multiplies the value for an upper limit
             // (subj.mass * 1.2 <= 150) and the limit for a lower limit (subj.capacity >= 300 * 1.2).
             double? marginFactor = constraint.Margin > 0 ? Math.Round(1 + constraint.Margin.Value / 100, MarginFactorDecimalCount) : null;
             var isUpperLimit = constraint.Operator is "<" or "<=";
 
-            var comparison = this.CreateOperation(constraint.Operator, this.MultiplyBy(valueOperand, isUpperLimit ? marginFactor : null),
+            return this.CreateOperation(constraint.Operator, this.MultiplyBy(valueOperand, isUpperLimit ? marginFactor : null),
                 this.MultiplyBy(limitOperand, isUpperLimit ? null : marginFactor));
-
-            this.AddOwnedRelationship(constraintUsage, new ResultExpressionMembership { Visibility = VisibilityKind.Public }, comparison);
         }
 
         /// <summary>

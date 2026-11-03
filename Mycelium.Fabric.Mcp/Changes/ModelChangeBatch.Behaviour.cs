@@ -105,8 +105,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Performed: null, Item: null }
-                || !string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, Constraints: null, Multiplicity: null, SatisfiedRequirement: null, SatisfyingPart: null, Direction: null }
+                || payload is not { Conjugated: null, IsEnd: null, Specializes: null, Performed: null, Item: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A TransitionUsage takes an owner and two ends, and optionally a name, a trigger, a guard, an effect and a text.");
             }
@@ -210,8 +210,8 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("The stateAction must be Entry, Do or Exit.");
             }
 
-            if (payload is not { Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null, Trigger: null, Guard: null, Effect: null, Item: null }
-                || !string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload is not { Value: null, Unit: null, Constraint: null, Constraints: null, Multiplicity: null, SatisfiedRequirement: null, SatisfyingPart: null, Ends: null, Direction: null }
+                || payload is not { Conjugated: null, IsEnd: null, Trigger: null, Guard: null, Effect: null, Item: null } || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException(
                     "An entry, do or exit action takes an owner state and a name or a performed action, and optionally a definition, specializes and a text.");

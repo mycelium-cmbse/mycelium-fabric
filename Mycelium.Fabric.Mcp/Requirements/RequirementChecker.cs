@@ -289,7 +289,7 @@ namespace Mycelium.Fabric.Mcp.Requirements
                 return null;
             }
 
-            var total = NumberValue.Sum(parts.SelectMany(part => part.Contributions).Select(contribution => contribution.GetValueWithMargin()));
+            var total = NumberValue.Sum(parts.SelectMany(part => part.Contributions).Select(contribution => contribution.GetTotalWithMargin()));
             var amount = total.IsError ? string.Empty : $" ({total.Value})";
 
             var names = string.Join(", ", parts.Take(NamedPartCount).Select(part => $"'{part.Part.DeclaredName}'"));

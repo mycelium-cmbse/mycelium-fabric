@@ -79,7 +79,8 @@ namespace Mycelium.Fabric.Mcp.Prompts
               and the trigger of the transition (a guard or an effect only when the specification gives one).
               Operations: an ActionUsage inside the StateUsage of each phase that performs it. When the operations of a
               phase come in sequence, a SuccessionAsUsage owned by the StateUsage links each operation to the next one
-              (ends: ['loadConsumablesAndPropellants', 'transferCrewToVehicle']). What a state or mode does when it is
+              (ends: ['loadConsumablesAndPropellants', 'transferCrewToVehicle']); an operation of another phase is given
+              by its identifier or its qualified name. A single operation needs no succession. What a state or mode does when it is
               entered, while it is active or when it is left: an ActionUsage owned by it with stateAction Entry, Do or Exit.
               Functions: an ActionDefinition for the top-level function, and an ActionUsage per function, inside the
               function that it decomposes; sub-functions that the specification orders are linked by successions too. The
@@ -98,9 +99,11 @@ namespace Mycelium.Fabric.Mcp.Prompts
             Modelling rules:
             - Two members of a package cannot have the same name: name a usage differently from its definition
               (part definition Camera, part usage camera), and a package differently from what it contains.
-            - One part per unit: four wheels are four parts. Put the numeric values on the units or on their part
-              definitions, never on a subsystem or on the system when its units carry the same quantity: sum_attribute
-              computes the totals, and a value on a part hides the values of its sub-parts.
+            - One part per unit that the specification names (reactionWheel1, reactionWheel2). Identical units that it
+              only counts are one part with a multiplicity (four wheels: multiplicity '4'), whose values are the values of
+              one unit: sum_attribute and check_requirements count it four times. Put the numeric values on the units or
+              on their part definitions, never on a subsystem or on the system when its units carry the same quantity:
+              sum_attribute computes the totals, and a value on a part hides the values of its sub-parts.
             - Every numeric property that the specification gives to a unit or to a vehicle becomes an attribute with its
               value, whatever the quantity (a pressure, a duration, a payload capacity), not only mass and power.
             - Use the same attribute name for the same quantity everywhere (mass, power), and give every numeric value the
@@ -116,8 +119,8 @@ namespace Mycelium.Fabric.Mcp.Prompts
             - Constrain a requirement whenever its text gives a limit: a number with its unit, a count (no injury:
               injuryCount <= 0), or an outcome that is achieved or avoided, as a Boolean (flagPlanted == true,
               contaminationReleased == false). Take the operator from the wording: 'at least' is '>=', 'at most' and 'not
-              exceed' are '<=', 'less than' and 'below' are '<'. When the text gives several limits, constrain the first
-              one and name the others in the summary. Only a requirement without any limit stays textual.
+              exceed' are '<=', 'less than' and 'below' are '<'. When the text gives several limits (a mass and a power),
+              give them all in constraints, one constraint each. Only a requirement without any limit stays textual.
             - A value that the specification leaves to be defined (TBD) is an attribute without value, never an invented
               number: sum_attribute and check_requirements then report it as missing.
             - A margin that the specification gives for a value of a unit (maturity margin) is an attribute named after

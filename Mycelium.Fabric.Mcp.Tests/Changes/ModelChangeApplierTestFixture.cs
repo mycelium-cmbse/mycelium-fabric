@@ -40,6 +40,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.POCO.Systems.Connections;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Interactions;
+    using SysML2.NET.Core.POCO.Kernel.Multiplicities;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Enumerations;
     using SysML2.NET.Core.POCO.Systems.Flows;
@@ -893,9 +894,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             [
                 "Change 1 (create): A value of the EnumerationDefinition 'OrbitKind' is typed by this enumeration: give no definition, not the EnumerationDefinition 'Mode'.",
                 "Change 2 (create): An EnumerationUsage needs a definition, the EnumerationDefinition that lists its values. For a value of an enumeration, create the EnumerationUsage in the EnumerationDefinition.",
-                "Change 3 (create): The definition must be an enumeration definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 3 (create): The definition must be an enumeration definition, not the PartDefinition 'OpticalCamera'. A change cannot change the metaclass of an element: if it is meant to be one, delete it and create it again with the type EnumerationDefinition.",
                 "Change 4 (update): A value of the EnumerationDefinition 'OrbitKind' is typed by this enumeration: give no definition, not the EnumerationDefinition 'Mode'.",
-                "Change 5 (update): The definition must be an enumeration definition, not the PartDefinition 'OpticalCamera'."
+                "Change 5 (update): The definition must be an enumeration definition, not the PartDefinition 'OpticalCamera'. A change cannot change the metaclass of an element: if it is meant to be one, delete it and create it again with the type EnumerationDefinition."
             ];
 
             using (Assert.EnterMultipleScope())
@@ -1051,29 +1052,29 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             string[] expectedProblems =
             [
-                "Change 1 (create): A connector connects two ends: give them as paths of names from its owner, for example ['camera.dataOut', 'obc.dataIn'].",
+                "Change 1 (create): An interface connects two ports: give them as paths of names from its owner or as identifiers, for example ['camera.dataOut', 'obc.dataIn'].",
                 "Change 2 (create): The end 'payloadSubsystem.lens' is not valid: the PartUsage 'payloadSubsystem' and its definitions have no feature named 'lens'. Use list_children to read their features.",
-                "Change 3 (create): The end 'payloadSubsystem.camera' of an interface must be a port, not the PartUsage 'camera'.",
+                "Change 3 (create): The end 'payloadSubsystem.camera' of an interface must be a port, not the PartUsage 'camera'. Give one of its ports: 'payloadSubsystem.camera.dataOut'.",
                 "Change 4 (create): The two ends are the same feature 'camera'.",
-                "Change 5 (create): The definition must be an interface definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 5 (create): The definition must be an interface definition, not the PartDefinition 'OpticalCamera'. A change cannot change the metaclass of an element: if it is meant to be one, delete it and create it again with the type InterfaceDefinition.",
                 "Change 6 (create): A BindingConnectorAsUsage has no definition: it states that its two ends are the same thing.",
                 "Change 7 (create): A connector takes two ends, and optionally an owner, a name, a definition and a text.",
                 "Change 8 (create): Only a connector (ConnectionUsage, InterfaceUsage, BindingConnectorAsUsage, AllocationUsage or SuccessionAsUsage) has ends, not the PartUsage 'lens'.",
                 "Change 9 (create): Only a feature, for example a port or an attribute, has a direction, not the Package 'Ports'.",
-                "Change 10 (create): Only a port can be conjugated, not the PartUsage 'lens'.",
+                "Change 10 (create): Only a port can be conjugated, not the PartUsage 'lens'. A port is a PortUsage, typed by a PortDefinition.",
                 "Change 11 (create): A conjugated port needs a definition: the port definition whose conjugate types it.",
                 "Change 12 (create): Only a feature of a connection or interface definition can be an end, not the PartUsage 'lens' of the PartDefinition 'OpticalCamera'.",
                 "Change 13 (create): The ends of an interface definition are ports, not the AttributeUsage 'latency'.",
-                "Change 14 (create): The definition must be a port definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 14 (create): The definition must be a port definition, not the PartDefinition 'OpticalCamera'. A change cannot change the metaclass of an element: if it is meant to be one, delete it and create it again with the type PortDefinition.",
                 "Change 15 (create): 'ConjugatedPortDefinition' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server.",
-                "Change 16 (create): The definition must be a flow definition, not the InterfaceDefinition 'DataInterface'.",
+                "Change 16 (create): The definition must be a flow definition, not the InterfaceDefinition 'DataInterface'. A change cannot change the metaclass of an element: if it is meant to be one, delete it and create it again with the type FlowDefinition.",
                 "Change 17 (update): The ends of a connector cannot change: delete the connector and create it again.",
                 "Change 18 (update): isEnd only applies to the creation of a feature: delete the feature and create it again.",
                 "Change 20 (update): The PortUsage 'bare' has no port definition to conjugate: give its definition.",
                 "Change 21 (create): A conjugated port definition cannot be given as a definition: give its port definition with conjugated true.",
                 "Change 22 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text.",
                 "Change 23 (create): An end of the connector is empty.",
-                "Change 24 (create): The definition must be a connection definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 24 (create): The definition must be a connection definition, not the PartDefinition 'OpticalCamera'. A change cannot change the metaclass of an element: if it is meant to be one, delete it and create it again with the type ConnectionDefinition.",
                 "Change 25 (create): 'AllocationDefinition' is not the metaclass of a package, a definition, a usage or a connector, for example Package, PartDefinition, PartUsage, PortUsage, AttributeUsage, RequirementUsage or InterfaceUsage. The other relationships are built by the server."
             ];
 
@@ -1373,6 +1374,204 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             {
                 Assert.That(result.IsError, Is.True);
                 Assert.That(result.Errors.Select(error => error.Description), Is.EqualTo(expectedProblems));
+            }
+        }
+
+        [Test]
+        public void Apply_WithMultiplicitiesAndSeveralConstraints_BuildsThemAsTheTextualNotation()
+        {
+            var result = this.Apply([], MultiplicityChangesHelper.CreateChanges(withUncountedPart: true));
+            var model = CommitRequestHelper.Apply([], result.Value);
+            var elements = Assemble(model);
+            var byQualifiedName = elements.Values.Where(element => element.qualifiedName != null).ToDictionary(element => element.qualifiedName);
+            var wheels = (IPartUsage)byQualifiedName["Rover::Bogie::wheels"];
+            var bogies = (IPartUsage)byQualifiedName["Rover::rover::bogies"];
+            var heaters = (IPartUsage)byQualifiedName["Rover::rover::heaters"];
+            var heatersRange = (IMultiplicityRange)heaters.multiplicity;
+            var roverBudget = (IRequirementUsage)byQualifiedName["Rover::roverBudget"];
+
+            IValidationRule[] rules = [new BrokenReferenceRule(), new OrphanElementRule(), new DuplicateQualifiedNameRule()];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(new ModelValidator(rules).Validate([.. elements.Values]), Is.Empty);
+                Assert.That(wheels.DescribeMultiplicity(), Is.EqualTo("2"));
+                Assert.That(bogies.DescribeMultiplicity(), Is.EqualTo("2"));
+                Assert.That(heaters.DescribeMultiplicity(), Is.EqualTo("1..4"));
+                Assert.That(byQualifiedName["Rover::rover::battery"], Is.InstanceOf<IPartUsage>().With.Property("multiplicity").Null);
+                Assert.That(bogies.ownedMember.OfType<IMultiplicityRange>().Single(), Is.SameAs(bogies.multiplicity));
+                Assert.That(((IMultiplicityRange)bogies.multiplicity).lowerBound, Is.Null);
+                Assert.That(((IMultiplicityRange)bogies.multiplicity).upperBound, Is.InstanceOf<ILiteralInteger>().With.Property("Value").EqualTo(2));
+                Assert.That(heatersRange.lowerBound, Is.InstanceOf<ILiteralInteger>().With.Property("Value").EqualTo(1));
+                Assert.That(heatersRange.upperBound, Is.InstanceOf<ILiteralInteger>().With.Property("Value").EqualTo(4));
+                Assert.That(roverBudget.subjectParameter.feature.Select(feature => feature.DeclaredName), Is.EqualTo(["mass", "power"]));
+                Assert.That(roverBudget.requiredConstraint.Select(constraint => constraint.GetTerm().Value.ToString()), Is.EqualTo(["subj.mass <= 30 [kg]", "subj.power <= 15 [W]"]));
+            }
+
+            // A new multiplicity replaces the current one, and new constraints replace the current ones of the same kinds.
+            var update = this.Apply(model,
+            [
+                new ModelChange { Identity = heaters.Id.ToString(), Payload = new ElementPayload { Multiplicity = " 3 " } },
+                new ModelChange { Identity = bogies.Id.ToString(), Payload = new ElementPayload { Multiplicity = "[0..*]" } },
+                new ModelChange
+                {
+                    Identity = roverBudget.Id.ToString(),
+                    Payload = new ElementPayload
+                    {
+                        Constraints =
+                        [
+                            new ConstraintPayload { Attribute = "power", Operator = "<=", Limit = 25, Unit = "W" },
+                            new ConstraintPayload { Kind = RequirementConstraintKind.Assumption, Attribute = "mass", Operator = ">", Limit = 0 }
+                        ]
+                    }
+                }
+            ]);
+
+            elements = Assemble(CommitRequestHelper.Apply(model, update.Value));
+            heaters = (IPartUsage)elements[heaters.Id];
+            bogies = (IPartUsage)elements[bogies.Id];
+            roverBudget = (IRequirementUsage)elements[roverBudget.Id];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(update.IsError, Is.False);
+                Assert.That(new ModelValidator(rules).Validate([.. elements.Values]), Is.Empty);
+                Assert.That(heaters.DescribeMultiplicity(), Is.EqualTo("3"));
+                Assert.That(heaters.ownedMember.OfType<IMultiplicity>().Count(), Is.EqualTo(1));
+                Assert.That(bogies.DescribeMultiplicity(), Is.EqualTo("0..*"));
+                Assert.That(((IMultiplicityRange)bogies.multiplicity).upperBound, Is.InstanceOf<ILiteralInfinity>());
+                Assert.That(roverBudget.requiredConstraint.Select(constraint => constraint.GetTerm().Value.ToString()), Is.EqualTo(["subj.power <= 25 [W]"]));
+                Assert.That(roverBudget.assumedConstraint.Select(constraint => constraint.GetTerm().Value.ToString()), Is.EqualTo(["subj.mass > 0"]));
+            }
+        }
+
+        [Test]
+        public void Apply_WithEndsGivenElsewhereInTheModel_ResolvesThem()
+        {
+            var model = ReadSatelliteWithPorts();
+            var eosat1 = Eosat1Id.ToString();
+
+            var result = this.Apply(model,
+            [
+                new ModelChange { Identity = "acquire", Payload = new ElementPayload { Type = "ActionUsage", Owner = eosat1, Name = "acquireImage" } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = eosat1, Name = "downlinkImage" } },
+                new ModelChange { Identity = "operations", Payload = new ElementPayload { Type = "ActionUsage", Owner = eosat1, Name = "operations" } },
+                new ModelChange { Payload = new ElementPayload { Type = "ActionUsage", Owner = "operations", Name = "calibrate" } },
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = "operations", Name = "calibrateFirst", Ends = ["calibrate", "acquire"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = "operations", Name = "downlinkLast", Ends = ["acquire", "'EOSat1'::Architecture::eosat1::downlinkImage"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Name = "spareLink", Ends = [$"{CameraId}.dataOut", ConnectionChangesHelper.ComputerDataIn] } }
+            ]);
+
+            var elements = Assemble(CommitRequestHelper.Apply(model, result.Value));
+            var byQualifiedName = elements.Values.Where(element => element.qualifiedName != null).ToDictionary(element => element.qualifiedName);
+            var acquireImage = byQualifiedName["EOSat1::Architecture::eosat1::acquireImage"];
+            var calibrateFirst = (ISuccessionAsUsage)byQualifiedName["EOSat1::Architecture::eosat1::operations::calibrateFirst"];
+            var downlinkLast = (ISuccessionAsUsage)byQualifiedName["EOSat1::Architecture::eosat1::operations::downlinkLast"];
+            var spareLink = (IInterfaceUsage)byQualifiedName["EOSat1::Architecture::eosat1::spareLink"];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(calibrateFirst.relatedFeature, Is.EqualTo([byQualifiedName["EOSat1::Architecture::eosat1::operations::calibrate"], acquireImage]));
+                Assert.That(downlinkLast.relatedFeature, Is.EqualTo([acquireImage, byQualifiedName["EOSat1::Architecture::eosat1::downlinkImage"]]));
+                Assert.That(spareLink.relatedFeature[0].chainingFeature[0], Is.SameAs(elements[CameraId]));
+                Assert.That(spareLink.relatedFeature[0].chainingFeature[1].DeclaredName, Is.EqualTo("dataOut"));
+                Assert.That(spareLink.relatedFeature[1].chainingFeature.Select(feature => feature.DeclaredName), Is.EqualTo(["dataHandlingSubsystem", "onBoardComputer", "dataIn"]));
+            }
+        }
+
+        [Test]
+        public void Apply_WithCommonMistakesOfAnAssistant_SaysWhatToSendInstead()
+        {
+            var model = ReadSatelliteWithPorts();
+            var ids = model.Where(dto => dto.DeclaredName is "DataPort" or "imageLink").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+            var eosat1 = Eosat1Id.ToString();
+            var payloadSubsystem = PayloadSubsystemId.ToString();
+            var massBudget = MassBudgetId.ToString();
+            var massLimit = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150 };
+
+            var result = this.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = eosat1, Ends = ["payloadSubsystem"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "PortDefinition", Owner = PackageId.ToString(), Name = "PowerPort", Direction = FeatureDirectionKind.In } },
+                new ModelChange { Identity = ids["DataPort"], Payload = new ElementPayload { Direction = FeatureDirectionKind.Out } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = payloadSubsystem, Name = "imageIn", Definition = ids["DataPort"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = eosat1, Ends = ["payloadSubsystem", "camera"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Ends = ["EOSat1::Architecture::eosat1::spare", ConnectionChangesHelper.ComputerDataIn] } },
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Ends = ["dataHandlingSubsystem.onBoardComputer", ConnectionChangesHelper.CameraDataOut] } },
+                new ModelChange { Payload = new ElementPayload { Type = "InterfaceUsage", Owner = eosat1, Ends = [ConnectionChangesHelper.CameraDataOut, "payloadSubsystem.massMemory"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = payloadSubsystem, Name = "lenses", Multiplicity = "4..1" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = payloadSubsystem, Name = "lenses", Multiplicity = "many" } },
+                new ModelChange { Payload = new ElementPayload { Type = "Package", Owner = PackageId.ToString(), Name = "Spares", Multiplicity = "2" } },
+                new ModelChange { Identity = ids["imageLink"], Payload = new ElementPayload { Multiplicity = "2" } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraint = massLimit, Constraints = [massLimit] } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraints = [] } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraints = [massLimit, new ConstraintPayload { Attribute = "power", Operator = "=<", Limit = 5 }] } },
+                new ModelChange { Identity = massBudget, Payload = new ElementPayload { Constraints = [null] } }
+            ]);
+
+            string[] expectedProblems =
+            [
+                "Change 1 (create): A succession orders two actions or other occurrences: give the one that comes first, then the one that follows, as paths of names from its owner "
+                    + "or as identifiers, for example ['prepare', 'launch']. An action alone in its owner needs no succession.",
+                "Change 2 (create): A port definition has no direction, so the PortDefinition 'PowerPort' has none: give the direction to what flows through the port, "
+                    + "an ItemUsage or an AttributeUsage that the port definition owns (port def FuelPort { out item fuel : Fuel; }), and type the port of the other side with conjugated true.",
+                "Change 3 (update): A port definition has no direction, so the PortDefinition 'DataPort' has none: give the direction to what flows through the port, "
+                    + "an ItemUsage or an AttributeUsage that the port definition owns (port def FuelPort { out item fuel : Fuel; }), and type the port of the other side with conjugated true.",
+                "Change 4 (create): A part is not typed by the PortDefinition 'DataPort': create a PortUsage for a port.",
+                "Change 5 (create): The end 'camera' is not valid: the PartUsage 'eosat1' and its definitions have no feature named 'camera'. "
+                    + $"The model has the PartUsage 'EOSat1::Architecture::eosat1::payloadSubsystem::camera' (Id {CameraId}): give its identifier or its qualified name as the end, "
+                    + "or a path from the owner to a feature that holds it. Use list_children to read their features.",
+                "Change 6 (create): The end 'EOSat1::Architecture::eosat1::spare' is not valid: no feature has the qualified name 'EOSat1::Architecture::eosat1::spare'. "
+                    + "Use find_elements_by_name to read the qualified names.",
+                "Change 7 (create): The end 'dataHandlingSubsystem.onBoardComputer' of an interface must be a port, not the PartUsage 'onBoardComputer'. "
+                    + "Give one of its ports: 'dataHandlingSubsystem.onBoardComputer.dataIn'.",
+                "Change 8 (create): The end 'payloadSubsystem.massMemory' of an interface must be a port, not the PartUsage 'massMemory'. It has no port: create a PortUsage in it or in its definition first.",
+                "Change 9 (create): The multiplicity '4..1' is not valid: its lower bound is greater than its upper bound.",
+                "Change 10 (create): The multiplicity 'many' is not valid: write a number of units, such as '4', or a range, such as '1..4' or '0..*'.",
+                "Change 11 (create): Only a usage, for example a part, a port, an item or an attribute, has a multiplicity, not the Package 'Spares'.",
+                "Change 12 (update): Only a usage, for example a part, a port, an item or an attribute, has a multiplicity, not the InterfaceUsage 'imageLink'.",
+                "Change 13 (update): Give either constraint or constraints, not both.",
+                "Change 14 (update): The list of constraints is empty: give at least one constraint.",
+                "Change 15 (update): Constraint 2: The operator '=<' is not supported. Use '<', '<=', '>', '>=', '==', '!='.",
+                "Change 16 (update): Constraint 1: The constraint is empty."
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(result.Errors.Select(error => error.Description), Is.EqualTo(expectedProblems));
+            }
+        }
+
+        [Test]
+        public void Apply_WithAnElementRenamedInItsBatch_GivesItTheNewName()
+        {
+            var dtos = ReadSatelliteDtos();
+
+            var result = this.Apply(dtos,
+            [
+                new ModelChange { Identity = "optics", Payload = new ElementPayload { Type = "Package", Owner = PackageId.ToString(), Name = "Optics" } },
+                new ModelChange { Identity = "lens", Payload = new ElementPayload { Type = "PartUsage", Owner = "optics", Name = "lens" } },
+                new ModelChange { Identity = "lens", Payload = new ElementPayload { Name = "mainLens" } },
+                new ModelChange { Identity = "lens", Payload = new ElementPayload { Name = "mainLens", Text = "The main lens." } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "optics", Name = "lens" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "lens", Name = "mass", Value = 1 } },
+                new ModelChange { Identity = "optics", Payload = new ElementPayload { Name = "Lenses" } },
+                new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "camera" } }
+            ]);
+
+            var elements = Assemble(CommitRequestHelper.Apply(dtos, result.Value));
+            var qualifiedNames = elements.Values.Select(element => element.qualifiedName).Where(name => name?.StartsWith("EOSat1::Lenses", StringComparison.Ordinal) == true);
+            var mainLens = elements.Values.Single(element => element.qualifiedName == "EOSat1::Lenses::mainLens");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(qualifiedNames, Is.EquivalentTo(["EOSat1::Lenses", "EOSat1::Lenses::mainLens", "EOSat1::Lenses::mainLens::mass", "EOSat1::Lenses::lens"]));
+                Assert.That(mainLens.GetDocumentationBodies(), Is.EqualTo("The main lens."));
+                Assert.That(elements[CameraId].DeclaredName, Is.EqualTo("camera"));
             }
         }
 

@@ -92,9 +92,12 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </exception>
         [McpServerTool(Name = "sum_attribute", ReadOnly = true)]
         [Description("Computes the sum of a numeric attribute (for example 'mass' or 'power') over an element and all its sub-parts, using the values of their definitions and converting their units. Gives the total and the contribution of each part. "
-            + "Lists the parts whose value is missing (attribute declared without value, to be defined, or part of the same type as a contributing part without value): the total is then incomplete. "
+            + "A part counts as many times as its multiplicity says (part wheels : Wheel[4] counts 4 wheels). "
+            + "Lists the parts whose value is missing (attribute declared without value, to be defined, or part of the same type as a contributing part without value) "
+            + "or whose number of units is not fixed (multiplicity 1..4 or 0..*): the total is then incomplete. "
             + "When the model gives margins (an attribute named after the summed one with Margin, in %, for example massMargin = 10), also gives the total with margins. Use it for any mass or power budget instead of adding the values yourself.")]
-        [return: Description("The total and its unit, the number of contributing parts, the contribution of each part with its identifier, qualified name, types, value, unit and margin, the total with margins (null without margin), and the parts whose value is missing (null when none).")]
+        [return: Description("The total and its unit, the number of contributing parts, the contribution of each part with its identifier, qualified name, types, value for one unit, unit, margin and number of units (null for one), "
+            + "the total with margins (null without margin), and the parts whose value is missing, with their multiplicity when their number of units is not fixed (null when none).")]
         public SumResult SumAttribute([Description("The identifier (Id, a GUID) of the root element of the sum, for example the satellite or a subsystem.")] Guid elementId,
             [Description("The name of the attribute to add up, for example 'mass' or 'power'.")] string attributeName)
         {
@@ -115,7 +118,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             }
 
             var total = SumContributions(contributions);
-            double? totalWithMargins = contributions.Any(contribution => contribution.Margin != null) ? SumValues(contributions.Select(contribution => contribution.GetValueWithMargin())).Number : null;
+            double? totalWithMargins = contributions.Any(contribution => contribution.Margin != null) ? SumValues(contributions.Select(contribution => contribution.GetTotalWithMargin())).Number : null;
 
             return new SumResult(attributeName, total.Number, total.Unit, contributions.Count, contributions, totalWithMargins, values.MissingValues.Count == 0 ? null : values.MissingValues);
         }
@@ -140,7 +143,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         public WhatIfResult EvaluateWhatIf([Description("The identifier (Id, a GUID) of the root element of the sum, for example the satellite or a subsystem.")] Guid rootElementId,
             [Description("The name of the attribute, for example 'mass' or 'power'.")] string attributeName,
             [Description("The identifier (Id, a GUID) of the part whose value changes, as returned by sum_attribute. It must contribute to the sum.")] Guid elementId,
-            [Description("The new value of the attribute for this part, in the same unit as its current value.")] double newValue)
+            [Description("The new value of the attribute for this part, for one unit when it has several (multiplicity [4]), in the same unit as its current value.")] double newValue)
         {
             var sum = this.SumAttribute(rootElementId, attributeName);
 
@@ -164,7 +167,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <exception cref="McpException">Thrown when two contributions have units of different dimensions.</exception>
         private static NumberValue SumContributions(IEnumerable<Contribution> contributions)
         {
-            return SumValues(contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit)));
+            return SumValues(contributions.Select(contribution => contribution.GetTotal()));
         }
 
         /// <summary>
