@@ -160,8 +160,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             EndpointInvocation.VerifyInformationLogged(this.logger, "postQueryByProject");
 
             this.queryService
-                .Setup(service => service.CreateQueryAsync("Parts", ProjectId, It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<IData>>(), It.IsAny<Constraint>(),
-                    It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+                .Setup(service => service.CreateQueryAsync(It.Is<Query>(query => query.Name == "Parts" && query.Project == ProjectId), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Record());
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/queries", CompositeWhereBody);
@@ -169,16 +168,15 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             invocation.AssertPayload(StatusCodes.Status201Created, QueryId.ToString());
 
             // scope and orderBy have no counterpart in the QueryRequest JSON model of the PSM.
-            this.queryService.Verify(service => service.CreateQueryAsync("Parts", ProjectId, It.Is<IReadOnlyList<string>>(select => select.Count == 1 && select[0] == "name"),
-                It.Is<IReadOnlyList<IData>>(scope => scope.Count == 0), It.IsAny<CompositeConstraint>(), It.Is<IReadOnlyList<string>>(orderBy => orderBy.Count == 0),
-                It.IsAny<CancellationToken>()), Times.Once);
+            this.queryService.Verify(service => service.CreateQueryAsync(
+                It.Is<Query>(query => query.Select.Count == 1 && query.Select[0] == "name" && query.Scope.Count == 0 && query.Where is CompositeConstraint
+                    && query.OrderBy.Count == 0), It.IsAny<CancellationToken>()), Times.Once);
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/queries", PrimitiveWhereBody);
 
             invocation.AssertPayload(StatusCodes.Status201Created, QueryId.ToString());
 
-            this.queryService.Verify(service => service.CreateQueryAsync("Parts", ProjectId, It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<IData>>(),
-                It.IsAny<PrimitiveConstraint>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+            this.queryService.Verify(service => service.CreateQueryAsync(It.Is<Query>(query => query.Where is PrimitiveConstraint), It.IsAny<CancellationToken>()), Times.Once);
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/queries", "not json at all");
 

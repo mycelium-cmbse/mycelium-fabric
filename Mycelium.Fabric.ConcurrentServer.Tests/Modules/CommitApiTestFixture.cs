@@ -150,7 +150,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             EndpointInvocation.VerifyInformationLogged(this.logger, "postCommitByProject");
 
             this.versioningService
-                .Setup(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<IReadOnlyList<Guid>>(), ProjectId,
+                .Setup(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.Is<Commit>(commit => commit.OwningProject == ProjectId),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(CommitRecord());
 
@@ -161,7 +161,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
             // The branch is taken from the query string and the change set from the body.
             this.versioningService.Verify(service => service.CreateCommitAsync(It.Is<IReadOnlyList<DataVersion>>(change => change.Count == 1 && change[0].Payload != null),
-                BranchId, It.Is<IReadOnlyList<Guid>>(previous => previous.Count == 0), ProjectId, It.IsAny<CancellationToken>()), Times.Once);
+                BranchId, It.Is<Commit>(commit => commit.OwningProject == ProjectId && commit.PreviousCommits.Count == 0), It.IsAny<CancellationToken>()), Times.Once);
 
             // §7.2.3 takes change as DataVersion [1..*], and §8.1.3 deletes the identity named by a version without payload.
             foreach (var invalid in new[]
@@ -176,8 +176,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
                 invocation.AssertError(StatusCodes.Status400BadRequest, "postCommitByProject");
             }
 
-            this.versioningService.Verify(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<IReadOnlyList<Guid>>(),
-                It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+            this.versioningService.Verify(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(),
+                It.IsAny<CancellationToken>()), Times.Once);
 
             // A malformed branchId is rejected before the body is read.
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/commits?branchId=not-a-guid",

@@ -108,9 +108,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
                     return;
                 }
 
-                var request = body.Content.Value;
+                var tag = body.Content.Value.ToPim();
+                tag.OwningProject = projectId;
 
-                var outcome = await versioningService.CreateTagAsync(projectId, request.Name, request.TaggedCommit, context.RequestAborted);
+                var outcome = await versioningService.CreateTagAsync(tag, context.RequestAborted);
 
                 await WriteAsync<Tag, SysML2.NET.PIM.DTO.Tag>(context, operationId, outcome, StatusCodes.Status201Created);
             }

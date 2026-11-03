@@ -107,9 +107,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
                     return;
                 }
 
-                var request = body.Content.Value;
-
-                var outcome = await projectService.CreateProjectAsync(request.Name, request.Description, context.RequestAborted);
+                var outcome = await projectService.CreateProjectAsync(body.Content.Value.ToPim(), context.RequestAborted);
 
                 await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status201Created);
             }
@@ -203,9 +201,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
                     return;
                 }
 
-                var request = body.Content.Value;
+                var project = body.Content.Value.ToPim();
+                project.Id = projectId;
 
-                var outcome = await projectService.UpdateProjectAsync(projectId, request.Name, request.Description, request.DefaultBranch, context.RequestAborted);
+                var outcome = await projectService.UpdateProjectAsync(project, context.RequestAborted);
 
                 await WriteAsync<Project, SysML2.NET.PIM.DTO.Project>(context, operationId, outcome, StatusCodes.Status200OK);
             }

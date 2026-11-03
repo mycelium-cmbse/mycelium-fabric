@@ -109,9 +109,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
                     return;
                 }
 
-                var request = body.Content.Value;
+                var branch = body.Content.Value.ToPim();
+                branch.OwningProject = projectId;
 
-                var outcome = await versioningService.CreateBranchAsync(projectId, request.Name, request.Head.Value, context.RequestAborted);
+                var outcome = await versioningService.CreateBranchAsync(branch, context.RequestAborted);
 
                 await WriteAsync<Branch, SysML2.NET.PIM.DTO.Branch>(context, operationId, outcome, StatusCodes.Status201Created);
             }

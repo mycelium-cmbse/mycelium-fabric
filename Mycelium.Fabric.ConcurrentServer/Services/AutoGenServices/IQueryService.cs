@@ -35,23 +35,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <summary>
         /// Create a query in the given project with the given inputs.
         /// </summary>
-        /// <param name="name">
-        /// The name.
-        /// </param>
-        /// <param name="projectId">
-        /// The identifier of the project.
-        /// </param>
-        /// <param name="select">
-        /// The select elements.
-        /// </param>
-        /// <param name="scope">
-        /// The scope elements.
-        /// </param>
-        /// <param name="where">
-        /// The where.
-        /// </param>
-        /// <param name="orderBy">
-        /// The orderBy elements.
+        /// <param name="query">
+        /// The Query to create: only its <c>name</c>, <c>select</c>, <c>scope</c>, <c>where</c> and <c>orderBy</c> are read, and the service assigns every other member.
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken" /> that cancels the operation.
@@ -59,7 +44,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<Query>> CreateQueryAsync(string name, Guid projectId, IReadOnlyList<string> select, IReadOnlyList<SysML2.NET.Common.IData> scope, Constraint where, IReadOnlyList<string> orderBy, CancellationToken cancellationToken);
+        Task<ErrorOr<Query>> CreateQueryAsync(Query query, CancellationToken cancellationToken);
 
         /// <summary>
         /// Delete the query with the given id (queryId) in the given project.
