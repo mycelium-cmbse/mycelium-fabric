@@ -28,8 +28,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
         [Test]
         public void VerifyConstructor()
         {
-            Assert.That(() => new FunctionalDataInitializationService(null), Throws.ArgumentNullException);
-            Assert.That(() => new FunctionalDataInitializationService(CreateInitializer().Object), Throws.Nothing);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => new FunctionalDataInitializationService(null), Throws.ArgumentNullException);
+                Assert.That(() => new FunctionalDataInitializationService(CreateInitializer().Object), Throws.Nothing);
+            }
         }
 
         [Test]
