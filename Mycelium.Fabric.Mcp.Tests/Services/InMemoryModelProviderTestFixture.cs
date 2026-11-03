@@ -271,6 +271,28 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(connectionResult.CreatedElements.Select(createdElement => createdElement.Type), Is.EqualTo(expectedTypes));
                 Assert.That(createdElements.Keys, Is.SupersetOf(["EOSat1::DataInterface::target", "EOSat1::Components::OpticalCamera::dataOut", "EOSat1::Architecture::eosat1::imageLink"]));
             }
+
+            // The states, transitions, actions of the states and flows are created elements, but not the triggers, guards and
+            // effects of the transitions, nor the ends of the flows and their features.
+            var behaviourChanges = BehaviourChangesHelper.CreateChanges();
+            var behaviourCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(this.modelProvider.ElementDtos, behaviourChanges, new Dictionary<string, Guid>()).Value;
+            this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), behaviourChanges, It.IsAny<Dictionary<string, Guid>>())).Returns(behaviourCommitRequest);
+
+            var behaviourResult = this.modelProvider.ApplyChanges(behaviourChanges);
+
+            string[] expectedBehaviourTypes =
+            [
+                "ItemDefinition", "ItemDefinition", "AttributeDefinition", "ActionDefinition", "ReferenceUsage", "ActionDefinition", "ItemUsage", "ActionUsage", "ActionUsage", "ActionUsage",
+                "FlowUsage", "FlowUsage", "AttributeUsage", "AttributeUsage", "ActionUsage", "StateDefinition", "StateUsage", "StateUsage", "StateUsage", "StateUsage", "PerformActionUsage",
+                "PerformActionUsage", "PerformActionUsage", "TransitionUsage", "TransitionUsage", "TransitionUsage"
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(behaviourResult.Applied, Is.True);
+                Assert.That(behaviourResult.CreatedElements.Select(createdElement => createdElement.Type), Is.EqualTo(expectedBehaviourTypes));
+                Assert.That(behaviourResult.CreatedElements.Select(createdElement => createdElement.QualifiedName), Does.Contain("EOSat1::Architecture::eosat1::modes::safe::pointToSun"));
+            }
         }
 
         [Test]

@@ -24,7 +24,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="OwnerName">The declared name of the owner of the element, or <c>null</c> when it has none.</param>
     /// <param name="ChildCount">The number of elements directly owned by the element.</param>
     /// <param name="Documentation">The documentation of the element, or <c>null</c> when it has none.</param>
-    /// <param name="Ends">The path of each end of the element when it is a connector, from its owner, or <c>null</c>.</param>
+    /// <param name="Ends">The path of each end of the element when it is a connector, from its owner, or the name of its source and of its target when it is a transition, or <c>null</c>.</param>
     /// <param name="Connections">The connectors that connect the element or one of its features, or <c>null</c> when there are none.</param>
     /// <param name="Specializes">The qualified names of the elements that the element specializes (<c>:></c>), or <c>null</c> when there are none.</param>
     /// <param name="Performed">The qualified name of the action that the element performs when it is a <c>PerformActionUsage</c>, or <c>null</c>.</param>

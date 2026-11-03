@@ -14,6 +14,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using System.Text.Json.Serialization;
 
     using SysML2.NET.Core.Core.Types;
+    using SysML2.NET.Core.Systems.States;
 
     /// <summary>
     /// The payload of a <see cref="ModelChange"/>: a compact description of an element, from which the server builds the
@@ -96,7 +97,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the two ends of the created connector, as paths of names from its owner.
         /// </summary>
-        [Description("Create, for a ConnectionUsage, an InterfaceUsage, a BindingConnectorAsUsage, an AllocationUsage (from the allocated element to its target) or a SuccessionAsUsage (from the action that comes first to the one that follows): its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. The ends of an interface are ports. They cannot be updated: delete the connector and create it again.")]
+        [Description("Create, for a ConnectionUsage, an InterfaceUsage, a BindingConnectorAsUsage, an AllocationUsage (from the allocated element to its target), a SuccessionAsUsage (from the action that comes first to the one that follows), a TransitionUsage (from the state or action that it leaves to the one that it enters) or a FlowUsage (from the feature that the item leaves to the one that it enters, each through the usage that holds it, for example 'takeImage.image' or 'camera.dataOut'): its two ends, as paths of names from its owner through the features of each element and of its definitions, for example ['payloadSubsystem.camera.dataOut', 'dataHandlingSubsystem.obc.dataIn']. The ends of an interface are ports. They cannot be updated: delete the element and create it again.")]
         public IReadOnlyList<string> Ends { get; init; }
 
         /// <summary>
@@ -108,13 +109,13 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the action that the created <c>PerformActionUsage</c> performs.
         /// </summary>
-        [Description("Create, for a PerformActionUsage: the action usage that its owner performs, as an identifier (Id) or a temporary name. The owner (a part, a part definition or an action) is required; the name is optional.")]
+        [Description("Create, for a PerformActionUsage: the action usage that its owner performs, as an identifier (Id) or a temporary name. The owner (a part, a part definition, an action, or a state with stateAction) is required; the name is optional.")]
         public string Performed { get; init; }
 
         /// <summary>
         /// Gets the direction of the element, which must be a feature.
         /// </summary>
-        [Description("Create or update, for a feature such as a port or an attribute of a port definition: its direction, In, Out or Inout.")]
+        [Description("Create or update, for a feature such as a port, an attribute of a port definition or a parameter of an action (a ReferenceUsage, an ItemUsage or an AttributeUsage owned by an ActionDefinition or an ActionUsage: in currentStatus : VehicleStatus;): its direction, In, Out or Inout.")]
         [JsonConverter(typeof(JsonStringEnumConverter<FeatureDirectionKind>))]
         public FeatureDirectionKind? Direction { get; init; }
 
@@ -129,5 +130,36 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </summary>
         [Description("Create, for a feature of a ConnectionDefinition or a port of an InterfaceDefinition: true makes it one of its ends (end port supplier : PowerPort).")]
         public bool? IsEnd { get; init; }
+
+        /// <summary>
+        /// Gets the definition of the event that triggers the created <c>TransitionUsage</c>.
+        /// </summary>
+        [Description("Create, for a TransitionUsage: the definition of the event that triggers it (accept), for example the ItemDefinition LaunchPhaseCompletedNotification or an AttributeDefinition of a signal, as an identifier (Id) or a temporary name. Without trigger, the transition happens when its source is done.")]
+        public string Trigger { get; init; }
+
+        /// <summary>
+        /// Gets the condition that must hold for the created <c>TransitionUsage</c> to happen.
+        /// </summary>
+        [Description("Create, for a TransitionUsage: the condition that must hold for it to happen (if), an attribute compared with a limit or with another attribute.")]
+        public GuardPayload Guard { get; init; }
+
+        /// <summary>
+        /// Gets the action that the created <c>TransitionUsage</c> performs when it happens.
+        /// </summary>
+        [Description("Create, for a TransitionUsage: the action usage that it performs when it happens (do), as an identifier (Id) or a temporary name.")]
+        public string Effect { get; init; }
+
+        /// <summary>
+        /// Gets the kind of the action of a state that the created action is: its entry, do or exit action.
+        /// </summary>
+        [Description("Create, for an ActionUsage or a PerformActionUsage owned by a StateUsage or a StateDefinition: Entry, Do or Exit makes it the action that the state performs when it is entered, while it is active, or when it is left (entry action initialise;, do action operate : Operate;, or with performed: exit applyBrake;). A state has at most one action of each kind.")]
+        [JsonConverter(typeof(JsonStringEnumConverter<StateSubactionKind>))]
+        public StateSubactionKind? StateAction { get; init; }
+
+        /// <summary>
+        /// Gets the definition of what flows through the created <c>FlowUsage</c>.
+        /// </summary>
+        [Description("Create, for a FlowUsage: the definition of what flows (flow of Image), for example an ItemDefinition or an AttributeDefinition, as an identifier (Id) or a temporary name.")]
+        public string Item { get; init; }
     }
 }

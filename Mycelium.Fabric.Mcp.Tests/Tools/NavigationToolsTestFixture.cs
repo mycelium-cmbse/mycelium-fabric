@@ -217,6 +217,20 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(perform.Performed, Is.EqualTo("EOSat1::Architecture::eosat1::acquireImage"));
                 Assert.That(acquireImage.Connections.Select(connection => connection.Type), Is.EquivalentTo(["SuccessionAsUsage", "AllocationUsage"]));
             }
+
+            // With behaviour, a transition gives its source and its target, and a flow the features that the item leaves and enters.
+            Assert.That(connectedModelProvider.ApplyChanges(BehaviourChangesHelper.CreateChanges()).Problems, Is.Empty);
+            tools = new NavigationTools(connectedModelProvider);
+            var safeToNominal = tools.GetElementDetails(connectedModelProvider.Elements.Single(element => element.DeclaredName == "safeToNominal").Id);
+            var imageFlow = tools.GetElementDetails(connectedModelProvider.Elements.Single(element => element.DeclaredName == "imageFlow").Id);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(safeToNominal.Type, Is.EqualTo("TransitionUsage"));
+                Assert.That(safeToNominal.Ends, Is.EqualTo(["safe", "nominal"]));
+                Assert.That(imageFlow.Ends, Is.EqualTo([ConnectionChangesHelper.CameraDataOut, ConnectionChangesHelper.ComputerDataIn]));
+                Assert.That(tools.GetElementDetails(CameraId).Connections.Select(connection => connection.Name), Does.Contain("imageFlow"));
+            }
         }
 
         [Test]

@@ -173,7 +173,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var payload = change.Payload;
 
-            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null }
+            if (payload is not { Definition: null, Value: null, Unit: null, Constraint: null, SatisfiedRequirement: null, SatisfyingPart: null, Ends: null, Direction: null, Conjugated: null, IsEnd: null, Specializes: null, Trigger: null, Guard: null, Effect: null, Item: null }
                 || !string.IsNullOrWhiteSpace(payload.ReqId))
             {
                 throw new InvalidChangeException("A PerformActionUsage takes an owner and a performed action, and optionally a name and a text.");
