@@ -467,17 +467,24 @@ class FakeDocument {
  * Loads a page and runs its script, as a host shows an MCP App in a frame.
  * @param {string} pagePath The path of the HTML file of the page.
  * @param {string} scriptPath The path of the script of the page.
- * @returns {object} The page: its document, the messages sent to the host, and functions to send a message of the host and to
- * resize the view.
+ * @returns {object} The page: its document, the messages sent to the host, and functions to send a message of the host, to
+ * resize the view and to run the callbacks of its timers.
  */
 function loadPage(pagePath, scriptPath) {
     const sent = [];
     const host = { postMessage: (message, targetOrigin) => sent.push({ message, targetOrigin }) };
     const messageListeners = [];
+    const timers = [];
     let resize = null;
 
     globalThis.document = new FakeDocument(readFileSync(pagePath, "utf8"));
-    globalThis.window = { parent: host, innerWidth: 599.5, addEventListener: (type, listener) => messageListeners.push(listener) };
+    globalThis.window = {
+        parent: host,
+        innerWidth: 599.5,
+        addEventListener: (type, listener) => messageListeners.push(listener),
+        // The timers of the page do not run by themselves: the tests run their callbacks.
+        setInterval: callback => timers.push(callback)
+    };
     globalThis.ResizeObserver = class {
         /**
          * Keeps the callback, that the tests call to resize the view.
@@ -502,7 +509,8 @@ function loadPage(pagePath, scriptPath) {
         document: globalThis.document,
         sent,
         receive: (data, origin = "https://host.example", source = host) => messageListeners.forEach(listener => listener({ data, origin, source })),
-        resize: () => resize()
+        resize: () => resize(),
+        tick: () => timers.forEach(callback => callback())
     };
 }
 

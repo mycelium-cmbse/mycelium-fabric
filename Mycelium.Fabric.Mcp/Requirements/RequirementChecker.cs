@@ -218,6 +218,7 @@ namespace Mycelium.Fabric.Mcp.Requirements
                 Id = requirement.Id,
                 ReqId = requirement.ReqId,
                 Name = requirement.DeclaredName,
+                Text = requirement.text is { Count: > 0 } texts ? string.Join("\n", texts) : null,
                 Constraint = JoinExpressions(constraints.Required),
                 Assumption = JoinExpressions(constraints.Assumptions)
             };
