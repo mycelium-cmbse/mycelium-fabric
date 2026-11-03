@@ -220,7 +220,7 @@ namespace Mycelium.Fabric.Mcp.Services
                 // A change without type designates an existing element, or one that an earlier change of the batch creates.
                 foreach (var change in changes.Where(change => string.IsNullOrWhiteSpace(change.Payload?.Type)))
                 {
-                    if (ResolveIdentity(change.Identity, batchTemporaryNames) is not { } elementId || !previousElementIds.Contains(elementId))
+                    if (!TryResolveIdentity(change.Identity, batchTemporaryNames, out var elementId) || !previousElementIds.Contains(elementId))
                     {
                         continue;
                     }
@@ -386,20 +386,16 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Gets the <c>Id</c> that the identity of a change designates once its batch has been turned into a commit: an
+        /// Tries to get the <c>Id</c> that the identity of a change designates once its batch has been turned into a commit: an
         /// identifier, or a temporary name of the batch or of a previous one.
         /// </summary>
         /// <param name="identity">The identity of the change.</param>
         /// <param name="temporaryNames">The temporary names known after the batch, indexed by name.</param>
-        /// <returns>The designated <c>Id</c>, or <c>null</c> when the identity designates nothing.</returns>
-        private static Guid? ResolveIdentity(string identity, Dictionary<string, Guid> temporaryNames)
+        /// <param name="elementId">The designated <c>Id</c>, or <see cref="Guid.Empty"/> when the identity designates nothing.</param>
+        /// <returns><c>true</c> when the identity designates an <c>Id</c>.</returns>
+        private static bool TryResolveIdentity(string identity, Dictionary<string, Guid> temporaryNames, out Guid elementId)
         {
-            if (Guid.TryParse(identity, out var elementId) || (identity != null && temporaryNames.TryGetValue(identity, out elementId)))
-            {
-                return elementId;
-            }
-
-            return null;
+            return Guid.TryParse(identity, out elementId) || (identity != null && temporaryNames.TryGetValue(identity, out elementId));
         }
 
         /// <summary>

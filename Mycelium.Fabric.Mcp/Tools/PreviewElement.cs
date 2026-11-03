@@ -45,23 +45,18 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// (<c>REQ-SYS-001</c>); for a modified element
     /// whose value changes, the value before and after the batch (<c>38 kg → 35 kg</c>); <c>null</c> when it has none.
     /// </param>
-    /// <param name="Domain">
-    /// The code of the subsystem that the element belongs to, for example <c>THE</c> for an element under
-    /// <c>eosat1::thermal</c> or <c>kestrelMission::kestrel1::thermalSubsystem</c>, <c>SYS</c> for the system part and its own
-    /// features, or <c>null</c> outside any part or inside a definition.
+    /// <param name="Ownership">
+    /// The Ownership of the element, given by the subsystem that the element belongs to: the code of the subsystem, for example
+    /// <c>THE</c> for an element under <c>eosat1::thermal</c> or <c>kestrelMission::kestrel1::thermalSubsystem</c>, or <c>null</c>
+    /// for the system part and its own features, outside any part or inside a definition.
     /// </param>
     /// <param name="Multiplicity">
     /// The multiplicity of a feature as the textual notation writes it between brackets, for example <c>4</c> or <c>0..*</c>,
     /// or <c>null</c> when it has none.
     /// </param>
-    public sealed partial record PreviewElement(Guid Id, string QualifiedName, string Type, string Definition = null, string Value = null, string Domain = null,
+    public sealed partial record PreviewElement(Guid Id, string QualifiedName, string Type, string Definition = null, string Value = null, string Ownership = null,
         string Multiplicity = null)
     {
-        /// <summary>
-        /// The code of the system part and of its own features.
-        /// </summary>
-        public const string SystemDomain = "SYS";
-
         /// <summary>
         /// The names of the attributes added up over a part and its sub-parts to give its value.
         /// </summary>
@@ -75,7 +70,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="type">The metaclass of the element.</param>
         /// <param name="before">The element before the batch, <c>null</c> for a created element.</param>
         /// <param name="after">The element after the batch, <c>null</c> for a deleted element.</param>
-        /// <returns>The new <see cref="PreviewElement"/>, without definition, value nor domain when both elements are <c>null</c>.</returns>
+        /// <returns>The new <see cref="PreviewElement"/>, without definition, value nor Ownership when both elements are <c>null</c>.</returns>
         public static PreviewElement Create(Guid id, string qualifiedName, string type, IElement before, IElement after)
         {
             var element = after ?? before;
@@ -90,7 +85,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             var value = before == null || after == null || valueBefore == valueAfter ? valueAfter ?? valueBefore : $"{valueBefore ?? "none"} → {valueAfter ?? "none"}";
             var definitionNames = element is IUsage and not IAttributeUsage ? element.GetTypeNames() : [];
 
-            return new PreviewElement(id, qualifiedName, type, definitionNames.Count == 0 ? null : string.Join(", ", definitionNames), value, GetDomain(element),
+            return new PreviewElement(id, qualifiedName, type, definitionNames.Count == 0 ? null : string.Join(", ", definitionNames), value, GetOwnership(element),
                 DescribeMultiplicity(element));
         }
 
@@ -219,17 +214,18 @@ namespace Mycelium.Fabric.Mcp.Tools
         private static partial Regex DocumentedUnit();
 
         /// <summary>
-        /// Gets the code of the subsystem that an element belongs to: the part directly under the system that owns the element,
-        /// or the element itself, abbreviated to three letters without its <c>Subsystem</c> suffix. The system is the outermost
-        /// part that owns the element, or the deepest part below it, on the way to the element, that is a system too (see
-        /// <see cref="IsSystem"/>), as the spacecraft of a mission.
+        /// Gets the Ownership of an element: the code of the subsystem that the element belongs to, that is the part directly
+        /// under the system that owns the element, or the element itself, abbreviated to three letters without its
+        /// <c>Subsystem</c> suffix. The system is the outermost part that owns the element, or the deepest part below it, on the
+        /// way to the element, that is a system too (see <see cref="IsSystem"/>), as the spacecraft of a mission. The system has
+        /// no Ownership, as the Ownerships of a project may not include one.
         /// </summary>
         /// <param name="element">The element.</param>
         /// <returns>
-        /// The code of the subsystem, <see cref="SystemDomain"/> for the system part and its own features, or <c>null</c> outside any
-        /// part or inside a definition.
+        /// The code of the subsystem, or <c>null</c> for the system part and its own features, outside any part or inside a
+        /// definition.
         /// </returns>
-        private static string GetDomain(IElement element)
+        private static string GetOwnership(IElement element)
         {
             var parts = new List<IPartUsage>();
 
@@ -262,7 +258,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             if (systemIndex + 1 == parts.Count)
             {
-                return SystemDomain;
+                return null;
             }
 
             var name = parts[systemIndex + 1].DeclaredName ?? string.Empty;

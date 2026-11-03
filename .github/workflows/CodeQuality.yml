@@ -39,13 +39,16 @@ jobs:
         run: |
           dotnet tool install --global dotnet-sonarscanner
           dotnet tool install --global dotnet-coverage
-          dotnet sonarscanner begin /k:"mycelium-cmbse_mycelium-fabric" /o:"mycelium-cmbse" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml /d:sonar.coverage.exclusions="**/McpApp/**"
+          dotnet sonarscanner begin /k:"mycelium-cmbse_mycelium-fabric" /o:"mycelium-cmbse" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml /d:sonar.javascript.lcov.reportPaths=lcov.info
 
       - name: Build
         run: dotnet build Mycelium.Fabric.sln --no-restore --no-incremental /p:ContinuousIntegrationBuild=true
 
       - name: Run Tests and Compute Coverage
         run: dotnet-coverage collect "dotnet test Mycelium.Fabric.sln --no-restore --no-build --verbosity normal" -f xml -o "coverage.xml"
+
+      - name: Run JavaScript Tests and Compute Coverage
+        run: node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info Mycelium.Fabric.Mcp.Tests/McpApp/script.test.js
 
       - name: Sonarqube end
         env:

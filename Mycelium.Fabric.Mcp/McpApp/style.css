@@ -56,7 +56,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .cr .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr .nm i { color: var(--muted); font-style: normal; font-size: 11px; }
 .cr .v { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
-.cr .dom { flex: none; font: 600 9.5px/1 var(--mono); letter-spacing: .02em; color: var(--fg2); border: 1px solid var(--border); border-left: 3px solid var(--dc); border-radius: 3px; padding: 3px 5px 3px 4px; }
+.cr .own { flex: none; font: 600 9.5px/1 var(--mono); letter-spacing: .02em; color: var(--fg2); border: 1px solid var(--border); border-left: 3px solid var(--oc); border-radius: 3px; padding: 3px 5px 3px 4px; }
 
 .impact { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 14px 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
 .tagv { font-size: 11px; border-radius: 5px; padding: 3px 7px; background: var(--muted-bg); color: var(--fg2); display: inline-flex; align-items: center; gap: 5px; }

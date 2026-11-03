@@ -47,21 +47,24 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <summary>
         /// The message for the AI assistant when a batch waits for the decision of the user.
         /// </summary>
-        private const string PendingMessage = "The batch is valid and waits for the decision of the user, who sees it in the conversation. Do not send another batch: "
-            + "wait for the user's message, which tells whether it has been applied, with the identifiers of the created elements, or rejected, with a comment.";
+        private const string PendingMessage = """
+            The batch is valid and waits for the decision of the user, who sees it in the conversation. Do not send another batch: wait for the user's message, which tells whether it has been applied, with the identifiers of the created elements, or rejected, with a comment.
+            """;
 
         /// <summary>
         /// The problem returned when a batch is sent while another one waits for the decision of the user.
         /// </summary>
-        private const string BatchAlreadyPendingProblem = "A batch already waits for the decision of the user, and nothing has been applied. "
-            + "Do not send another batch: wait for the user's message, which tells whether the waiting batch has been applied or rejected.";
+        private const string BatchAlreadyPendingProblem = """
+            A batch already waits for the decision of the user, and nothing has been applied. Do not send another batch: wait for the user's message, which tells whether the waiting batch has been applied or rejected.
+            """;
 
         /// <summary>
         /// The message returned when a batch is sent while another one waits for the decision of the user, in a host that shows
         /// the waiting batch again.
         /// </summary>
-        private const string BatchShownAgainMessage = "A batch already waits for the decision of the user: the batch just sent has been ignored, and the user sees the waiting batch again in the conversation. "
-            + "Do not send another batch: wait for the user's message, which tells whether the waiting batch has been applied or rejected.";
+        private const string BatchShownAgainMessage = """
+            A batch already waits for the decision of the user: the batch just sent has been ignored, and the user sees the waiting batch again in the conversation. Do not send another batch: wait for the user's message, which tells whether the waiting batch has been applied or rejected.
+            """;
 
         /// <summary>
         /// The <see cref="IModelProvider"/> that gives access to the model.

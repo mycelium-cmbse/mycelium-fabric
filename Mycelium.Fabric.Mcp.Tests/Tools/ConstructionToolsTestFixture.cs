@@ -442,7 +442,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(creation.Applied, Is.True);
                 Assert.That(review.Status, Is.EqualTo(BatchReviewStatus.Pending));
                 Assert.That(review.Preview.CreatedElements, Is.Empty);
-                Assert.That(review.Preview.ModifiedElements, Is.EqualTo(new[] { new PreviewElement(cameraMassId, "Spacecraft::camera::mass", "AttributeUsage", Value: "38 → 45", Domain: "SYS") }));
+                Assert.That(review.Preview.ModifiedElements, Is.EqualTo(new[] { new PreviewElement(cameraMassId, "Spacecraft::camera::mass", "AttributeUsage", Value: "38 → 45") }));
                 Assert.That(review.Preview.DeletedElements, Is.Empty);
                 Assert.That(review.Preview.RequirementChanges, Is.EqualTo(new[]
                 {
@@ -458,7 +458,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         }
 
         [Test]
-        public void ApplyChanges_InAHostWithApps_PreviewsTheDefinitionValueAndDomainOfTheCreatedElements()
+        public void ApplyChanges_InAHostWithApps_PreviewsTheDefinitionValueAndOwnershipOfTheCreatedElements()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
             var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
@@ -485,28 +485,28 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(review.Status, Is.EqualTo(BatchReviewStatus.Pending));
-                Assert.That(review.Preview.CreatedElements.Select(element => (element.QualifiedName, element.Definition, element.Value, element.Domain)), Is.EqualTo(new (string, string, string, string)[]
+                Assert.That(review.Preview.CreatedElements.Select(element => (element.QualifiedName, element.Definition, element.Value, element.Ownership)), Is.EqualTo(new (string, string, string, string)[]
                 {
                     ("Spacecraft", null, null, null),
                     ("Spacecraft::Radiator", null, null, null),
                     ("Spacecraft::Radiator::mass", null, "2 kg", null),
                     ("Spacecraft::Radiator::fin", null, null, null),
-                    ("Spacecraft::eosat1", null, "2 kg · 5 W", PreviewElement.SystemDomain),
+                    ("Spacecraft::eosat1", null, "2 kg · 5 W", null),
                     ("Spacecraft::eosat1::thermalSubsystem", null, "2 kg · 5 W", "THE"),
                     ("Spacecraft::eosat1::thermalSubsystem::radiator", "Radiator", "2 kg", "THE"),
                     ("Spacecraft::eosat1::thermalSubsystem::heater", null, "5 W", "THE"),
                     ("Spacecraft::eosat1::thermalSubsystem::heater::power", null, "5 W", "THE"),
                     ("Spacecraft::heaterPower", null, "REQ-THE-001", null),
-                    ("Spacecraft::testBench", null, "mass 3", PreviewElement.SystemDomain),
-                    ("Spacecraft::testBench::mass", null, "3", PreviewElement.SystemDomain),
-                    ("Spacecraft::sensor", null, "4 kg", PreviewElement.SystemDomain),
-                    ("Spacecraft::sensor::mass", null, "4 kg", PreviewElement.SystemDomain)
+                    ("Spacecraft::testBench", null, "mass 3", null),
+                    ("Spacecraft::testBench::mass", null, "3", null),
+                    ("Spacecraft::sensor", null, "4 kg", null),
+                    ("Spacecraft::sensor::mass", null, "4 kg", null)
                 }));
             }
         }
 
         [Test]
-        public void ApplyChanges_InAHostWithApps_PreviewsTheDomainOfTheElementsOfAMission()
+        public void ApplyChanges_InAHostWithApps_PreviewsTheOwnershipOfTheElementsOfAMission()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
             var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
@@ -529,12 +529,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(review.Status, Is.EqualTo(BatchReviewStatus.Pending));
-                Assert.That(review.Preview.CreatedElements.Select(element => (element.QualifiedName, element.Domain)), Is.EqualTo(new (string, string)[]
+                Assert.That(review.Preview.CreatedElements.Select(element => (element.QualifiedName, element.Ownership)), Is.EqualTo(new (string, string)[]
                 {
                     ("Mission", null),
-                    ("Mission::mission", PreviewElement.SystemDomain),
-                    ("Mission::mission::spacecraft", PreviewElement.SystemDomain),
-                    ("Mission::mission::spacecraft::mass", PreviewElement.SystemDomain),
+                    ("Mission::mission", null),
+                    ("Mission::mission::spacecraft", null),
+                    ("Mission::mission::spacecraft::mass", null),
                     ("Mission::mission::spacecraft::aocsSubsystem", "AOC"),
                     ("Mission::mission::spacecraft::aocsSubsystem::reactionWheel", "AOC"),
                     ("Mission::mission::spacecraft::thermalSubsystem", "THE"),
