@@ -18,11 +18,11 @@
         <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
         <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
         <PackageVersion Include="ModelContextProtocol" Version="2.3.0" />
-        <PackageVersion Include="SysML2.NET.Dal" Version="0.25.0" />
-        <PackageVersion Include="SysML2.NET.Serializer.Json" Version="0.25.0" />
-        <PackageVersion Include="SysML2.NET.Serializer.MessagePack" Version="0.25.0" />
-
+        <PackageVersion Include="SysML2.NET.Dal" Version="0.25.2" />
+        <PackageVersion Include="SysML2.NET.Serializer.Json" Version="0.25.2" />
+        <PackageVersion Include="SysML2.NET.Serializer.MessagePack" Version="0.25.2" />
         <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.14" />
+        <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
         <PackageVersion Include="Moq" Version="4.21.0" />
         <PackageVersion Include="NUnit" Version="5.0.0" />
