@@ -15,7 +15,7 @@ namespace Mycelium.Fabric.AppHost
     using Aspire.Hosting.ApplicationModel;
 
     /// <summary>
-    /// Defines and runs the local PostgreSQL and concurrent-server environment.
+    /// Defines and runs PostgreSQL and the independent Concurrent Server and Functional Data microservices.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public static class Program
@@ -46,7 +46,9 @@ namespace Mycelium.Fabric.AppHost
             var functionalData = postgres.AddDatabase("functionaldata", "mycelium_functional_data");
 
             builder.AddProject<Projects.Mycelium_Fabric_ConcurrentServer>("concurrent-server")
-                .WithHttpEndpoint()
+                .WithHttpEndpoint();
+
+            builder.AddProject<Projects.Mycelium_Fabric_FunctionalDataServer>("functional-data-server")
                 .WithReference(functionalData)
                 .WaitFor(functionalData, WaitBehavior.WaitOnResourceUnavailable);
 
