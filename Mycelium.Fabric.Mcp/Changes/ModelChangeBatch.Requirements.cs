@@ -372,7 +372,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Thrown when an attribute must be created but a member already has its name, or when a text limit names several
         /// enumeration values.
         /// </exception>
-        private IElement CreateComparison(IElement subject, ConstraintPayload constraint)
+        private OperatorExpression CreateComparison(IElement subject, ConstraintPayload constraint)
         {
             var valueOperand = this.CreateSubjectPath(subject, constraint.Attribute);
 
