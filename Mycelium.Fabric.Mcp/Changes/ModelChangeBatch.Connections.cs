@@ -21,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Systems.Connections;
     using SysML2.NET.Core.DTO.Systems.Allocations;
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.DTO.Systems.Enumerations;
     using SysML2.NET.Core.DTO.Systems.Flows;
     using SysML2.NET.Core.DTO.Systems.Interfaces;
     using SysML2.NET.Core.DTO.Systems.Occurrences;
@@ -141,8 +142,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Checks that a definition has the kind that a feature expects: a port definition for a port, an interface definition
-        /// for an interface, and a connection definition for a connection. A conjugated port definition is never a
-        /// definition of its own: a port is typed by it through <c>conjugated</c>.
+        /// for an interface, a connection definition for a connection, and an enumeration definition for an enumeration usage.
+        /// A conjugated port definition is never a definition of its own: a port is typed by it through <c>conjugated</c>.
         /// </summary>
         /// <param name="feature">The typed feature.</param>
         /// <param name="definition">The definition, which is a classifier.</param>
@@ -160,6 +161,7 @@ namespace Mycelium.Fabric.Mcp.Changes
                 IInterfaceUsage => (definition is IInterfaceDefinition, "an interface definition"),
                 IConnectionUsage => (definition is IConnectionDefinition, "a connection definition"),
                 IFlowUsage => (definition is IFlowDefinition, "a flow definition"),
+                IEnumerationUsage => (definition is IEnumerationDefinition, "an enumeration definition"),
                 _ => (true, null)
             };
 

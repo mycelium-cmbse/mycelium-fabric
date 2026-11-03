@@ -200,5 +200,33 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             return enumerationValues.Count == 0 ? null : this.elementsById[enumerationValues[0].Id];
         }
+
+        /// <summary>
+        /// Gets the enumeration definition that types an <c>EnumerationUsage</c>: the enumeration that owns it, for a value
+        /// such as <c>polar</c> in <c>enum def OrbitKind { enum polar; }</c>, or else its given definition, which
+        /// <see cref="CheckDefinitionKind"/> has checked.
+        /// </summary>
+        /// <param name="owner">The owner of the <c>EnumerationUsage</c>.</param>
+        /// <param name="definition">The given definition, or <c>null</c> when the payload gives none.</param>
+        /// <returns>The enumeration definition that types the <c>EnumerationUsage</c>.</returns>
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when a value of an enumeration is given another definition, or when an <c>EnumerationUsage</c> outside an
+        /// enumeration has no definition.
+        /// </exception>
+        private static IElement GetEnumerationDefinition(IElement owner, IElement definition)
+        {
+            if (owner is IEnumerationDefinition)
+            {
+                if (definition != null && definition.Id != owner.Id)
+                {
+                    throw new InvalidChangeException($"A value of the {Describe(owner)} is typed by this enumeration: give no definition, not the {Describe(definition)}.");
+                }
+
+                return owner;
+            }
+
+            return definition ?? throw new InvalidChangeException("An EnumerationUsage needs a definition, the EnumerationDefinition that lists its values. "
+                + "For a value of an enumeration, create the EnumerationUsage in the EnumerationDefinition.");
+        }
     }
 }

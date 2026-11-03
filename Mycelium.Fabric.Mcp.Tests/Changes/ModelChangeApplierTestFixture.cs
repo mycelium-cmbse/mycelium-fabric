@@ -41,6 +41,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Interactions;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.POCO.Systems.Enumerations;
     using SysML2.NET.Core.POCO.Systems.Flows;
     using SysML2.NET.Core.POCO.Systems.Interfaces;
     using SysML2.NET.Core.POCO.Systems.Items;
@@ -806,6 +807,95 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 "Change 14 (update): A margin in percent does not apply to a unit with an offset, such as °C: include the margin in the limit instead.",
                 "Change 15 (update): 'nominal' names several enumeration values: write 'EOSat1::Requirements::ModeA::nominal' or 'EOSat1::Requirements::ModeB::nominal'.",
                 "Change 16 (create): A SatisfyRequirementUsage takes a satisfied requirement and a satisfying part, and optionally an owner, a name and a text."
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(problems, Is.EqualTo(expectedProblems));
+            }
+        }
+
+        [Test]
+        public void Apply_WithEnumerations_TypesEachValueByItsEnumeration()
+        {
+            var dtos = ReadSatelliteDtos();
+            var eosat1 = Eosat1Id.ToString();
+
+            var result = this.Apply(dtos,
+            [
+                new ModelChange { Identity = "kind", Payload = new ElementPayload { Type = "EnumerationDefinition", Owner = PackageId.ToString(), Name = "OrbitKind" } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = "kind", Name = "polar" } },
+                new ModelChange { Identity = "equatorial", Payload = new ElementPayload { Type = "EnumerationUsage", Owner = "kind", Name = "equatorial", Definition = "kind" } },
+                new ModelChange { Identity = "equatorial", Payload = new ElementPayload { Definition = "kind", Text = "Low-inclination orbit." } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = eosat1, Name = "orbitKind", Definition = "kind" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = eosat1, Name = "orbit", Value = "OrbitKind::polar" } },
+                new ModelChange { Identity = "mode", Payload = new ElementPayload { Type = "EnumerationDefinition", Owner = PackageId.ToString(), Name = "Mode" } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = "mode", Name = "nominal" } }
+            ]);
+
+            var model = CommitRequestHelper.Apply(dtos, result.Value);
+            var elements = Assemble(model);
+            var named = elements.Values.Where(element => element.DeclaredName != null && dtos.TrueForAll(dto => dto.Id != element.Id)).ToDictionary(element => element.DeclaredName);
+            var orbitKind = (IEnumerationDefinition)named["OrbitKind"];
+            var polar = (IEnumerationUsage)named["polar"];
+            var equatorial = (IEnumerationUsage)named["equatorial"];
+            var orbit = elements[Eosat1Id].GetAttributeUsages().Single(attribute => attribute.DeclaredName == "orbit");
+
+            var deletion = this.Apply(model, [new ModelChange { Identity = named["Mode"].Id.ToString() }]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(orbitKind.IsVariation, Is.True);
+                Assert.That(orbitKind.enumeratedValue, Is.EqualTo([polar, equatorial]));
+                Assert.That(polar.OwningRelationship, Is.InstanceOf<IVariantMembership>());
+                Assert.That(polar.enumerationDefinition, Is.SameAs(orbitKind));
+                Assert.That(polar.qualifiedName, Is.EqualTo("EOSat1::OrbitKind::polar"));
+                Assert.That(equatorial.ownedTyping.Select(typing => typing.Type), Is.EqualTo([orbitKind]));
+                Assert.That(equatorial.GetDocumentationBodies(), Is.EqualTo("Low-inclination orbit."));
+                Assert.That(named["orbitKind"].DescribeType(), Is.EqualTo("EnumerationUsage : OrbitKind"));
+                Assert.That(named["orbitKind"].OwningRelationship, Is.InstanceOf<IFeatureMembership>());
+                Assert.That(orbit.GetConstantValue(), Is.EqualTo(new EnumValue("polar", "EOSat1::OrbitKind::polar")));
+                Assert.That(deletion.IsError, Is.False);
+            }
+        }
+
+        [Test]
+        public void Apply_WithEnumerationUsagesNotTypedByTheirEnumeration_ReturnsEveryProblem()
+        {
+            var dtos = ReadSatelliteDtos();
+            var eosat1 = Eosat1Id.ToString();
+            var opticalCamera = ConnectionChangesHelper.OpticalCameraId;
+
+            var model = CommitRequestHelper.Apply(dtos, this.Apply(dtos,
+            [
+                new ModelChange { Identity = "kind", Payload = new ElementPayload { Type = "EnumerationDefinition", Owner = PackageId.ToString(), Name = "OrbitKind" } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = "kind", Name = "polar" } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationDefinition", Owner = PackageId.ToString(), Name = "Mode" } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = eosat1, Name = "orbitKind", Definition = "kind" } }
+            ]).Value);
+
+            var ids = model.Where(dto => dto.DeclaredName is "OrbitKind" or "polar" or "Mode" or "orbitKind").ToDictionary(dto => dto.DeclaredName, dto => dto.Id.ToString());
+
+            var result = this.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = ids["OrbitKind"], Name = "equatorial", Definition = ids["Mode"] } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = eosat1, Name = "mode" } },
+                new ModelChange { Payload = new ElementPayload { Type = "EnumerationUsage", Owner = eosat1, Name = "mode", Definition = opticalCamera } },
+                new ModelChange { Identity = ids["polar"], Payload = new ElementPayload { Definition = ids["Mode"] } },
+                new ModelChange { Identity = ids["orbitKind"], Payload = new ElementPayload { Definition = opticalCamera } }
+            ]);
+
+            var problems = result.Errors.Select(error => error.Description).ToList();
+
+            string[] expectedProblems =
+            [
+                "Change 1 (create): A value of the EnumerationDefinition 'OrbitKind' is typed by this enumeration: give no definition, not the EnumerationDefinition 'Mode'.",
+                "Change 2 (create): An EnumerationUsage needs a definition, the EnumerationDefinition that lists its values. For a value of an enumeration, create the EnumerationUsage in the EnumerationDefinition.",
+                "Change 3 (create): The definition must be an enumeration definition, not the PartDefinition 'OpticalCamera'.",
+                "Change 4 (update): A value of the EnumerationDefinition 'OrbitKind' is typed by this enumeration: give no definition, not the EnumerationDefinition 'Mode'.",
+                "Change 5 (update): The definition must be an enumeration definition, not the PartDefinition 'OpticalCamera'."
             ];
 
             using (Assert.EnterMultipleScope())

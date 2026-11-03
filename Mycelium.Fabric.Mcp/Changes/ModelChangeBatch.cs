@@ -27,6 +27,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Systems.Attributes;
     using SysML2.NET.Core.DTO.Systems.Connections;
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.DTO.Systems.Enumerations;
     using SysML2.NET.Core.DTO.Systems.Flows;
     using SysML2.NET.Core.DTO.Systems.Interfaces;
     using SysML2.NET.Core.DTO.Systems.Occurrences;
@@ -407,6 +408,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             var definition = payload.Definition == null ? null : this.ResolveDefinition(member, payload.Definition);
             var general = payload.Specializes == null ? null : this.ResolveGeneral(member, payload.Specializes);
 
+            if (member is IEnumerationUsage)
+            {
+                definition = GetEnumerationDefinition(owner, definition);
+            }
+
             this.CheckValue(payload.Value, payload.Unit);
 
             if (payload.Value != null)
@@ -561,6 +567,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             return payload switch
             {
+                { Definition: not null } when element is IEnumerationUsage => GetEnumerationDefinition(this.GetOwner(element), this.ResolveDefinition(element, payload.Definition)),
                 { Definition: not null } => this.ResolveDefinition(element, payload.Definition),
                 { Conjugated: not null } => this.GetPortDefinition(element),
                 _ => null
@@ -868,8 +875,9 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates the public membership through which an element owns a member: a <c>FeatureMembership</c> for a feature
-        /// (part, attribute...) of a type (part definition, part), an <c>EndFeatureMembership</c> for an end feature, and an
-        /// <c>OwningMembership</c> for any other member, for example an element of a package.
+        /// (part, attribute...) of a type (part definition, part), an <c>EndFeatureMembership</c> for an end feature, a
+        /// <c>VariantMembership</c> for a value of an enumeration definition, and an <c>OwningMembership</c> for any other
+        /// member, for example an element of a package.
         /// </summary>
         /// <param name="owner">The element that owns the member.</param>
         /// <param name="member">The owned member.</param>
@@ -878,6 +886,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             return (member, owner) switch
             {
+                (IEnumerationUsage, IEnumerationDefinition) => new VariantMembership { Visibility = VisibilityKind.Public },
                 (IFeature { IsEnd: true }, IType) => new EndFeatureMembership { Visibility = VisibilityKind.Public },
                 (IFeature, IType) => new FeatureMembership { Visibility = VisibilityKind.Public },
                 _ => new OwningMembership { Visibility = VisibilityKind.Public }
