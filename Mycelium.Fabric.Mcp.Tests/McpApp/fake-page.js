@@ -85,6 +85,14 @@ class FakeElement {
     }
 
     /**
+     * The parent element.
+     * @returns {FakeElement} The parent, or null.
+     */
+    get parentElement() {
+        return this.parentNode instanceof FakeElement ? this.parentNode : null;
+    }
+
+    /**
      * The number of child elements.
      * @returns {number} The number of child elements.
      */
@@ -110,13 +118,20 @@ class FakeElement {
 
     /**
      * The CSS classes of the element.
-     * @returns {{contains: function(string): boolean, toggle: function(string, boolean): boolean}} The classes.
+     * @returns {{contains: function(string): boolean, add: function(string): void, remove: function(string): void,
+     * toggle: function(string, boolean): boolean}} The classes.
      */
     get classList() {
         const names = () => this.className.split(/\s+/).filter(Boolean);
 
         return {
             contains: name => names().includes(name),
+            add: name => {
+                this.className = [...names().filter(other => other !== name), name].join(" ");
+            },
+            remove: name => {
+                this.className = names().filter(other => other !== name).join(" ");
+            },
             toggle: (name, force) => {
                 const on = force ?? !names().includes(name);
                 this.className = [...names().filter(other => other !== name), ...(on ? [name] : [])].join(" ");
@@ -140,6 +155,16 @@ class FakeElement {
         } else if (name.startsWith("data-")) {
             this.dataset[name.slice("data-".length)] = String(value);
         }
+    }
+
+    /**
+     * Gets an attribute; a data attribute comes from the dataset.
+     * @param {string} name The name of the attribute.
+     * @returns {string} The value, or null when the element has no such attribute.
+     */
+    getAttribute(name) {
+        const value = name.startsWith("data-") ? this.dataset[name.slice("data-".length)] : this.attributes.get(name);
+        return value === undefined ? null : String(value);
     }
 
     /**
@@ -173,6 +198,36 @@ class FakeElement {
     }
 
     /**
+     * Moves elements just after this one, among its siblings.
+     * @param {...FakeElement} nodes The elements.
+     */
+    after(...nodes) {
+        this.insertSiblings(nodes, 1);
+    }
+
+    /**
+     * Moves elements just before this one, among its siblings.
+     * @param {...FakeElement} nodes The elements.
+     */
+    before(...nodes) {
+        this.insertSiblings(nodes, 0);
+    }
+
+    /**
+     * Moves elements next to this one, in its parent.
+     * @param {FakeElement[]} nodes The elements.
+     * @param {number} shift 0 to put them before this element, 1 after.
+     */
+    insertSiblings(nodes, shift) {
+        const parent = this.parentNode;
+        for (const node of nodes) {
+            node.parentNode.childNodes = node.parentNode.childNodes.filter(child => child !== node);
+            node.parentNode = parent;
+        }
+        parent.childNodes.splice(parent.childNodes.indexOf(this) + shift, 0, ...nodes);
+    }
+
+    /**
      * Adds a listener of an event.
      * @param {string} type The type of the event, for example click.
      * @param {function(object): void} listener The listener.
@@ -191,6 +246,42 @@ class FakeElement {
     }
 
     /**
+     * Fires an event on the element: the listeners of the element, then of its ancestors, run, as the event bubbles up.
+     * @param {string} type The type of the event, for example change.
+     * @param {object} [properties] The other properties of the event, for example key or clientY.
+     * @returns {object} The event, with defaultPrevented.
+     */
+    dispatch(type, properties = {}) {
+        const event = { type, target: this, defaultPrevented: false, ...properties };
+        event.preventDefault = () => {
+            event.defaultPrevented = true;
+        };
+
+        for (let node = this; node instanceof FakeElement; node = node.parentNode) {
+            for (const listener of node.listeners.get(type) ?? []) {
+                listener(event);
+            }
+        }
+
+        return event;
+    }
+
+    /**
+     * Gives the focus to the element.
+     */
+    focus() {
+        globalThis.document.activeElement = this;
+    }
+
+    /**
+     * Captures the pointer: the element keeps the pointer id.
+     * @param {number} pointerId The id of the pointer.
+     */
+    setPointerCapture(pointerId) {
+        this.pointerCapture = pointerId;
+    }
+
+    /**
      * Gets the descendants of the element, in the order of the page.
      * @returns {FakeElement[]} The descendants.
      */
@@ -204,8 +295,33 @@ class FakeElement {
      * @returns {FakeElement[]} The matching descendants.
      */
     querySelectorAll(selectors) {
-        const list = selectors.split(",").map(selector => selector.trim().split(/\s+/).map(parseCompound));
+        const list = parseSelectors(selectors);
         return this.descendants().filter(element => list.some(compounds => matches(element, compounds)));
+    }
+
+    /**
+     * Finds the first descendant that matches a list of selectors.
+     * @param {string} selectors The selectors.
+     * @returns {FakeElement} The descendant, or null.
+     */
+    querySelector(selectors) {
+        return this.querySelectorAll(selectors)[0] ?? null;
+    }
+
+    /**
+     * Finds the element itself or its closest ancestor that matches a list of selectors.
+     * @param {string} selectors The selectors.
+     * @returns {FakeElement} The element, or null.
+     */
+    closest(selectors) {
+        const list = parseSelectors(selectors);
+        for (let node = this; node instanceof FakeElement; node = node.parentNode) {
+            if (list.some(compounds => matches(node, compounds))) {
+                return node;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -218,23 +334,36 @@ class FakeElement {
 }
 
 /**
- * Reads a selector without combinator, as "button" or ".chk.bad".
+ * Reads a list of selectors, each made of selectors without combinator joined by the descendant combinator.
+ * @param {string} selectors The selectors, as ".seg button, .segp".
+ * @returns {{tag: string, classes: string[], attributes: object[]}[][]} The selectors.
+ */
+function parseSelectors(selectors) {
+    return selectors.split(",").map(selector => selector.trim().split(/\s+/).map(parseCompound));
+}
+
+/**
+ * Reads a selector without combinator, as "button", ".chk.bad" or ".line[data-index]".
  * @param {string} text The selector.
- * @returns {{tag: string, classes: string[]}} The tag name, empty for any tag, and the classes.
+ * @returns {{tag: string, classes: string[], attributes: {name: string, value: string}[]}} The tag name, empty for any tag,
+ * the classes, and the attributes with their value, undefined when only the attribute is required.
  */
 function parseCompound(text) {
-    const [tag, ...classes] = text.split(".");
-    return { tag: tag.toUpperCase(), classes };
+    const attributes = [...text.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)].map(([, name, value]) => ({ name, value }));
+    const [tag, ...classes] = text.replaceAll(/\[[^\]]*\]/g, "").split(".");
+    return { tag: tag.toUpperCase(), classes, attributes };
 }
 
 /**
  * Tells whether an element matches a selector without combinator.
  * @param {FakeElement} element The element.
- * @param {{tag: string, classes: string[]}} compound The selector.
+ * @param {{tag: string, classes: string[], attributes: {name: string, value: string}[]}} compound The selector.
  * @returns {boolean} true when the element matches.
  */
 function matchesCompound(element, compound) {
-    return (!compound.tag || element.tagName === compound.tag) && compound.classes.every(name => element.classList.contains(name));
+    return (!compound.tag || element.tagName === compound.tag)
+        && compound.classes.every(name => element.classList.contains(name))
+        && compound.attributes.every(({ name, value }) => element.getAttribute(name) !== null && (value === undefined || element.getAttribute(name) === value));
 }
 
 /**

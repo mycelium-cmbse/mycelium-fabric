@@ -20,7 +20,9 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Title">The short title of the trade-off, or <c>null</c>.</param>
     /// <param name="Root">The <see cref="TradeOffRoot"/> under which the totals are computed.</param>
     /// <param name="Status">The <see cref="TradeOffStatus"/> of the search.</param>
-    /// <param name="Request">The <see cref="TradeOffRequest"/>, that the view sends again with other settings.</param>
+    /// <param name="Request">
+    /// The <see cref="TradeOffRequest"/>, that the view sends again with other settings, with empty lists instead of <c>null</c>.
+    /// </param>
     /// <param name="Attributes">The <see cref="TradeOffAttribute"/> of each total.</param>
     /// <param name="Choices">The <see cref="TradeOffStudyChoice"/> of each choice, with all its variants.</param>
     /// <param name="Objectives">The <see cref="TradeOffObjective"/>s, by order of priority.</param>

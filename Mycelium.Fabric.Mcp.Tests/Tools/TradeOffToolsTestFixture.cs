@@ -307,6 +307,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var withView = tools.SolveTradeOff(SatelliteId, CameraAndTransmitter, MassThenPower, MassRequirement, count: 3, title: "Camera and X-band transmitter");
             var study = tools.ExploreTradeOff(SatelliteId, CameraAndTransmitter, MassThenPower, MassRequirement, count: 3, title: "Camera and X-band transmitter");
             var expectedText = JsonSerializer.Serialize(new TradeOffResult(study.Status, study.Current, study.Best, study.Conflicts), McpJsonUtilities.DefaultOptions);
+            var compared = tools.SolveTradeOff(SatelliteId, CameraAndTransmitter, MassThenPower, MassRequirement, compareBy: "camera");
+            var overall = JsonSerializer.SerializeToElement(tools.ExploreTradeOff(SatelliteId, CameraAndTransmitter, MassThenPower, MassRequirement, count: 3), TradeOffTools.StudySerializerOptions);
 
             using (Assert.EnterMultipleScope())
             {
@@ -317,6 +319,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(withView.StructuredContent?.GetProperty("points").GetArrayLength(), Is.EqualTo(6));
                 Assert.That(withView.StructuredContent?.GetProperty("request").GetProperty("excluded").GetArrayLength(), Is.Zero);
                 Assert.That(withView.StructuredContent?.GetProperty("request").GetProperty("compareBy").ValueKind, Is.EqualTo(JsonValueKind.Null));
+                Assert.That(ReadResult(compared).Combinations.Select(combination => combination.Alternative), Has.All.StartWith("camera."));
+                Assert.That(JsonElement.DeepEquals(compared.StructuredContent!.Value, overall), Is.True);
             }
         }
 
@@ -327,6 +331,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var elementCount = this.modelProvider.Elements.Count;
 
             var study = tools.ExploreTradeOff(SatelliteId, CameraAndTransmitter, MassThenPower, MassRequirement, count: 3);
+            var withoutConstraints = tools.ExploreTradeOff(SatelliteId, CameraAndTransmitter, MassThenPower);
+            var withoutObjectives = tools.ExploreTradeOff(SatelliteId, CameraAndTransmitter, constraints: MassRequirement);
             var byVariants = study.Points.ToDictionary(point => string.Join("+", point.Choices.Select(choice => choice.Variant)));
             var rankOne = study.Points.Single(point => point.Rank == 1);
 
@@ -352,6 +358,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(rankOne.Choices.Select(choice => choice.Variant), Is.EqualTo(study.Best[0].Choices.Select(choice => choice.Variant)));
                 Assert.That(study.Best.Select(combination => combination.Rank), Is.EqualTo([1, 2, 3]));
                 Assert.That(study.Best[0].Constraints.Single(), Is.EqualTo(new ConstraintCheck("mass * 1.2 <= 150", true, "REQ-SYS-001", 140.88, 150)));
+                Assert.That(withoutConstraints.Request.Constraints, Is.Empty);
+                Assert.That(withoutObjectives.Request.Objectives, Is.Empty);
                 Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(elementCount));
             }
         }

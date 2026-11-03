@@ -32,6 +32,11 @@ namespace Mycelium.Fabric.Mcp.Tools
     public class TradeOffTools
     {
         /// <summary>
+        /// The smallest number of combinations that the view of a trade-off lists.
+        /// </summary>
+        private const int ViewCount = 3;
+
+        /// <summary>
         /// The <see cref="JsonSerializerOptions"/> of the <see cref="TradeOffStudy"/> sent to the view: a key whose value is
         /// <c>null</c> is still written, because the output schema of explore_trade_off requires every key of the study and
         /// hosts check the result against it.
@@ -87,7 +92,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="server">The <see cref="McpServer"/> of the request, which tells what the host can show.</param>
         /// <returns>
         /// The <see cref="CallToolResult"/>: for the AI assistant, the <see cref="TradeOffResult"/> in JSON; for the view, when the
-        /// host shows MCP Apps, the <see cref="TradeOffStudy"/> as structured content.
+        /// host shows MCP Apps, the <see cref="TradeOffStudy"/> as structured content, with the best combinations overall (without
+        /// <paramref name="compareBy"/>) and at least <see cref="ViewCount"/> of them.
         /// </returns>
         /// <exception cref="McpException">
         /// Thrown when the request is invalid, with a message that tells the AI assistant what to correct.
@@ -123,13 +129,16 @@ namespace Mycelium.Fabric.Mcp.Tools
             [Description("Optional: a short title for the view of the trade-off, for example 'Camera and X-band transmitter'.")] string title = null,
             McpServer server = null)
         {
-            var study = this.CreateStudy(new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, null, title));
+            var request = new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, null, title);
+            var study = this.CreateStudy(request);
             var resultText = JsonSerializer.Serialize(new TradeOffResult(study.Status, study.Current, study.Best, study.Conflicts), McpJsonUtilities.DefaultOptions);
             var toolResult = new CallToolResult { Content = [new TextContentBlock { Text = resultText }] };
 
             if (this.appHostDetector.ShowsApps(server?.ClientCapabilities))
             {
-                toolResult.StructuredContent = JsonSerializer.SerializeToElement(study, StudySerializerOptions);
+                var viewRequest = request with { CompareBy = null, Count = Math.Max(count, ViewCount) };
+                var viewStudy = viewRequest == request ? study : this.CreateStudy(viewRequest);
+                toolResult.StructuredContent = JsonSerializer.SerializeToElement(viewStudy, StudySerializerOptions);
             }
 
             return toolResult;

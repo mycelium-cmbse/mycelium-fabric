@@ -62,7 +62,7 @@ namespace Mycelium.Fabric.Mcp.Tools
                 request.Title,
                 root,
                 solution.Status,
-                request with { Excluded = request.Excluded ?? [] },
+                request with { Objectives = request.Objectives ?? [], Constraints = request.Constraints ?? [], Excluded = request.Excluded ?? [] },
                 [.. problem.GetAttributes().Select(attribute => new TradeOffAttribute(attribute, problem.GetUnit(attribute)))],
                 [.. problem.Decisions.Select((decision, decisionIndex) => CreateChoice(problem, decision, decisionIndex))],
                 problem.Objectives,

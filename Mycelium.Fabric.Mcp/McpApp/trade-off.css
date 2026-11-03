@@ -80,7 +80,6 @@
 .tr-better { color: var(--success); }
 .tr-worse { color: var(--danger); }
 .tr-checks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-.tr-card h3.tr-group { margin: 0; padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--muted-bg); font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--fg2); }
 
 #excluded { padding: 0 12px; margin-bottom: 12px; }
 .tr-scroll { max-height: 200px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
