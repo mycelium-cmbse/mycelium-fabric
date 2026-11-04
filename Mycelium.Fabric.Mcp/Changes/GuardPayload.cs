@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.Mcp.Changes
 {
     using System.ComponentModel;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// The guard of a transition in an <see cref="ElementPayload"/>: an attribute compared with a limit or with another
@@ -22,12 +23,14 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Gets the name of the attribute that the guard compares, or a path to an attribute of a feature.
         /// </summary>
         [Description("The compared attribute, found from the owner of the transition up through its owners, for example 'batteryCharge' (an attribute of the part whose states these are), or a path such as 'eps.battery.charge'.")]
+        [JsonRequired]
         public string Attribute { get; init; }
 
         /// <summary>
         /// Gets the comparison operator of the guard.
         /// </summary>
         [Description("How the attribute compares with the limit: '<', '<=', '>', '>=', '==' or '!='.")]
+        [JsonRequired]
         public string Operator { get; init; }
 
         /// <summary>

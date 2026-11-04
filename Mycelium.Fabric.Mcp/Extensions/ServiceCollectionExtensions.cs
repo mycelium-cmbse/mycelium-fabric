@@ -14,6 +14,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using System.Linq;
     using System.Reflection;
 
+    using Microsoft.Extensions.AI;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
     using Microsoft.Extensions.Options;
@@ -21,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Documents;
     using ModelContextProtocol.Extensions.Apps;
+    using ModelContextProtocol.Server;
 
     using Mycelium.Fabric.Mcp.Prompts;
     using Mycelium.Fabric.Mcp.Resources;
@@ -48,7 +50,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <see cref="ConstructionOptions"/> that tell whether apply_changes returns the new issues of a batch, all read from
             /// the configuration of the host, a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this
             /// assembly, and for the review of a batch by the user in a host that shows MCP Apps, a <see cref="PendingBatchStore"/>,
-            /// an <see cref="AppHostDetector"/> and the <see cref="BatchReviewResource"/> that serves the view of a batch.
+            /// an <see cref="AppHostDetector"/> and the <see cref="BatchReviewResource"/> that serves the view of a batch. The input
+            /// schema of apply_changes is the strict schema of <see cref="ModelChangeSchema"/>, and the
+            /// <see cref="ToolArgumentChecker"/> checks the arguments of a tool against such a schema before the tool is called.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -103,16 +107,21 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return new DocumentReader(new Uri(documentDirectory), serviceProvider.GetServices<IDocumentParser>());
                 });
 
+                // WithTools<T>() takes no options for the input schema: the tools of ConstructionTools are created as it creates
+                // them, apply_changes with the strict schema of ModelChangeSchema.
+                services.AddSingleton(serviceProvider => CreateConstructionTool(nameof(ConstructionTools.ApplyChanges), ModelChangeSchema.CreateOptions, serviceProvider));
+                services.AddSingleton(serviceProvider => CreateConstructionTool(nameof(ConstructionTools.DecideBatch), schemaCreateOptions: null, serviceProvider));
+
                 return services
                     .AddMcpServer()
                     .WithTools<NavigationTools>()
                     .WithTools<BudgetTools>()
-                    .WithTools<ConstructionTools>()
                     .WithTools<RequirementTools>()
                     .WithTools<ExportTools>()
                     .WithTools<TradeOffTools>()
                     .WithTools<ValidationTools>()
                     .WithTools<DocumentTools>()
+                    .WithRequestFilters(filters => filters.AddCallToolFilter(ToolArgumentChecker.CheckArguments))
                     // A static class cannot be a type argument: the prompts are registered by their type.
                     .WithPrompts([typeof(GenerationPrompts), typeof(RequirementPrompts)])
                     .WithResources([typeof(BatchReviewResource)])
@@ -148,6 +157,20 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
                 return services;
             }
+        }
+
+        /// <summary>
+        /// Creates a tool of <see cref="ConstructionTools"/> as <c>WithTools&lt;T&gt;()</c> creates it, a new
+        /// <see cref="ConstructionTools"/> answering each call, with the given options of its input schema.
+        /// </summary>
+        /// <param name="methodName">The name of the method of the tool, for example <c>ApplyChanges</c>.</param>
+        /// <param name="schemaCreateOptions">The options of the input schema, or <c>null</c> for those of the SDK.</param>
+        /// <param name="serviceProvider">The <see cref="IServiceProvider"/> of the server.</param>
+        /// <returns>The <see cref="McpServerTool"/>.</returns>
+        private static McpServerTool CreateConstructionTool(string methodName, AIJsonSchemaCreateOptions schemaCreateOptions, IServiceProvider serviceProvider)
+        {
+            return McpServerTool.Create(typeof(ConstructionTools).GetMethod(methodName), request => ActivatorUtilities.CreateInstance<ConstructionTools>(request.Services),
+                new McpServerToolCreateOptions { Services = serviceProvider, SchemaCreateOptions = schemaCreateOptions });
         }
     }
 }
