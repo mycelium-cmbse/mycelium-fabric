@@ -39,7 +39,8 @@ jobs:
         run: |
           dotnet tool install --global dotnet-sonarscanner
           dotnet tool install --global dotnet-coverage
-          dotnet sonarscanner begin /k:"mycelium-cmbse_mycelium-fabric" /o:"mycelium-cmbse" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml /d:sonar.javascript.lcov.reportPaths="$GITHUB_WORKSPACE/Mycelium.Fabric.Mcp/lcov.info"
+          # Exclude the SDK-generated PostgreSQL artifact from Oracle PL/SQL analysis.
+          dotnet sonarscanner begin /k:"mycelium-cmbse_mycelium-fabric" /o:"mycelium-cmbse" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml /d:sonar.javascript.lcov.reportPaths="$GITHUB_WORKSPACE/Mycelium.Fabric.Mcp/lcov.info" /d:sonar.exclusions="Mycelium.Fabric.FunctionalDataServer/Persistence/Sql/schema.sql"
 
       - name: Build
         run: dotnet build Mycelium.Fabric.sln --no-restore --no-incremental /p:ContinuousIntegrationBuild=true
