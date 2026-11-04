@@ -36,14 +36,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// Create a new branch with the given name (branchName) in the given project, and set the head of the
         /// new branch as the given commit (head).
         /// </summary>
-        /// <param name="projectId">
-        /// The identifier of the project.
-        /// </param>
-        /// <param name="branchName">
-        /// The branchName.
-        /// </param>
-        /// <param name="headId">
-        /// The identifier of the head.
+        /// <param name="branch">
+        /// The Branch to create: only its <c>name</c> and <c>head</c> are read, and the service assigns every other member.
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken" /> that cancels the operation.
@@ -51,7 +45,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<Branch>> CreateBranchAsync(Guid projectId, string branchName, Guid headId, CancellationToken cancellationToken);
+        Task<ErrorOr<Branch>> CreateBranchAsync(Branch branch, CancellationToken cancellationToken);
 
         /// <summary>
         /// Create a new commit with the given change (collection of DataVersion records) in the given branch of
@@ -81,11 +75,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <param name="branchId">
         /// The identifier of the branch.
         /// </param>
-        /// <param name="previousCommitsIds">
-        /// The identifier of the previousCommits elements.
-        /// </param>
-        /// <param name="projectId">
-        /// The identifier of the project.
+        /// <param name="commit">
+        /// The Commit to create: only its <c>previousCommits</c> are read, and the service assigns every other member.
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken" /> that cancels the operation.
@@ -93,20 +84,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<Commit>> CreateCommitAsync(IReadOnlyList<DataVersion> change, Guid? branchId, IReadOnlyList<Guid> previousCommitsIds, Guid projectId, CancellationToken cancellationToken);
+        Task<ErrorOr<Commit>> CreateCommitAsync(IReadOnlyList<DataVersion> change, Guid? branchId, Commit commit, CancellationToken cancellationToken);
 
         /// <summary>
         /// Create a new tag with the given name (tagName) in the given project, and set the taggedCommit of the
         /// new tag as the given commit (taggedCommit).
         /// </summary>
-        /// <param name="projectId">
-        /// The identifier of the project.
-        /// </param>
-        /// <param name="tagName">
-        /// The tagName.
-        /// </param>
-        /// <param name="taggedCommitId">
-        /// The identifier of the taggedCommit.
+        /// <param name="tag">
+        /// The Tag to create: only its <c>name</c> and <c>taggedCommit</c> are read, and the service assigns every other member.
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken" /> that cancels the operation.
@@ -114,7 +99,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<Tag>> CreateTagAsync(Guid projectId, string tagName, Guid taggedCommitId, CancellationToken cancellationToken);
+        Task<ErrorOr<Tag>> CreateTagAsync(Tag tag, CancellationToken cancellationToken);
 
         /// <summary>
         /// Delete the branch with the given id (branchId) in the given project.
@@ -160,17 +145,17 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// the compareCommit but present in the baseCommit, DataDifference.compareData will be empty and
         /// DataDifference.baseData will include the corresponding DataVersion. If any data is present in both
         /// but different in the compareCommit and baseCommit, DataDifference.compareData and
-        /// DataDifference.baseData will include the corresponding DataVersion records.The operation diffCommits
-        /// in ProjectDataVersioningService has an optional argument changeTypes that is a collection typed by
-        /// the enumeration ChangeType with three literals (CREATED, UPDATED, DELETED).If the argument
-        /// changeTypes is passed, then only the changes of the given type will be returned by the operation as
-        /// DataDifference objects. Some examples to elaborate this behavior are included below.If changeTypes =
-        /// [], i.e. the argument is not specified, then the DataDifference objects for all the data that was
-        /// created, updated, or deleted in the compareCommit versus the baseCommit will be returned.If
-        /// changeTypes = ['DELETED'], then the DataDifference objects for all the data that was deleted in the
-        /// compareCommit versus the baseCommit will be returned. If changeTypes = ['CREATED', 'UPDATED'], then
-        /// the DataDifference objects for all the data that was created or updated in the compareCommit versus
-        /// the baseCommit will be returned.
+        /// DataDifference.baseData will include the corresponding DataVersion records. The operation
+        /// diffCommits in ProjectDataVersioningService has an optional argument changeTypes that is a
+        /// collection typed by the enumeration ChangeType with three literals (CREATED, UPDATED, DELETED). If
+        /// the argument changeTypes is passed, then only the changes of the given type will be returned by the
+        /// operation as DataDifference objects. Some examples to elaborate this behavior are included below. If
+        /// changeTypes = [], i.e. the argument is not specified, then the DataDifference objects for all the
+        /// data that was created, updated, or deleted in the compareCommit versus the baseCommit will be
+        /// returned. If changeTypes = ['DELETED'], then the DataDifference objects for all the data that was
+        /// deleted in the compareCommit versus the baseCommit will be returned. If changeTypes = ['CREATED',
+        /// 'UPDATED'], then the DataDifference objects for all the data that was created or updated in the
+        /// compareCommit versus the baseCommit will be returned.
         /// </summary>
         /// <param name="baseCommitId">
         /// The identifier of the baseCommit.
@@ -244,14 +229,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         Task<ErrorOr<Commit>> GetCommitByIdAsync(Guid projectId, Guid commitId, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Get the change in the given commit of the given project.The operation getCommitChange in
+        /// Get the change in the given commit of the given project. The operation getCommitChange in
         /// ProjectDataVersioningService has an optional argument changeTypes that is a collection typed by the
-        /// enumeration ChangeType with three literals (CREATED, UPDATED, DELETED).If the argument changeTypes
+        /// enumeration ChangeType with three literals (CREATED, UPDATED, DELETED). If the argument changeTypes
         /// is passed, then only the changes of the given type will be returned by the operation as DataVersion
-        /// records. Some examples to elaborate this behavior are included below.If changeTypes = [], i.e. the
+        /// records. Some examples to elaborate this behavior are included below. If changeTypes = [], i.e. the
         /// argument is not specified, then the DataVersion records for all the data that was created, updated,
-        /// or deleted in the given commit will be returned.If changeTypes = ['DELETED'], then the DataVersion
-        /// records for all the data that was deleted in the given commit will be returned.If changeTypes =
+        /// or deleted in the given commit will be returned. If changeTypes = ['DELETED'], then the DataVersion
+        /// records for all the data that was deleted in the given commit will be returned. If changeTypes =
         /// ['CREATED', 'UPDATED'], then the DataVersion records for all the data that was created or updated in
         /// the given commit will be returned.
         /// </summary>
@@ -399,12 +384,12 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <summary>
         /// Merge the given commits (commitsToMerge) in the given branch (baseBranch). The commits included in
         /// commitsToMerge may be commits referenced by a CommitReference, such as Branch.head or
-        /// Tag.taggedCommit, or any other commit in the owning project (Project.commits).This operation returns
-        /// a MergeResult which will include either of the following: (1) commit after the merge operation if
-        /// successful, or (2) a set of DataIdentity records representing the merge conflicts if the merge
-        /// operation is unsuccessful.Two optional inputs may be provided: (1) resolution as a set of Data that
-        /// will resolve the merge conflicts, and (2) description of the merged commit if this operation is
-        /// successful.
+        /// Tag.taggedCommit, or any other commit in the owning project (Project.commits). This operation
+        /// returns a MergeResult which will include either of the following: (1) commit after the merge
+        /// operation if successful, or (2) a set of DataIdentity records representing the merge conflicts if
+        /// the merge operation is unsuccessful. Two optional inputs may be provided: (1) resolution as a set of
+        /// Data that will resolve the merge conflicts, and (2) description of the merged commit if this
+        /// operation is successful.
         /// </summary>
         /// <param name="baseBranchId">
         /// The identifier of the baseBranch.

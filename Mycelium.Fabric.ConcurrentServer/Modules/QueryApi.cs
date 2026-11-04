@@ -86,7 +86,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         /// <param name="logger">The logger of the module.</param>
         /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// <c>scope</c> and <c>orderBy</c> are passed empty, since <c>QueryRequest</c> carries neither.
+        /// <c>scope</c> and <c>orderBy</c> are left empty, since <c>QueryRequest</c> carries neither.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
@@ -119,8 +119,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
                 }
 
                 var query = body.Content.Value.ToPim();
+                query.Project = projectId;
 
-                var outcome = await queryService.CreateQueryAsync(query.Name, projectId, query.Select, [], query.Where, [], context.RequestAborted);
+                var outcome = await queryService.CreateQueryAsync(query, context.RequestAborted);
 
                 await WriteAsync<Query, SysML2.NET.PIM.DTO.Query>(context, operationId, outcome, StatusCodes.Status201Created);
             }

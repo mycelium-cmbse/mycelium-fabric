@@ -35,11 +35,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <summary>
         /// Create a new project with the given name and description (optional).
         /// </summary>
-        /// <param name="name">
-        /// The name.
-        /// </param>
-        /// <param name="description">
-        /// The description.
+        /// <param name="project">
+        /// The Project to create: only its <c>name</c> and <c>description</c> are read, and the service assigns every other member.
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken" /> that cancels the operation.
@@ -47,27 +44,27 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<Project>> CreateProjectAsync(string name, string description, CancellationToken cancellationToken);
+        Task<ErrorOr<Project>> CreateProjectAsync(Project project, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Delete the project with the given id (projectId).The following pre-condition must be satisfied for a
-        /// project to be deleted.<ol> <li>Project with given projectId exists.</li></ol>The following
-        /// post-condition must be satisfied for a project to be deleted.<ol> <li>All operations of all services
-        /// where projectId (Id of the deleted project) is an input argument will return null.</li></ol>Note
-        /// that when a project is being deleted, elements owned by the project may be used in other projects
-        /// via project usages. The detection of this condition and subsequent behavior is left to the API and
-        /// Service providers. As a general recommendation, API and Service providers may implement different
-        /// behaviors, such as, but not limited to, the following.<ol> <li>Allow projects to be deleted
-        /// irrespective of any of the elements from its latest tag (commit), default or pre-specified branches,
-        /// being used in other projects, via project usages. The Service provider guarantees that future
-        /// operations involving the using projects will continue to work in the absence of referenced elements
-        /// owned by the deleted project. It is up to the Service Provider to find a way to implement this
-        /// guarantee, such as by suppressing such nonexistent element references or reporting only unique
+        /// Delete the project with the given id (projectId). The following pre-condition must be satisfied for
+        /// a project to be deleted. <ol> <li>Project with given projectId exists.</li> </ol> The following
+        /// post-condition must be satisfied for a project to be deleted. <ol> <li>All operations of all
+        /// services where projectId (Id of the deleted project) is an input argument will return null.</li>
+        /// </ol> Note that when a project is being deleted, elements owned by the project may be used in other
+        /// projects via project usages. The detection of this condition and subsequent behavior is left to the
+        /// API and Service providers. As a general recommendation, API and Service providers may implement
+        /// different behaviors, such as, but not limited to, the following. <ol> <li>Allow projects to be
+        /// deleted irrespective of any of the elements from its latest tag (commit), default or pre-specified
+        /// branches, being used in other projects, via project usages. The Service provider guarantees that
+        /// future operations involving the using projects will continue to work in the absence of referenced
+        /// elements owned by the deleted project. It is up to the Service Provider to find a way to implement
+        /// this guarantee, such as by suppressing such nonexistent element references or reporting only unique
         /// identifiers of nonexistent element references in operation results.</li> <li>Allow projects to be
         /// deleted only if none of the elements in a list of pre-specified commits (e.g. latest tag and main
         /// branch) are being used in the list of pre-specified commits (e.g. latest tag or main branch) of
         /// another project, via project usage.</li> <li>Allow projects to be deleted only if none of their
-        /// commits are referenced by project usages in any of the commits of any other project.</li></ol>
+        /// commits are referenced by project usages in any of the commits of any other project.</li> </ol>
         /// </summary>
         /// <param name="projectId">
         /// The projectId.
@@ -111,17 +108,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <summary>
         /// Update the project with the given id (projectId).
         /// </summary>
-        /// <param name="projectId">
-        /// The projectId.
-        /// </param>
-        /// <param name="name">
-        /// The name.
-        /// </param>
-        /// <param name="description">
-        /// The description.
-        /// </param>
-        /// <param name="defaultBranchId">
-        /// The identifier of the defaultBranch.
+        /// <param name="project">
+        /// The changes to the Project in scope: only its <c>name</c>, <c>description</c> and <c>defaultBranch</c> are read, and a member left unset keeps its current value.
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken" /> that cancels the operation.
@@ -129,7 +117,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<Project>> UpdateProjectAsync(Guid projectId, string name, string description, Guid? defaultBranchId, CancellationToken cancellationToken);
+        Task<ErrorOr<Project>> UpdateProjectAsync(Project project, CancellationToken cancellationToken);
     }
 }
 

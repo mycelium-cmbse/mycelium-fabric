@@ -137,7 +137,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             EndpointInvocation.VerifyInformationLogged(this.logger, "postTagByProject");
 
             this.versioningService
-                .Setup(service => service.CreateTagAsync(ProjectId, "Release 1", TaggedCommitId, It.IsAny<CancellationToken>()))
+                .Setup(service => service.CreateTagAsync(It.Is<Tag>(tag => tag.OwningProject == ProjectId && tag.Name == "Release 1" && tag.TaggedCommit == TaggedCommitId),
+                    It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Record());
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/tags",
@@ -145,11 +146,12 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
             invocation.AssertPayload(StatusCodes.Status201Created, TagId.ToString());
 
-            this.versioningService.Verify(service => service.CreateTagAsync(ProjectId, "Release 1", TaggedCommitId, It.IsAny<CancellationToken>()), Times.Once);
+            this.versioningService.Verify(service => service.CreateTagAsync(It.IsAny<Tag>(), It.IsAny<CancellationToken>()), Times.Once);
 
             // A tag name already taken in the project is a conflict, not a validation failure.
             this.versioningService
-                .Setup(service => service.CreateTagAsync(ProjectId, "Release 1", TaggedCommitId, It.IsAny<CancellationToken>()))
+                .Setup(service => service.CreateTagAsync(It.Is<Tag>(tag => tag.OwningProject == ProjectId && tag.Name == "Release 1" && tag.TaggedCommit == TaggedCommitId),
+                    It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.Conflict("tag.duplicate", "A tag with the given name already exists."));
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/tags",

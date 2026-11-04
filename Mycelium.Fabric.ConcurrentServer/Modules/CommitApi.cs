@@ -90,7 +90,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
         /// <param name="logger">The logger of the module.</param>
         /// <returns>A <see cref="Task"/> that completes once the response is written.</returns>
         /// <remarks>
-        /// The branch comes from the optional <c>branchId</c> query parameter; <c>previousCommits</c> has no REST source and is passed empty.
+        /// The branch comes from the optional <c>branchId</c> query parameter; <c>previousCommits</c> has no REST source and is left empty.
         /// </remarks>
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(Error), StatusCodes.Status500InternalServerError)]
@@ -131,9 +131,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Modules
                     return;
                 }
 
-                var (_, change) = body.Content.Value.ToPimWithChange();
+                var (commit, change) = body.Content.Value.ToPimWithChange();
+                commit.OwningProject = projectId;
 
-                var outcome = await versioningService.CreateCommitAsync(change, branchId.Value, [], projectId, context.RequestAborted);
+                var outcome = await versioningService.CreateCommitAsync(change, branchId.Value, commit, context.RequestAborted);
 
                 await WriteAsync<Commit, SysML2.NET.PIM.DTO.Commit>(context, operationId, outcome, StatusCodes.Status201Created);
             }

@@ -167,7 +167,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             EndpointInvocation.VerifyInformationLogged(this.logger, "postProject");
 
             this.projectService
-                .Setup(service => service.CreateProjectAsync("SysML v2 API Start", "Getting started", It.IsAny<CancellationToken>()))
+                .Setup(service => service.CreateProjectAsync(It.Is<Project>(project => project.Name == "SysML v2 API Start" && project.Description == "Getting started"),
+                    It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Record());
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, "/projects",
@@ -175,7 +176,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
             invocation.AssertPayload(StatusCodes.Status201Created, ProjectId.ToString());
 
-            this.projectService.Verify(service => service.CreateProjectAsync("SysML v2 API Start", "Getting started", It.IsAny<CancellationToken>()), Times.Once);
+            this.projectService.Verify(service => service.CreateProjectAsync(It.IsAny<Project>(), It.IsAny<CancellationToken>()), Times.Once);
 
             // A body without the @type discriminator cannot be resolved to a request model.
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, "/projects", """{ "name": "No discriminator" }""");
@@ -222,7 +223,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             EndpointInvocation.VerifyInformationLogged(this.logger, "putProjectById");
 
             this.projectService
-                .Setup(service => service.UpdateProjectAsync(ProjectId, "Renamed", null, BranchId, It.IsAny<CancellationToken>()))
+                .Setup(service => service.UpdateProjectAsync(
+                    It.Is<Project>(project => project.Id == ProjectId && project.Name == "Renamed" && project.Description == null && project.DefaultBranch == BranchId),
+                    It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Record());
 
             // The body also carries setDefaultBranch, which §8.1.3 maps onto this same endpoint.
@@ -231,7 +234,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
             invocation.AssertPayload(StatusCodes.Status200OK, ProjectId.ToString());
 
-            this.projectService.Verify(service => service.UpdateProjectAsync(ProjectId, "Renamed", null, BranchId, It.IsAny<CancellationToken>()), Times.Once);
+            this.projectService.Verify(service => service.UpdateProjectAsync(It.IsAny<Project>(), It.IsAny<CancellationToken>()), Times.Once);
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Put, $"/projects/{ProjectId}", "not json at all");
 

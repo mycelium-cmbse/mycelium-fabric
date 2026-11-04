@@ -166,7 +166,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
             EndpointInvocation.VerifyInformationLogged(this.logger, "postBranchByProject");
 
             this.versioningService
-                .Setup(service => service.CreateBranchAsync(ProjectId, "feature", HeadId, It.IsAny<CancellationToken>()))
+                .Setup(service => service.CreateBranchAsync(It.Is<Branch>(branch => branch.OwningProject == ProjectId && branch.Name == "feature" && branch.Head == HeadId),
+                    It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Record());
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Post, $"/projects/{ProjectId}/branches",
@@ -194,8 +195,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
                 invocation.AssertError(StatusCodes.Status400BadRequest, "postBranchByProject");
             }
 
-            this.versioningService.Verify(service => service.CreateBranchAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
-                Times.Once);
+            this.versioningService.Verify(service => service.CreateBranchAsync(It.IsAny<Branch>(), It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Test]
