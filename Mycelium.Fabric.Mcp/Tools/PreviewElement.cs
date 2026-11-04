@@ -90,7 +90,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Adds up the budget attributes, the mass and the power, over a part and its sub-parts, as sum_attribute does.
+        /// Adds up the budget attributes, the mass and the power, over a part and its sub-parts, each counted as many times as its
+        /// multiplicity says, as sum_attribute does.
         /// </summary>
         /// <param name="part">The part.</param>
         /// <returns>
@@ -102,7 +103,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             return BudgetAttributeNames
                 .Select(attributeName => (Name: attributeName, Contributions: part.CollectContributions(attributeName)))
                 .Where(budget => budget.Contributions.Count > 0)
-                .Select(budget => (budget.Name, Total: NumberValue.Sum(budget.Contributions.Select(contribution => new NumberValue(contribution.Value, contribution.Unit)))))
+                .Select(budget => (budget.Name, Total: NumberValue.Sum(budget.Contributions.Select(contribution => contribution.GetTotal()))))
                 .Where(budget => !budget.Total.IsError)
                 .Select(budget => (budget.Name, budget.Total.Value.Number, budget.Total.Value.Unit?.ToString() ?? FindDocumentedUnit(part, budget.Name)))
                 .ToList();
