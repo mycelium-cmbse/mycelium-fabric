@@ -15,6 +15,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
 
     using Microsoft.Extensions.DependencyInjection;
 
+    using Mycelium.Fabric.ConcurrentServer.Persistence;
     using Mycelium.Fabric.ConcurrentServer.Serialization;
 
     using SysML2.NET.Serializer.Json;
@@ -39,6 +40,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
                 Assert.That(provider.GetService<IDeSerializer>(), Is.TypeOf<DeSerializer>());
                 Assert.That(provider.GetServices<IRequestBodyDeserializer>(), Has.One.TypeOf<JsonRequestBodyDeserializer>());
                 Assert.That(provider.GetService<IRequestBodyReader>(), Is.TypeOf<RequestBodyReader>());
+                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IProjectScope)
+                                                                                       && descriptor.ImplementationType == typeof(ProjectScope)
+                                                                                       && descriptor.Lifetime == ServiceLifetime.Scoped));
 
                 // Carter's own default negotiator writes any *json media type without the SysML2.NET serializers, so none of its negotiators survives.
                 Assert.That(provider.GetServices<IResponseNegotiator>(), Has.Exactly(1).Items.And.All.TypeOf<JsonResponseNegotiator>());

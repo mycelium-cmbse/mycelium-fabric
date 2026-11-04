@@ -16,6 +16,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
 
+    using Mycelium.Fabric.ConcurrentServer.Persistence;
+
     using SysML2.NET.Serializer.Json;
 
     /// <summary>
@@ -27,8 +29,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers the Carter modules, the SysML2.NET JSON serializers with the request body readers built on them, and
-            /// <see cref="JsonResponseNegotiator"/> as the only response negotiator.
+            /// Registers the Carter modules, the SysML2.NET JSON serializers with the request body readers built on them,
+            /// <see cref="JsonResponseNegotiator"/> as the only response negotiator, and the per-request <see cref="IProjectScope"/>.
             /// </summary>
             /// <returns>The same service collection, so that registrations chain.</returns>
             /// <remarks>
@@ -42,6 +44,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
                 services.AddSingleton<IDeSerializer, DeSerializer>();
                 services.AddSingleton<IRequestBodyDeserializer, JsonRequestBodyDeserializer>();
                 services.AddSingleton<IRequestBodyReader, RequestBodyReader>();
+                services.AddScoped<IProjectScope, ProjectScope>();
 
                 services.AddCarter();
                 services.RemoveAll<IResponseNegotiator>();
