@@ -88,6 +88,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             var elapsed = Stopwatch.StartNew();
             var token = deadline.Token;
             var stage = "reading connection configuration";
+            Exception initializationFailure;
+            string errorCode;
 
             try
             {
@@ -176,22 +178,34 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 await transaction.CommitAsync(token).ConfigureAwait(false);
 
-                this.logger.LogInformation("Functional Data initialization completed. Created schema: {CreatedSchema}.", !schemaExists);
+                if (this.logger.IsEnabled(LogLevel.Information))
+                {
+                    this.logger.LogInformation("Functional Data initialization completed. Created schema: {CreatedSchema}.", !schemaExists);
+                }
+
+                return;
             }
             catch (Exception) when (token.IsCancellationRequested)
             {
-                this.logger.LogWarning("Functional Data initialization was canceled or exceeded its deadline during {Stage}.", stage);
-
-                throw new OperationCanceledException("Functional Data initialization was canceled or exceeded its deadline.", token);
+                errorCode = null;
+                initializationFailure = new OperationCanceledException("Functional Data initialization was canceled or exceeded its deadline.", token);
             }
             catch (Exception exception)
             {
-                var errorCode = exception is PostgresException postgresException ? postgresException.SqlState : exception.GetType().Name;
-
-                this.logger.LogError("Functional Data initialization failed during {Stage}. Error code: {ErrorCode}.", stage, errorCode);
-
-                throw new InvalidOperationException($"Functional Data initialization failed during {stage}. Error code: {errorCode}.");
+                errorCode = exception is PostgresException postgresException ? postgresException.SqlState : exception.GetType().Name;
+                initializationFailure = new InvalidOperationException($"Functional Data initialization failed during {stage}. Error code: {errorCode}.");
             }
+
+            if (initializationFailure is OperationCanceledException)
+            {
+                this.logger.LogWarning("Functional Data initialization was canceled or exceeded its deadline during {Stage}.", stage);
+            }
+            else
+            {
+                this.logger.LogError("Functional Data initialization failed during {Stage}. Error code: {ErrorCode}.", stage, errorCode);
+            }
+
+            throw initializationFailure;
         }
 
         /// <summary>

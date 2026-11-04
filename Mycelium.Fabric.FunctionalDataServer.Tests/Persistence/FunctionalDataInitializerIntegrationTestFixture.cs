@@ -34,7 +34,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     [TestFixture]
     [Category("Database")]
     [NonParallelizable]
-    public class FunctionalDataInitializerIntegrationTestFixture
+    public partial class FunctionalDataInitializerIntegrationTestFixture
     {
         private PostgreSqlContainer database;
 
@@ -238,8 +238,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             using var reader = new StreamReader(stream);
 
             var sql = await reader.ReadToEndAsync();
-            var expectedConstraints = Regex.Matches(sql, "CONSTRAINT \"([^\"]+)\"").Select(match => match.Groups[1].Value).ToArray();
-            var expectedIndexes = Regex.Matches(sql, "CREATE INDEX \"([^\"]+)\"").Select(match => match.Groups[1].Value).ToArray();
+            var expectedConstraints = ConstraintNameRegex().Matches(sql).Select(match => match.Groups[1].Value).ToArray();
+            var expectedIndexes = IndexNameRegex().Matches(sql).Select(match => match.Groups[1].Value).ToArray();
             var constraints = await this.ReadNamesAsync("SELECT conname FROM pg_constraint WHERE connamespace = '\"Fabric\"'::regnamespace");
             var indexes = await this.ReadNamesAsync("SELECT indexname FROM pg_indexes WHERE schemaname = 'Fabric'");
 
@@ -357,6 +357,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM \"Fabric\".\"BranchProtectionRule\" WHERE id = @id", secondRule), Is.EqualTo(1));
             }
         }
+
+        [GeneratedRegex("CONSTRAINT \"([^\"]+)\"")]
+        private static partial Regex ConstraintNameRegex();
+
+        [GeneratedRegex("CREATE INDEX \"([^\"]+)\"")]
+        private static partial Regex IndexNameRegex();
 
         private FunctionalDataInitializer CreateInitializer(string timeout = "60")
         {
