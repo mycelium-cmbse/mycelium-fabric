@@ -121,7 +121,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var satelliteModelProvider = CreateSatelliteModelProvider();
             var tools = new RequirementTools(satelliteModelProvider);
 
-            var batch = new ConstructionTools(satelliteModelProvider, new Mock<IModelValidator>().Object, Options.Create(new ConstructionOptions { ReportNewIssues = false })).ApplyChanges(
+            var batch = satelliteModelProvider.ApplyChanges(
             [
                 new ModelChange { Identity = MassBudgetId, Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId, SatisfyingPart = Eosat1Id } },
@@ -169,7 +169,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
             emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
-            var batch = new ConstructionTools(emptyModelProvider, new Mock<IModelValidator>().Object, Options.Create(new ConstructionOptions { ReportNewIssues = false })).ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
+            var batch = emptyModelProvider.ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
             var result = new RequirementTools(emptyModelProvider).CheckRequirements();
 
             using (Assert.EnterMultipleScope())

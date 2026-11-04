@@ -182,7 +182,62 @@ namespace Mycelium.Fabric.Mcp.Services
                 this.ApplyCommit(commitRequest.Value);
                 this.temporaryNames = batchTemporaryNames;
 
-                return new ApplyChangesResult(this.GetCreatedElements(commitRequest.Value, previousElementIds), []);
+                return new ApplyChangesResult(GetCreatedElements(commitRequest.Value, previousElementIds, this.elementsById), []);
+            }
+        }
+
+        /// <summary>
+        /// Computes what a batch of changes would do to the loaded model, on a copy: the batch is turned into a
+        /// <see cref="CommitRequest"/> as <see cref="ApplyChanges"/> does, then the elements of the model it would give are
+        /// built from a copy of the DTOs. The loaded model and the temporary names of the previous batches are left unchanged.
+        /// </summary>
+        /// <param name="changes">The changes to preview, in order.</param>
+        /// <returns>The <see cref="ModelPreview"/> that describes the model the batch would give, or its problems.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="changes"/> is <c>null</c>.
+        /// </exception>
+        public ModelPreview PreviewChanges(IReadOnlyList<ModelChange> changes)
+        {
+            ArgumentNullException.ThrowIfNull(changes);
+
+            lock (this.modelLock)
+            {
+                var batchTemporaryNames = new Dictionary<string, Guid>(this.temporaryNames);
+                var commitRequest = this.changeApplier.Apply(this.ElementDtos, changes, batchTemporaryNames);
+
+                if (commitRequest.IsError)
+                {
+                    return new ModelPreview([.. commitRequest.Errors.Select(error => error.Description)]);
+                }
+
+                var previousElementIds = this.elementsById.Keys.ToHashSet();
+                var candidateElements = BuildElements(this.MergeCommit(commitRequest.Value));
+                var candidateElementsById = candidateElements.ToDictionary(element => element.Id);
+
+                var modifiedElements = new List<ChangedElement>();
+                var deletedElements = new List<ChangedElement>();
+
+                // A change without type designates an existing element, or one that an earlier change of the batch creates.
+                foreach (var change in changes.Where(change => string.IsNullOrWhiteSpace(change.Payload?.Type)))
+                {
+                    if (!TryResolveIdentity(change.Identity, batchTemporaryNames, out var elementId) || !previousElementIds.Contains(elementId))
+                    {
+                        continue;
+                    }
+
+                    var element = change.Payload == null ? this.elementsById[elementId] : candidateElementsById[elementId];
+                    var changedElements = change.Payload == null ? deletedElements : modifiedElements;
+                    changedElements.Add(new ChangedElement(elementId, element.qualifiedName, element.GetType().Name));
+                }
+
+                // An element that several changes of the batch modify is listed once.
+                return new ModelPreview([])
+                {
+                    Elements = candidateElements,
+                    CreatedElements = GetCreatedElements(commitRequest.Value, previousElementIds, candidateElementsById),
+                    ModifiedElements = [.. modifiedElements.DistinctBy(changedElement => changedElement.Id)],
+                    DeletedElements = [.. deletedElements.DistinctBy(changedElement => changedElement.Id)]
+                };
             }
         }
 
@@ -307,14 +362,15 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Gets the elements that a commit has created as a change creates them: the new packages, definitions and usages
-        /// owned as members, without the elements that the server builds around them, such as memberships, values,
-        /// documentation or the subject of a requirement. The caller holds the lock and has applied the commit.
+        /// Gets the elements that a commit creates as a change creates them: the new packages, definitions and usages owned as
+        /// members, without the elements that the server builds around them, such as memberships, values, documentation or the
+        /// subject of a requirement.
         /// </summary>
-        /// <param name="commitRequest">The applied <see cref="CommitRequest"/>.</param>
+        /// <param name="commitRequest">The <see cref="CommitRequest"/>.</param>
         /// <param name="previousElementIds">The <c>Id</c> of the elements of the model before the commit.</param>
+        /// <param name="elementsById">The elements of the model after the commit, indexed by their <c>Id</c>.</param>
         /// <returns>The created elements, in the order of the change of the commit.</returns>
-        private List<CreatedElement> GetCreatedElements(CommitRequest commitRequest, HashSet<Guid> previousElementIds)
+        private static List<CreatedElement> GetCreatedElements(CommitRequest commitRequest, HashSet<Guid> previousElementIds, Dictionary<Guid, IElement> elementsById)
         {
             var newElementIds = commitRequest.Change
                 .Where(dataVersion => dataVersion.Payload != null && !previousElementIds.Contains(dataVersion.Identity.Id))
@@ -323,9 +379,37 @@ namespace Mycelium.Fabric.Mcp.Services
 
             return commitRequest.Change
                 .Where(dataVersion => newElementIds.Contains(dataVersion.Identity.Id))
-                .Select(dataVersion => this.elementsById[dataVersion.Identity.Id])
+                .Select(dataVersion => elementsById[dataVersion.Identity.Id])
                 .Where(element => IsCreatedByChange(element) && IsOwnedAsMember(element, newElementIds))
                 .Select(element => new CreatedElement(element.Id, element.qualifiedName, element.GetType().Name))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Tries to get the <c>Id</c> that the identity of a change designates once its batch has been turned into a commit: an
+        /// identifier, or a temporary name of the batch or of a previous one.
+        /// </summary>
+        /// <param name="identity">The identity of the change.</param>
+        /// <param name="temporaryNames">The temporary names known after the batch, indexed by name.</param>
+        /// <param name="elementId">The designated <c>Id</c>, or <see cref="Guid.Empty"/> when the identity designates nothing.</param>
+        /// <returns><c>true</c> when the identity designates an <c>Id</c>.</returns>
+        private static bool TryResolveIdentity(string identity, Dictionary<string, Guid> temporaryNames, out Guid elementId)
+        {
+            return Guid.TryParse(identity, out elementId) || (identity != null && temporaryNames.TryGetValue(identity, out elementId));
+        }
+
+        /// <summary>
+        /// Builds, with SysML2.NET, the POCOs of the elements of a model from their DTOs.
+        /// </summary>
+        /// <param name="dtos">The DTOs of the model.</param>
+        /// <returns>The elements of the model.</returns>
+        private static List<IElement> BuildElements(List<DtoElement> dtos)
+        {
+            var assembler = new Assembler();
+            assembler.Synchronize(dtos);
+
+            return assembler.Cache.Values
+                .Select(lazyElement => lazyElement.Value)
                 .ToList();
         }
 
@@ -340,10 +424,7 @@ namespace Mycelium.Fabric.Mcp.Services
         /// </exception>
         private Commit ApplyCommit(CommitRequest commitRequest)
         {
-            if (commitRequest.Change == null || !commitRequest.Change.TrueForAll(IsValid))
-            {
-                throw new ArgumentException("Each data version must have an identity, and either no payload or the element that has this identity as payload.", nameof(commitRequest));
-            }
+            var dtos = this.MergeCommit(commitRequest);
 
             var commit = new Commit
             {
@@ -353,6 +434,29 @@ namespace Mycelium.Fabric.Mcp.Services
                 Description = commitRequest.Description,
                 PreviousCommit = this.headCommitId == Guid.Empty ? [] : [this.headCommitId]
             };
+
+            this.SetModel(dtos);
+            this.headCommitId = commit.Id;
+
+            return commit;
+        }
+
+        /// <summary>
+        /// Gets the DTOs of the model that a <see cref="CommitRequest"/> would give, without modifying the loaded model: each
+        /// <see cref="DataVersionRequest"/> with a payload adds or replaces the DTO that has its identity, and each one without
+        /// payload removes it. The caller holds the lock.
+        /// </summary>
+        /// <param name="commitRequest">The <see cref="CommitRequest"/> that describes the commit.</param>
+        /// <returns>The DTOs of the model after the commit.</returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the request has no change or a <see cref="DataVersionRequest"/> cannot be committed.
+        /// </exception>
+        private List<DtoElement> MergeCommit(CommitRequest commitRequest)
+        {
+            if (commitRequest.Change == null || !commitRequest.Change.TrueForAll(IsValid))
+            {
+                throw new ArgumentException("Each data version must have an identity, and either no payload or the element that has this identity as payload.", nameof(commitRequest));
+            }
 
             var dtosById = this.ElementDtos.ToDictionary(dto => dto.Id);
 
@@ -368,10 +472,7 @@ namespace Mycelium.Fabric.Mcp.Services
                 }
             }
 
-            this.SetModel([.. dtosById.Values]);
-            this.headCommitId = commit.Id;
-
-            return commit;
+            return [.. dtosById.Values];
         }
 
         /// <summary>
@@ -380,12 +481,7 @@ namespace Mycelium.Fabric.Mcp.Services
         /// <param name="dtos">The DTOs of the new model.</param>
         private void SetModel(List<DtoElement> dtos)
         {
-            var assembler = new Assembler();
-            assembler.Synchronize(dtos);
-
-            var loadedElements = assembler.Cache.Values
-                .Select(lazyElement => lazyElement.Value)
-                .ToList();
+            var loadedElements = BuildElements(dtos);
 
             var loadedRootElements = loadedElements
                 .Where(element => element.OwningRelationship == null && element is not IRelationship { OwningRelatedElement: not null })

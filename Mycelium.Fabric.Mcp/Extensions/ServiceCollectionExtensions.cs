@@ -20,7 +20,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Documents;
+    using ModelContextProtocol.Extensions.Apps;
+
     using Mycelium.Fabric.Mcp.Prompts;
+    using Mycelium.Fabric.Mcp.Resources;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.TradeOff;
@@ -43,8 +46,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <see cref="JsonModelExporter"/> that writes the model to the export folder of the <see cref="ModelExportOptions"/>,
             /// a <see cref="DocumentReader"/> that reads the document folder of the <see cref="DocumentReaderOptions"/>, the
             /// <see cref="ConstructionOptions"/> that tell whether apply_changes returns the new issues of a batch, all read from
-            /// the configuration of the host, and a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this
-            /// assembly.
+            /// the configuration of the host, a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this
+            /// assembly, and for the review of a batch by the user in a host that shows MCP Apps, a <see cref="PendingBatchStore"/>,
+            /// an <see cref="AppHostDetector"/> and the <see cref="BatchReviewResource"/> that serves the view of a batch.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -81,6 +85,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return new JsonModelExporter(serviceProvider.GetRequiredService<ISerializer>(), new Uri(exportDirectory));
                 });
 
+                services.AddSingleton<IPendingBatchStore, PendingBatchStore>();
+                services.AddSingleton<IAppHostDetector, AppHostDetector>();
+
                 services.AddImplementations<IValidationRule>(typeof(IValidationRule).Assembly, ServiceLifetime.Singleton);
                 services.AddSingleton<IModelValidator, ModelValidator>();
 
@@ -107,7 +114,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<ValidationTools>()
                     .WithTools<DocumentTools>()
                     // A static class cannot be a type argument: the prompts are registered by their type.
-                    .WithPrompts([typeof(GenerationPrompts), typeof(RequirementPrompts)]);
+                    .WithPrompts([typeof(GenerationPrompts), typeof(RequirementPrompts)])
+                    .WithResources([typeof(BatchReviewResource)])
+                    // Last, so that the MCP Apps metadata of every tool registered above is written.
+                    .WithMcpApps();
             }
 
             /// <summary>

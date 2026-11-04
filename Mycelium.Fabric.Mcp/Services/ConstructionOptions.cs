@@ -26,5 +26,12 @@ namespace Mycelium.Fabric.Mcp.Services
         /// introduced. It is <c>true</c> unless the configuration turns it off.
         /// </summary>
         public bool ReportNewIssues { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether a valid batch waits for the decision of the user instead of being applied,
+        /// when the host shows MCP Apps. It is <c>true</c> unless the configuration turns it off, for example for a generation
+        /// bench run in such a host.
+        /// </summary>
+        public bool ReviewBatches { get; set; } = true;
     }
 }

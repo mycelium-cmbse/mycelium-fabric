@@ -99,6 +99,18 @@ namespace Mycelium.Fabric.Mcp.Services
         ApplyChangesResult ApplyChanges(IReadOnlyList<ModelChange> changes);
 
         /// <summary>
+        /// Computes what a batch of changes would do to the loaded model, on a copy: the batch is checked as
+        /// <see cref="ApplyChanges"/> checks it, but the loaded model and the temporary names of the previous batches are
+        /// left unchanged.
+        /// </summary>
+        /// <param name="changes">The changes to preview, in order.</param>
+        /// <returns>The <see cref="ModelPreview"/> that describes the model the batch would give, or its problems.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="changes"/> is <c>null</c>.
+        /// </exception>
+        ModelPreview PreviewChanges(IReadOnlyList<ModelChange> changes);
+
+        /// <summary>
         /// Creates a commit from the given request: each <see cref="DataVersionRequest"/> of its change with a payload adds or
         /// replaces the element that has its identity, and each one without payload removes it.
         /// </summary>
