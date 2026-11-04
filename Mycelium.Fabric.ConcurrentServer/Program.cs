@@ -42,6 +42,8 @@ namespace Mycelium.Fabric.ConcurrentServer
 
             app.UseExceptionHandler(_ => { });
             app.UseStatusCodePages(NegotiateStatusCodeAsync);
+            app.UseRouting();
+            app.UseMiddleware<ProjectScopeMiddleware>();
             app.MapCarter();
 
             app.Run();
