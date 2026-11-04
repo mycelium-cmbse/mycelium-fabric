@@ -71,8 +71,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// there are not more than <paramref name="maximum"/> of them.
         /// </summary>
         /// <param name="maximum">The largest number of combinations to list.</param>
-        /// <returns>The selection of each combination, or <c>null</c> when there are more than <paramref name="maximum"/>.</returns>
-        public IReadOnlyList<IReadOnlyList<int>> EnumerateSelections(int maximum)
+        /// <param name="selections">
+        /// The selection of each combination, or an empty list when there are more than <paramref name="maximum"/>.
+        /// </param>
+        /// <returns><c>true</c> when there are not more than <paramref name="maximum"/> combinations.</returns>
+        public bool TryEnumerateSelections(int maximum, out IReadOnlyList<IReadOnlyList<int>> selections)
         {
             var allowedOptions = this.Decisions
                 .Select((decision, decisionIndex) => Enumerable.Range(0, decision.Options.Count).Where(optionIndex => this.IsAllowed(decisionIndex, optionIndex)).ToList())
@@ -86,18 +89,20 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
                 if (count > maximum)
                 {
-                    return null;
+                    selections = [];
+                    return false;
                 }
             }
 
-            IEnumerable<IReadOnlyList<int>> selections = [[]];
+            IEnumerable<IReadOnlyList<int>> combinations = [[]];
 
             foreach (var options in allowedOptions)
             {
-                selections = selections.SelectMany(selection => options.Select(optionIndex => (IReadOnlyList<int>)[.. selection, optionIndex])).ToList();
+                combinations = combinations.SelectMany(selection => options.Select(optionIndex => (IReadOnlyList<int>)[.. selection, optionIndex])).ToList();
             }
 
-            return [.. selections];
+            selections = [.. combinations];
+            return true;
         }
 
         /// <summary>

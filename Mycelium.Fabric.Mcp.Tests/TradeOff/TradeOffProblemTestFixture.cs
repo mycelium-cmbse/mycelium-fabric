@@ -134,15 +134,18 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         }
 
         [Test]
-        public void VerifyEnumerateSelections()
+        public void VerifyTryEnumerateSelections()
         {
             var withoutLight = this.problem with { Excluded = [new TradeOffVariantReference(0, "light")] };
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(this.problem.EnumerateSelections(10), Is.EqualTo(BothCameras));
-                Assert.That(this.problem.EnumerateSelections(1), Is.Null);
-                Assert.That(withoutLight.EnumerateSelections(10), Is.EqualTo(CurrentCamera));
+                Assert.That(this.problem.TryEnumerateSelections(10, out var bothCameras), Is.True);
+                Assert.That(bothCameras, Is.EqualTo(BothCameras));
+                Assert.That(this.problem.TryEnumerateSelections(1, out var tooMany), Is.False);
+                Assert.That(tooMany, Is.Empty);
+                Assert.That(withoutLight.TryEnumerateSelections(10, out var currentCamera), Is.True);
+                Assert.That(currentCamera, Is.EqualTo(CurrentCamera));
             }
         }
 

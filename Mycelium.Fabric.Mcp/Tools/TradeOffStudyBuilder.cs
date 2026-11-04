@@ -55,8 +55,8 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .SelectMany(alternative => alternative.Conflicts.Select(conflict => compareName == null ? conflict : $"{Describe(compareName, alternative)}: {conflict}"))
                 .ToList();
 
-            var allSelections = problem.EnumerateSelections(MaximumPoints);
-            var pointSelections = allSelections ?? [.. solution.Alternatives.SelectMany(alternative => alternative.Selections)];
+            var pointsComplete = problem.TryEnumerateSelections(MaximumPoints, out var allSelections);
+            IReadOnlyList<IReadOnlyList<int>> pointSelections = pointsComplete ? allSelections : [.. solution.Alternatives.SelectMany(alternative => alternative.Selections)];
 
             return new TradeOffStudy(
                 request.Title,
@@ -72,7 +72,7 @@ namespace Mycelium.Fabric.Mcp.Tools
                 CreateCombination(problem, currentSelection, currentSelection, null, 0),
                 best,
                 CreatePoints(problem, pointSelections, currentSelection),
-                allSelections != null,
+                pointsComplete,
                 conflicts);
         }
 
