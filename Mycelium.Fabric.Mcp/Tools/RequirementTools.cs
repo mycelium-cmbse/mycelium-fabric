@@ -70,6 +70,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         [McpServerTool(Name = "check_requirements", ReadOnly = true)]
         [McpAppUi(ResourceUri = ModelHealthResource.Uri)]
         [Description("Checks the requirements of the model. For each requirement with a required constraint (for example subj.mass * 1.2 <= 150, the constraint of a RequirementUsage in apply_changes) and a part that satisfies it (SatisfyRequirementUsage), computes the values of the attributes on this part as sum_attribute does and tells whether the requirement holds, by how much (gap) and why. "
+            + "For a general question about the model (is it ready, is it healthy, what is wrong with it), call this tool first, then validate_model: when the host shows MCP Apps, the view of this tool shows the results of both. "
             + "Any expression of the model is evaluated: numbers with units (converted), Booleans, texts, enumeration values, feature chains (subj.camera.mass), attributes with a value, + - * / % **, comparisons, and or xor not implies, if, "
             + "and the library functions abs sqrt floor round min max sum product size isEmpty notEmpty select collect (for example (subj.camera, subj.radio)->select {in p; p.mass > 10}). A requirement holds when its required constraints hold, or when one of its assumptions (assume constraint) does not. "
             + "The sums include the margins that the model gives for the values (attribute massMargin in % for mass): value is then the total with margins, and valueWithoutMargins the total without them. "
