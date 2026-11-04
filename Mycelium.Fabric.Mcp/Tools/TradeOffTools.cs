@@ -127,7 +127,7 @@ namespace Mycelium.Fabric.Mcp.Tools
                 + "or the conflicts that make it impossible.")] string compareBy = null,
             [Description("Optional, 1 by default: the number of combinations to return, from 1 to 5, for each compared variant.")] int count = 1,
             [Description("Optional: a short title for the view of the trade-off, for example 'Camera and X-band transmitter'.")] string title = null,
-            McpServer server = null)
+            [Description("Bound by the SDK to the server that receives the call, not part of the tool schema.")] McpServer server = null)
         {
             var request = new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, null, title);
             var study = this.CreateStudy(request);
@@ -164,6 +164,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         [McpServerTool(Name = "explore_trade_off", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
         [McpAppUi(ResourceUri = TradeOffResource.Uri, Visibility = [McpUiToolVisibility.App])]
         [Description("Runs solve_trade_off again with the settings that the user changed in the view of a trade-off. Called by the view only.")]
+        [return: Description("The study with these settings: the choices and their variants, the objectives, the constraints, the best combinations "
+            + "and a point for every combination.")]
         public TradeOffStudy ExploreTradeOff(
             [Description("The identifier (Id, a GUID) of the element under which the totals are computed.")] Guid rootId,
             [Description("The choices to make, as in solve_trade_off.")] IReadOnlyList<TradeOffChoice> choices,

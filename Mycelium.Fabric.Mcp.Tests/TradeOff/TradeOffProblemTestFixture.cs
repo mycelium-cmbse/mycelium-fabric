@@ -20,6 +20,16 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
     [TestFixture]
     public class TradeOffProblemTestFixture
     {
+        /// <summary>
+        /// The selections of the problem: the current or the light camera, each with the small fuel tank.
+        /// </summary>
+        private static readonly int[][] BothCameras = [[0, 1], [1, 1]];
+
+        /// <summary>
+        /// The only selection left when the light camera is excluded.
+        /// </summary>
+        private static readonly int[][] CurrentCamera = [[0, 1]];
+
         private TradeOffProblem problem;
 
         [SetUp]
@@ -130,9 +140,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(this.problem.EnumerateSelections(10), Is.EqualTo(new[] { new[] { 0, 1 }, new[] { 1, 1 } }));
+                Assert.That(this.problem.EnumerateSelections(10), Is.EqualTo(BothCameras));
                 Assert.That(this.problem.EnumerateSelections(1), Is.Null);
-                Assert.That(withoutLight.EnumerateSelections(10), Is.EqualTo(new[] { new[] { 0, 1 } }));
+                Assert.That(withoutLight.EnumerateSelections(10), Is.EqualTo(CurrentCamera));
             }
         }
 

@@ -21,7 +21,7 @@ namespace Mycelium.Fabric.Mcp.Resources
     /// AI assistant.
     /// </summary>
     [McpServerResourceType]
-    public class TradeOffResource
+    public static class TradeOffResource
     {
         /// <summary>
         /// The URI of the view, which solve_trade_off declares in its <c>_meta.ui</c>.
@@ -39,6 +39,7 @@ namespace Mycelium.Fabric.Mcp.Resources
         /// <returns>The HTML page.</returns>
         [McpServerResource(UriTemplate = Uri, Name = "trade_off", MimeType = McpApps.HtmlMimeType)]
         [Description("The view in which the user explores the result of solve_trade_off with other settings.")]
+        [return: Description("The HTML page of the view, with its style sheet and script inside.")]
         public static string GetPage()
         {
             return Page.Value;

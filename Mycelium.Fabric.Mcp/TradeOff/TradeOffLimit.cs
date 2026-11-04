@@ -47,9 +47,19 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// Gets the total of the attribute at which a numeric limit is reached, margin included (<c>150 / 1.2 = 125</c> for
         /// <c>mass * 1.2 &lt;= 150</c>), or <c>null</c> when the limit is the total of another attribute.
         /// </summary>
-        public double? Threshold => this.Limit is { } limit && this.LimitAttribute == null
-            ? Math.Round(this.IsUpperBound ? limit / this.Factor : limit * this.Factor, 3)
-            : null;
+        public double? Threshold
+        {
+            get
+            {
+                if (this.Limit is not { } limit || this.LimitAttribute != null)
+                {
+                    return null;
+                }
+
+                var threshold = this.IsUpperBound ? limit / this.Factor : limit * this.Factor;
+                return Math.Round(threshold, 3);
+            }
+        }
 
         /// <summary>
         /// Gets the factor of the margin, 1 without margin.

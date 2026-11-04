@@ -331,6 +331,18 @@ describe("trade-off view", () => {
             assert.deepEqual(page.sent.at(-1), { message: { jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} }, targetOrigin: HOST_ORIGIN });
         });
 
+        it("tells why the host refused to start the view", async () => {
+            await answer(page, messages(page)[0], null, { code: -32603, message: "Not ready" });
+
+            assert.deepEqual([byId(page, "error").hidden, byId(page, "error").textContent], [false, "Not ready"]);
+        });
+
+        it("tells that the host refused to start the view, even without a reason", async () => {
+            await answer(page, messages(page)[0], null, { code: -32603 });
+
+            assert.equal(byId(page, "error").textContent, "The host did not start the view.");
+        });
+
         it("follows the changes of theme, and answers the requests of the host", async () => {
             await answer(page, messages(page)[0], {});
             page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { theme: "light", styles: { variables: { "--color-text-primary": "#1f2937" } } } });

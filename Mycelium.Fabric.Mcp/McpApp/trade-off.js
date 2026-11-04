@@ -54,7 +54,7 @@ function request(method, params) {
 window.addEventListener("message", event => {
     if (event.source !== window.parent || !isHostOrigin(event.origin)) return;
     const message = event.data;
-    if (!message || message.jsonrpc !== "2.0") return;
+    if (message?.jsonrpc !== "2.0") return;
 
     if (message.id !== undefined && !message.method) {
         const call = pending.get(message.id);
@@ -578,7 +578,10 @@ function drawLimit(chart, limit, onX, scale) {
  */
 function drawPoint(point, number, cx, cy) {
     const isBest = number !== undefined;
-    const group = svg("g", { class: !point.feasible ? "pt pt-bad" : isBest ? "pt pt-best pt-rank" + study.best[number - 1].rank : "pt pt-ok" });
+    let className = "pt pt-ok";
+    if (!point.feasible) className = "pt pt-bad";
+    else if (isBest) className = "pt pt-best pt-rank" + study.best[number - 1].rank;
+    const group = svg("g", { class: className });
     const tooltip = [describe(point.choices), valuesText(point.totals), ...point.broken];
     if (isBest) tooltip.unshift("Option " + number);
     group.append(svg("title", {}, tooltip.join(" · ")));
@@ -722,7 +725,7 @@ function onSetupChange(event) {
     } else {
         return;
     }
-    solve();
+    void solve();
 }
 
 /**
@@ -734,7 +737,7 @@ function moveObjective(from, to) {
     const [objective] = state.objectives.splice(from, 1);
     state.objectives.splice(to, 0, objective);
     drawObjectives(state);
-    solve();
+    void solve();
 }
 
 // The objective being dragged: its line, its index when grabbed, and where the pointer holds it.
@@ -985,4 +988,4 @@ $("objectives").addEventListener("keydown", onObjectiveKey);
 $("options").addEventListener("click", onOptionClick);
 $("chart").addEventListener("click", onOptionClick);
 new ResizeObserver(sendSize).observe(document.body);
-start();
+start().catch(error => showError(error?.message ?? "The host did not start the view."));
