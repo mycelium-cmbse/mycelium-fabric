@@ -124,12 +124,12 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
             }
         }
 
-        private static HttpContext ContextFor(string template)
+        private static DefaultHttpContext ContextFor(string template)
         {
             return ContextFor(new RouteEndpoint(_ => Task.CompletedTask, RoutePatternFactory.Parse(template), 0, EndpointMetadataCollection.Empty, template));
         }
 
-        private static HttpContext ContextFor(Endpoint endpoint)
+        private static DefaultHttpContext ContextFor(Endpoint endpoint)
         {
             var context = new DefaultHttpContext();
             context.SetEndpoint(endpoint);
