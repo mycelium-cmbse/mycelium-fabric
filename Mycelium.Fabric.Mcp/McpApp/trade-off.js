@@ -104,16 +104,21 @@ function sendSize() {
 }
 
 /**
- * Starts the talk with the host: initializes, applies its theme, then tells it that the view is ready.
+ * Starts the talk with the host: initializes, applies its theme, then tells it that the view is ready. Shows why when the host
+ * refuses.
  */
 async function start() {
-    const result = await request("ui/initialize", {
-        protocolVersion: "2026-01-26",
-        appInfo: { name: "trade-off", version: "0.1.0" },
-        appCapabilities: {}
-    });
-    applyTheme(result?.hostContext);
-    notify("ui/notifications/initialized", {});
+    try {
+        const result = await request("ui/initialize", {
+            protocolVersion: "2026-01-26",
+            appInfo: { name: "trade-off", version: "0.1.0" },
+            appCapabilities: {}
+        });
+        applyTheme(result?.hostContext);
+        notify("ui/notifications/initialized", {});
+    } catch (error) {
+        showError(error?.message ?? "The host did not start the view.");
+    }
 }
 
 /**
@@ -988,4 +993,4 @@ $("objectives").addEventListener("keydown", onObjectiveKey);
 $("options").addEventListener("click", onOptionClick);
 $("chart").addEventListener("click", onOptionClick);
 new ResizeObserver(sendSize).observe(document.body);
-start().catch(error => showError(error?.message ?? "The host did not start the view."));
+void start();
