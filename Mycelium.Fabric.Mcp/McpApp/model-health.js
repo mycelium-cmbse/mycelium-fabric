@@ -192,7 +192,7 @@ function onToolResult(result) {
         // A result that is not JSON: the view runs the checks itself anyway.
         state.first = null;
     }
-    refresh(true);
+    void refresh(true);
 }
 
 /**
@@ -790,7 +790,7 @@ function ignoreRule(name) {
     state.open.delete("rule:" + name);
     drawItems();
     drawFooter();
-    refresh(false);
+    void refresh(false);
 }
 
 /**
@@ -828,7 +828,7 @@ function drawFooter() {
     again.addEventListener("click", () => {
         state.ignored.clear();
         drawFooter();
-        refresh(false);
+        void refresh(false);
     });
     ignored.append("Not run here: " + [...state.ignored].join(", ") + ". ", again);
 }
@@ -922,4 +922,4 @@ $("show_all").addEventListener("click", () => {
 });
 new ResizeObserver(sendSize).observe(document.body);
 window.setInterval(drawSubtitle, 30000);
-start();
+void start();
