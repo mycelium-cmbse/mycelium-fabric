@@ -31,6 +31,35 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     [TestFixture]
     public class ToolArgumentCheckerTestFixture
     {
+        /// <summary>
+        /// The problems found when no argument is given.
+        /// </summary>
+        private static readonly string[] NoArgumentProblems = ["arguments: the required property 'changes' is missing."];
+
+        /// <summary>
+        /// The problems found when the name of the argument has another case.
+        /// </summary>
+        private static readonly string[] OtherCaseArgumentProblems =
+        [
+            "arguments: there is no property 'Changes'; the properties are changes.",
+            "arguments: the required property 'changes' is missing."
+        ];
+
+        /// <summary>
+        /// The problems found when the changes are sent as a text.
+        /// </summary>
+        private static readonly string[] TextChangesProblems = ["changes: an array is expected, not \"[{\"payload\": null}]\"."];
+
+        /// <summary>
+        /// The problems found with the other types and choices that a strict schema can use.
+        /// </summary>
+        private static readonly string[] OtherSchemaProblems =
+        [
+            "count: an integer is expected, not 1.5.",
+            "options: an object is expected, not \"high\".",
+            "level: a value that the schema describes is expected, not 4."
+        ];
+
         private McpServerTool applyChanges;
 
         private McpServerTool defaultApplyChanges;
@@ -82,19 +111,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(ToolArgumentChecker.FindProblems(CreateArguments(validBatch), schema), Is.Empty);
                 Assert.That(ToolArgumentChecker.FindProblems(CreateArguments(otherCaseBatch), schema), Is.Empty);
 
-                Assert.That(ToolArgumentChecker.FindProblems(null, schema), Is.EqualTo(new[] { "arguments: the required property 'changes' is missing." }));
+                Assert.That(ToolArgumentChecker.FindProblems(null, schema), Is.EqualTo(NoArgumentProblems));
 
                 // The SDK binds the arguments by their exact name.
-                Assert.That(ToolArgumentChecker.FindProblems(new Dictionary<string, JsonElement> { ["Changes"] = JsonDocument.Parse("[]").RootElement }, schema), Is.EqualTo(new[]
-                {
-                    "arguments: there is no property 'Changes'; the properties are changes.",
-                    "arguments: the required property 'changes' is missing."
-                }));
+                Assert.That(ToolArgumentChecker.FindProblems(new Dictionary<string, JsonElement> { ["Changes"] = JsonDocument.Parse("[]").RootElement }, schema),
+                    Is.EqualTo(OtherCaseArgumentProblems));
 
-                Assert.That(ToolArgumentChecker.FindProblems(CreateArguments("\"[{\\\"payload\\\": null}]\""), schema), Is.EqualTo(new[]
-                {
-                    "changes: an array is expected, not \"[{\"payload\": null}]\"."
-                }));
+                Assert.That(ToolArgumentChecker.FindProblems(CreateArguments("\"[{\\\"payload\\\": null}]\""), schema), Is.EqualTo(TextChangesProblems));
 
                 Assert.That(ToolArgumentChecker.FindProblems(CreateArguments(wrongBatch), schema), Is.EqualTo(new[]
                 {
@@ -146,12 +169,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(ToolArgumentChecker.FindProblems(otherArguments, JsonDocument.Parse(otherSchema).RootElement), Is.EqualTo(new[]
-                {
-                    "count: an integer is expected, not 1.5.",
-                    "options: an object is expected, not \"high\".",
-                    "level: a value that the schema describes is expected, not 4."
-                }));
+                Assert.That(ToolArgumentChecker.FindProblems(otherArguments, JsonDocument.Parse(otherSchema).RootElement), Is.EqualTo(OtherSchemaProblems));
 
                 Assert.That(ToolArgumentChecker.FindProblems(validArguments, JsonDocument.Parse(otherSchema).RootElement), Is.Empty);
             }

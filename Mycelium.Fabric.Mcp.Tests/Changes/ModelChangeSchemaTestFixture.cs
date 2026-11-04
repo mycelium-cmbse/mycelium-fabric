@@ -35,6 +35,21 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         /// </summary>
         private static readonly string[] StrictKeywords = ["type", "description", "properties", "required", "additionalProperties", "items", "enum", "anyOf"];
 
+        /// <summary>
+        /// The properties that a comparison (constraint or guard) requires.
+        /// </summary>
+        private static readonly string[] ComparisonRequiredProperties = ["attribute", "operator"];
+
+        /// <summary>
+        /// The comparison operators that the schema lists, in their order.
+        /// </summary>
+        private static readonly string[] ComparisonOperators = ["<", "<=", ">", ">=", "==", "!="];
+
+        /// <summary>
+        /// The types that a value or a limit accepts, in their order.
+        /// </summary>
+        private static readonly string[] ValueTypes = ["number", "boolean", "string", "null"];
+
         [Test]
         public void VerifyCreateOptions()
         {
@@ -62,15 +77,15 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
                 foreach (var comparison in comparisons)
                 {
-                    Assert.That(comparison.GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(new[] { "attribute", "operator" }));
+                    Assert.That(comparison.GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(ComparisonRequiredProperties));
                     Assert.That(comparison.GetProperty("properties").GetProperty("operator").GetProperty("type").GetString(), Is.EqualTo("string"));
                     Assert.That(comparison.GetProperty("properties").GetProperty("operator").GetProperty("enum").EnumerateArray().Select(value => value.GetString()),
-                        Is.EqualTo(new[] { "<", "<=", ">", ">=", "==", "!=" }));
+                        Is.EqualTo(ComparisonOperators));
                     Assert.That(comparison.GetProperty("properties").GetProperty("attribute").GetProperty("type").GetString(), Is.EqualTo("string"));
-                    Assert.That(GetChoiceTypes(comparison.GetProperty("properties").GetProperty("limit")), Is.EqualTo(new[] { "number", "boolean", "string", "null" }));
+                    Assert.That(GetChoiceTypes(comparison.GetProperty("properties").GetProperty("limit")), Is.EqualTo(ValueTypes));
                 }
 
-                Assert.That(GetChoiceTypes(payload.GetProperty("properties").GetProperty("value")), Is.EqualTo(new[] { "number", "boolean", "string", "null" }));
+                Assert.That(GetChoiceTypes(payload.GetProperty("properties").GetProperty("value")), Is.EqualTo(ValueTypes));
                 Assert.That(GetObjectSchemas(schema).Select(objectSchema => objectSchema.GetProperty("additionalProperties").ValueKind), Has.All.EqualTo(JsonValueKind.False));
                 Assert.That(GetPropertySchemas(schema).Where(property => !property.TryGetProperty("type", out _) && !property.TryGetProperty("anyOf", out _)), Is.Empty);
                 Assert.That(GetKeywords(schema).Except(StrictKeywords), Is.Empty);
