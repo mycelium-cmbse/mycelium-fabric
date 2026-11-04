@@ -98,6 +98,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             var closestUnderLimits = this.solver.Solve(problem with { Objectives = [], Limits = [Limit("mass", TradeOffOperator.LessThan, 38), Limit("power", TradeOffOperator.LessThanOrEqual, 65)] });
             var unchangedUnderLimits = this.solver.Solve(problem with { Objectives = [], Limits = [Limit("mass", TradeOffOperator.LessThanOrEqual, 38)] });
             var allCombinations = this.solver.Solve(problem with { Objectives = [Minimize("mass")], Count = 5 });
+            var exactPower = this.solver.Solve(problem with { Limits = [Limit("power", TradeOffOperator.Equal, 70)] });
+            var noExactPower = this.solver.Solve(problem with { Limits = [Limit("power", TradeOffOperator.Equal, 65)] });
 
             using (Assert.EnterMultipleScope())
             {
@@ -110,6 +112,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(allCombinations.Alternatives[0].Selections, Has.Count.EqualTo(3));
                 Assert.That(allCombinations.Alternatives[0].Selections.Take(2).Select(selection => selection[0]), Is.EquivalentTo([1, 2]));
                 Assert.That(allCombinations.Alternatives[0].Selections[2], Is.EqualTo([0]));
+                Assert.That(exactPower.Alternatives[0].Selections.Single(), Is.EqualTo([1]));
+                Assert.That(noExactPower.Status, Is.EqualTo(TradeOffStatus.Infeasible));
+                Assert.That(noExactPower.Alternatives.Single().Conflicts, Is.EqualTo(["constraint 1: power == 65"]));
             }
         }
 

@@ -32,7 +32,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <summary>
         /// Gets the comparison operator of the constraint.
         /// </summary>
-        [Description("How the total compares with the limit: '<', '<=', '>' or '>='.")]
+        [Description("How the total compares with the limit: '<', '<=', '>', '>=' or '=='.")]
         public string Operator { get; init; }
 
         /// <summary>
@@ -60,7 +60,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// </summary>
         [Description("Optional: a margin in percent, for example 20, that always makes the constraint harder to meet. With '<' or '<=', the total plus the margin "
             + "must stay under the limit (mass * 1.2 <= 150); with '>' or '>=', the total must reach the limit plus the margin (capacity >= 300 * 1.2). "
-            + "Not allowed with a limit of 0 or less.")]
+            + "Not allowed with '==' or with a limit of 0 or less.")]
         public double? Margin { get; init; }
     }
 }

@@ -12,6 +12,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     using System;
     using System.Globalization;
 
+    using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Values;
 
     /// <summary>
@@ -33,15 +34,10 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         public bool IsUpperBound => this.Operator is TradeOffOperator.LessThan or TradeOffOperator.LessThanOrEqual;
 
         /// <summary>
-        /// Gets the operator of the comparison, as written in a constraint: <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c> or <c>&gt;=</c>.
+        /// Gets the operator of the comparison, as written in a constraint: <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c> or
+        /// <c>==</c>.
         /// </summary>
-        public string Symbol => this.Operator switch
-        {
-            TradeOffOperator.LessThan => "<",
-            TradeOffOperator.LessThanOrEqual => "<=",
-            TradeOffOperator.GreaterThan => ">",
-            _ => ">="
-        };
+        public string Symbol => this.Operator.ToSymbol();
 
         /// <summary>
         /// Gets the total of the attribute at which a numeric limit is reached, margin included (<c>150 / 1.2 = 125</c> for
@@ -110,21 +106,13 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <returns>The text of the breach, without the name of the constraint.</returns>
         public string DescribeBreach(double value, double limit)
         {
-            var opposite = this.Operator switch
-            {
-                TradeOffOperator.LessThan => ">=",
-                TradeOffOperator.LessThanOrEqual => ">",
-                TradeOffOperator.GreaterThan => "<=",
-                _ => "<"
-            };
-
             var left = this.IsUpperBound ? $"{this.Attribute}{this.FactorText}" : this.Attribute;
             var right = this.IsUpperBound || (this.LimitAttribute == null && this.Margin == 0)
                 ? this.LimitAttribute
                 : $"{this.LimitAttribute ?? this.FormatValue(this.Limit ?? 0)}{this.FactorText}";
             var limitText = string.IsNullOrEmpty(right) ? this.FormatValue(limit) : $"{right} = {this.FormatValue(limit)}";
 
-            return $"{left} = {this.FormatValue(value)} {opposite} {limitText}";
+            return $"{left} = {this.FormatValue(value)} {this.Operator.ToOppositeSymbol()} {limitText}";
         }
 
         /// <summary>
@@ -142,26 +130,28 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <summary>
         /// Writes the constraint as one linear inequality on totals in units: with the margin factor <c>f</c>,
         /// <c>total * f &lt;= limit</c> for an upper bound and <c>total &gt;= limit * f</c> for a lower bound, multiplied out
-        /// so that every coefficient is an integer, and one unit less on the bound for a strict comparison.
+        /// so that every coefficient is an integer, and one unit less on the bound for a strict comparison. An equality is written
+        /// as a lower bound, without margin, that the totals must meet exactly.
         /// </summary>
         /// <returns>The <see cref="TradeOffLinearForm"/> of the constraint.</returns>
         public TradeOffLinearForm GetLinearForm()
         {
             var factor = TradeOffScale.ToFactorUnits(this.Margin);
             var strictness = this.Operator is TradeOffOperator.LessThan or TradeOffOperator.GreaterThan ? 1 : 0;
+            var isEquation = this.Operator == TradeOffOperator.Equal;
 
             if (this.LimitAttribute != null)
             {
                 return this.IsUpperBound
                     ? new TradeOffLinearForm(factor, -TradeOffScale.UnitsPerFactor, -strictness)
-                    : new TradeOffLinearForm(-TradeOffScale.UnitsPerFactor, factor, -strictness);
+                    : new TradeOffLinearForm(-TradeOffScale.UnitsPerFactor, factor, -strictness, isEquation);
             }
 
             var limit = TradeOffScale.ToUnits(this.Limit ?? 0);
 
             return this.IsUpperBound
                 ? new TradeOffLinearForm(factor, 0, TradeOffScale.UnitsPerFactor * limit - strictness)
-                : new TradeOffLinearForm(-TradeOffScale.UnitsPerFactor, 0, -factor * limit - strictness);
+                : new TradeOffLinearForm(-TradeOffScale.UnitsPerFactor, 0, -factor * limit - strictness, isEquation);
         }
     }
 }

@@ -58,22 +58,28 @@ namespace Mycelium.Fabric.Mcp.Tools
             var pointsComplete = problem.TryEnumerateSelections(MaximumPoints, out var allSelections);
             IReadOnlyList<IReadOnlyList<int>> pointSelections = pointsComplete ? allSelections : [.. solution.Alternatives.SelectMany(alternative => alternative.Selections)];
 
-            return new TradeOffStudy(
-                request.Title,
-                root,
-                solution.Status,
-                request with { Objectives = request.Objectives ?? [], Constraints = request.Constraints ?? [], Excluded = request.Excluded ?? [] },
-                [.. problem.GetAttributes().Select(attribute => new TradeOffAttribute(attribute, problem.GetUnit(attribute)))],
-                [.. problem.Decisions.Select((decision, decisionIndex) => CreateChoice(problem, decision, decisionIndex))],
-                problem.Objectives,
-                [.. problem.Limits.Select(limit => new TradeOffStudyConstraint(limit.Name, limit.Description, limit.Attribute, limit.Symbol, limit.LimitAttribute == null ? limit.Limit : null,
-                    limit.LimitAttribute, limit.Margin, limit.Threshold))],
-                [.. problem.Dependencies.Select(dependency => dependency.Description)],
-                CreateCombination(problem, currentSelection, currentSelection, null, 0),
-                best,
-                CreatePoints(problem, pointSelections, currentSelection),
-                pointsComplete,
-                conflicts);
+            var settings = request with { Objectives = request.Objectives ?? [], Constraints = request.Constraints ?? [], Excluded = request.Excluded ?? [] };
+            var attributes = problem.GetAttributes().Select(attribute => new TradeOffAttribute(attribute, problem.GetUnit(attribute))).ToList();
+            var choices = problem.Decisions.Select((decision, decisionIndex) => CreateChoice(problem, decision, decisionIndex)).ToList();
+            var constraints = problem.Limits.Select(CreateConstraint).ToList();
+            var dependencies = problem.Dependencies.Select(dependency => dependency.Description).ToList();
+            var current = CreateCombination(problem, currentSelection, currentSelection, null, 0);
+            var points = CreatePoints(problem, pointSelections, currentSelection);
+
+            return new TradeOffStudy(request.Title, root, solution.Status, settings, attributes, choices, problem.Objectives, constraints, dependencies, current, best,
+                points, pointsComplete, conflicts);
+        }
+
+        /// <summary>
+        /// Describes a constraint of the problem: a numeric limit, or the attribute whose total is the limit.
+        /// </summary>
+        /// <param name="limit">The <see cref="TradeOffLimit"/> of the constraint.</param>
+        /// <returns>The <see cref="TradeOffStudyConstraint"/>.</returns>
+        private static TradeOffStudyConstraint CreateConstraint(TradeOffLimit limit)
+        {
+            var numericLimit = limit.LimitAttribute == null ? limit.Limit : null;
+
+            return new TradeOffStudyConstraint(limit.Name, limit.Description, limit.Attribute, limit.Symbol, numericLimit, limit.LimitAttribute, limit.Margin, limit.Threshold);
         }
 
         /// <summary>

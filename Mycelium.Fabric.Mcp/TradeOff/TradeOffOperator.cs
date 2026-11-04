@@ -32,6 +32,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <summary>
         /// The total stays over the limit or equal to it (<c>&gt;=</c>).
         /// </summary>
-        GreaterThanOrEqual
+        GreaterThanOrEqual,
+
+        /// <summary>
+        /// The total equals the limit (<c>==</c>), without margin.
+        /// </summary>
+        Equal
     }
 }

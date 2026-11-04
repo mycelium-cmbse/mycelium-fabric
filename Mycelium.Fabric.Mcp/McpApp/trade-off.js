@@ -105,20 +105,16 @@ function sendSize() {
 
 /**
  * Starts the talk with the host: initializes, applies its theme, then tells it that the view is ready. Shows why when the host
- * refuses.
+ * refuses. Not async: the page is a classic script, where a call at the top level cannot be awaited.
  */
-async function start() {
-    try {
-        const result = await request("ui/initialize", {
-            protocolVersion: "2026-01-26",
-            appInfo: { name: "trade-off", version: "0.1.0" },
-            appCapabilities: {}
-        });
-        applyTheme(result?.hostContext);
-        notify("ui/notifications/initialized", {});
-    } catch (error) {
-        showError(error?.message ?? "The host did not start the view.");
-    }
+function start() {
+    const params = { protocolVersion: "2026-01-26", appInfo: { name: "trade-off", version: "0.1.0" }, appCapabilities: {} };
+    request("ui/initialize", params)
+        .then(result => {
+            applyTheme(result?.hostContext);
+            notify("ui/notifications/initialized", {});
+        })
+        .catch(error => showError(error?.message ?? "The host did not start the view."));
 }
 
 /**
@@ -549,7 +545,7 @@ function drawLegend(limits) {
 }
 
 /**
- * Draws the limit of a constraint, its label, and the area beyond it.
+ * Draws the limit of a constraint, its label, and the area beyond it; an equality has no such area, only its line.
  * @param {SVGElement} chart The chart.
  * @param {object} limit The constraint, with its threshold.
  * @param {boolean} onX true when the constraint is on the attribute of the horizontal axis.
@@ -561,12 +557,14 @@ function drawLimit(chart, limit, onX, scale) {
     const from = Math.min(at, end);
     const size = Math.abs(end - at);
     const label = (limit.name ?? limit.description) + " · " + withUnit(limit.threshold, limit.attribute);
+    const area = onX
+        ? { x: from, y: BOX.top, width: size, height: BOX.bottom - BOX.top }
+        : { x: BOX.left, y: from, width: BOX.right - BOX.left, height: size };
+    if (limit.operator !== "==") chart.append(svg("rect", { ...area, class: "tr-forbidden" }));
     if (onX) {
-        chart.append(svg("rect", { x: from, y: BOX.top, width: size, height: BOX.bottom - BOX.top, class: "tr-forbidden" }));
         chart.append(svg("line", { x1: at, x2: at, y1: BOX.top, y2: BOX.bottom, class: "tr-limit" }));
         chart.append(svg("text", { x: at - 4, y: BOX.top + 12, "text-anchor": "end", class: "tr-limit-label" }, label));
     } else {
-        chart.append(svg("rect", { x: BOX.left, y: from, width: BOX.right - BOX.left, height: size, class: "tr-forbidden" }));
         chart.append(svg("line", { x1: BOX.left, x2: BOX.right, y1: at, y2: at, class: "tr-limit" }));
         chart.append(svg("text", { x: BOX.right - 4, y: at - 4, "text-anchor": "end", class: "tr-limit-label" }, label));
     }
@@ -993,4 +991,4 @@ $("objectives").addEventListener("keydown", onObjectiveKey);
 $("options").addEventListener("click", onOptionClick);
 $("chart").addEventListener("click", onOptionClick);
 new ResizeObserver(sendSize).observe(document.body);
-void start();
+start();

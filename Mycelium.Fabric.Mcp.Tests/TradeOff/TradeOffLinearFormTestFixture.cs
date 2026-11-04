@@ -23,6 +23,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             var massWithMargin = new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 20).GetLinearForm();
             var strictMass = new TradeOffLimit("mass", TradeOffOperator.LessThan, 150, null, 0).GetLinearForm();
             var powerBalance = new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 10).GetLinearForm();
+            var exactMass = new TradeOffLimit("mass", TradeOffOperator.Equal, 130, null, 0).GetLinearForm();
 
             using (Assert.EnterMultipleScope())
             {
@@ -33,6 +34,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(strictMass.IsSatisfiedBy(150000, 0), Is.False);
                 Assert.That(powerBalance.IsSatisfiedBy(200000, 220000), Is.True);
                 Assert.That(powerBalance.IsSatisfiedBy(200001, 220000), Is.False);
+                Assert.That(exactMass.IsSatisfiedBy(130000, 0), Is.True);
+                Assert.That(exactMass.IsSatisfiedBy(129999, 0), Is.False);
+                Assert.That(exactMass.IsSatisfiedBy(130001, 0), Is.False);
             }
         }
     }

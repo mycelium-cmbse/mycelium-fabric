@@ -541,6 +541,18 @@ describe("trade-off view", () => {
             assert.equal(byId(page, "legend").children.at(-1).textContent, "power limit");
         });
 
+        it("draws an equality as its line only, since both sides of it are forbidden", async () => {
+            const constraints = [{ name: "REQ-MASS", description: "mass == 120 kg", attribute: "mass", operator: "==", limit: 120, limitAttribute: null, margin: 0, threshold: 120 }];
+
+            await open(study({ constraints }));
+
+            const chart = byId(page, "chart");
+            const line = chart.querySelector(".tr-limit");
+            assert.equal(line.getAttribute("x1"), line.getAttribute("x2"));
+            assert.equal(chart.querySelector(".tr-forbidden"), null);
+            assert.equal(chart.querySelector(".tr-limit-label").textContent, "REQ-MASS · 120 kg");
+        });
+
         it("draws no chart for a single attribute", async () => {
             await open(study({ attributes: [{ name: "mass", unit: "kg" }], objectives: [{ attribute: "mass", direction: "Minimize" }] }));
 

@@ -388,7 +388,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 "<=" => TradeOffOperator.LessThanOrEqual,
                 ">" => TradeOffOperator.GreaterThan,
                 ">=" => TradeOffOperator.GreaterThanOrEqual,
-                _ => throw new McpException($"{label} has the operator '{constraint.Operator}': use '<', '<=', '>' or '>='.")
+                "==" => TradeOffOperator.Equal,
+                _ => throw new McpException($"{label} has the operator '{constraint.Operator}': use '<', '<=', '>', '>=' or '=='.")
             };
 
             var attribute = constraint.Attribute.Trim();
@@ -418,6 +419,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             if (!double.IsFinite(margin) || margin < 0 || margin > 1000)
             {
                 throw new McpException($"{label} has a margin of {margin.ToString(CultureInfo.InvariantCulture)}: give a percentage between 0 and 1000.");
+            }
+
+            if (margin > 0 && comparison == TradeOffOperator.Equal)
+            {
+                throw new McpException($"{label} has a margin with '==': a margin only applies to '<', '<=', '>' or '>='. Write the margin into the limit instead.");
             }
 
             if (margin > 0 && constraint.Limit <= 0)

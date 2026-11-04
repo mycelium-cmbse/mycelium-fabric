@@ -321,7 +321,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     expression += form.LimitCoefficient * this.GetTotalExpression(limit.LimitAttribute);
                 }
 
-                this.model.Add(expression <= form.Bound).OnlyEnforceIf(literal);
+                this.model.Add(form.IsEquation ? expression == form.Bound : expression <= form.Bound).OnlyEnforceIf(literal);
                 this.assumptions.Add((literal, description));
             }
 

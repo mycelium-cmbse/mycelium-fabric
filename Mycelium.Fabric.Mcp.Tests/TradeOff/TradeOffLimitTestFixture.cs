@@ -26,6 +26,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 0).IsUpperBound, Is.True);
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThan, 300, null, 0).IsUpperBound, Is.False);
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 0).IsUpperBound, Is.False);
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.Equal, 130, null, 0).IsUpperBound, Is.False);
             }
         }
 
@@ -39,6 +40,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 12.5).Description, Is.EqualTo("capacity >= 300 * 1.125"));
                 Assert.That(new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 10).Description, Is.EqualTo("power * 1.1 <= powerOutput"));
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThan, null, "eclipseEnergy", 0).Description, Is.EqualTo("capacity > eclipseEnergy"));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.Equal, 130, null, 0).Description, Is.EqualTo("mass == 130"));
+                Assert.That(new TradeOffLimit("power", TradeOffOperator.Equal, null, "powerOutput", 0).Description, Is.EqualTo("power == powerOutput"));
             }
         }
 
@@ -51,6 +54,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 0).Symbol, Is.EqualTo("<="));
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThan, 300, null, 0).Symbol, Is.EqualTo(">"));
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 0).Symbol, Is.EqualTo(">="));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.Equal, 130, null, 0).Symbol, Is.EqualTo("=="));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.Equal, 130.25, null, 0).Threshold, Is.EqualTo(130.25));
                 Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 20).Threshold, Is.EqualTo(125));
                 Assert.That(new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 155, null, 20).Threshold, Is.EqualTo(129.167));
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 20).Threshold, Is.EqualTo(360));
@@ -65,6 +70,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             var capacityWithMargin = new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, 300, null, 20);
             var capacity = new TradeOffLimit("capacity", TradeOffOperator.GreaterThan, 300, null, 0);
             var powerBalance = new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 10);
+            var exactMass = new TradeOffLimit("mass", TradeOffOperator.Equal, 130, null, 0);
+            var exactPower = new TradeOffLimit("power", TradeOffOperator.Equal, null, "powerOutput", 0);
 
             using (Assert.EnterMultipleScope())
             {
@@ -75,6 +82,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(capacityWithMargin.DescribeBreach(320, 360), Is.EqualTo("capacity = 320 < 300 * 1.2 = 360"));
                 Assert.That(capacity.DescribeBreach(250, 300), Is.EqualTo("capacity = 250 <= 300"));
                 Assert.That(powerBalance.DescribeBreach(220, 210), Is.EqualTo("power * 1.1 = 220 > powerOutput = 210"));
+                Assert.That(exactMass.GetComparedValues(125.8, 0), Is.EqualTo((125.8, 130d)));
+                Assert.That(exactMass.DescribeBreach(125.8, 130), Is.EqualTo("mass = 125.8 != 130"));
+                Assert.That(exactPower.DescribeBreach(220, 210), Is.EqualTo("power = 220 != powerOutput = 210"));
             }
         }
 
@@ -90,6 +100,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 10).GetLinearForm(), Is.EqualTo(new TradeOffLinearForm(11000, -10000, 0)));
                 Assert.That(new TradeOffLimit("power", TradeOffOperator.LessThan, null, "powerOutput", 0).GetLinearForm(), Is.EqualTo(new TradeOffLinearForm(10000, -10000, -1)));
                 Assert.That(new TradeOffLimit("capacity", TradeOffOperator.GreaterThanOrEqual, null, "eclipseEnergy", 20).GetLinearForm(), Is.EqualTo(new TradeOffLinearForm(-10000, 12000, 0)));
+                Assert.That(new TradeOffLimit("mass", TradeOffOperator.Equal, 130, null, 0).GetLinearForm(), Is.EqualTo(new TradeOffLinearForm(-10000, 0, -1300000000, true)));
+                Assert.That(new TradeOffLimit("power", TradeOffOperator.Equal, null, "powerOutput", 0).GetLinearForm(), Is.EqualTo(new TradeOffLinearForm(-10000, 10000, 0, true)));
             }
         }
     }
