@@ -59,7 +59,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(JsonSerializer.Serialize((PayloadValue)38), Is.EqualTo("38"));
                 Assert.That(JsonSerializer.Serialize((PayloadValue)true), Is.EqualTo("true"));
                 Assert.That(JsonSerializer.Serialize((PayloadValue)"S-band"), Is.EqualTo("\"S-band\""));
-                Assert.That(JsonSerializer.Deserialize<ConstraintPayload>("{\"Kind\":\"Assumption\"}").Kind.ToString(), Is.EqualTo("Assumption"));
+                Assert.That(JsonSerializer.Deserialize<ConstraintPayload>("{\"Kind\":\"Assumption\",\"Attribute\":\"mass\",\"Operator\":\"<=\"}").Kind.ToString(), Is.EqualTo("Assumption"));
                 Assert.That(() => new PayloadValueJsonConverter().Write(null, 38, null), Throws.TypeOf<ArgumentNullException>());
             }
         }

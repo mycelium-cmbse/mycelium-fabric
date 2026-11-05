@@ -13,11 +13,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
 
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Options;
 
+    using ModelContextProtocol.Extensions.Apps;
+    using ModelContextProtocol.Protocol;
     using ModelContextProtocol.Server;
 
     using Moq;
@@ -26,6 +29,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Documents;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.TradeOff;
     using Mycelium.Fabric.Mcp.Validation;
     using Mycelium.Fabric.Mcp.Validation.Rules;
@@ -193,6 +197,32 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             {
                 Assert.That(exportOptions.ExportDirectory, Is.EqualTo(absoluteExportDirectory));
                 Assert.That(documentOptions.DocumentDirectory, Is.EqualTo(absoluteDocumentDirectory));
+            }
+
+            // apply_changes publishes the strict schema, decide_batch the schema of the SDK, both keep the attribute of their view,
+            // and the arguments are checked before a call.
+            var tools = toolRegistrations.Select(descriptor => (McpServerTool)descriptor.ImplementationFactory(serviceProvider.Object)).ToList();
+            var applyChanges = tools.Single(tool => tool.ProtocolTool.Name == "apply_changes");
+            var decideBatch = tools.Single(tool => tool.ProtocolTool.Name == "decide_batch");
+
+            var serverOptions = new McpServerOptions();
+
+            foreach (var configureOptions in services.Select(descriptor => descriptor.ImplementationInstance).OfType<IConfigureOptions<McpServerOptions>>())
+            {
+                configureOptions.Configure(serverOptions);
+            }
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tools.Select(tool => tool.ProtocolTool.Name), Is.Unique);
+                Assert.That(applyChanges.ProtocolTool.InputSchema.GetProperty("additionalProperties").ValueKind, Is.EqualTo(JsonValueKind.False));
+                Assert.That(applyChanges.ProtocolTool.Annotations.DestructiveHint, Is.True);
+                Assert.That(applyChanges.Metadata.OfType<McpAppUiAttribute>(), Is.Not.Empty);
+                Assert.That(decideBatch.ProtocolTool.InputSchema.TryGetProperty("additionalProperties", out _), Is.False);
+                Assert.That(decideBatch.ProtocolTool.OutputSchema, Is.Not.Null);
+                Assert.That(decideBatch.Metadata.OfType<McpAppUiAttribute>(), Is.Not.Empty);
+                Assert.That(serverOptions.Filters.Request.CallToolFilters,
+                    Is.EqualTo(new McpRequestFilter<CallToolRequestParams, CallToolResult>[] { ToolArgumentChecker.CheckArguments }));
             }
         }
 

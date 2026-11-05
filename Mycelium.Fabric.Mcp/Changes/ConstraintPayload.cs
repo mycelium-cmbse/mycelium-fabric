@@ -34,12 +34,14 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// sub-part.
         /// </summary>
         [Description("The constrained attribute of the subject, for example 'mass', or a path to an attribute of a sub-part of the subject, for example 'camera.mass'. check_requirements computes its value on the satisfying part as sum_attribute does.")]
+        [JsonRequired]
         public string Attribute { get; init; }
 
         /// <summary>
         /// Gets the comparison operator of the constraint.
         /// </summary>
         [Description("How the attribute compares with the limit: '<', '<=', '>', '>=', '==' or '!='.")]
+        [JsonRequired]
         public string Operator { get; init; }
 
         /// <summary>

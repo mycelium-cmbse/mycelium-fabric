@@ -97,6 +97,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             .ToDictionary(type => type.Name, StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
+        /// The names of the <see cref="CreatableMetaclasses"/>, in alphabetical order, as the schema of apply_changes lists them.
+        /// </summary>
+        internal static readonly IReadOnlyList<string> CreatableMetaclassNames = [.. CreatableMetaclasses.Keys.Order(StringComparer.Ordinal)];
+
+        /// <summary>
         /// The elements of the working copy, indexed by their <c>Id</c>.
         /// </summary>
         private readonly Dictionary<Guid, IElement> elementsById;

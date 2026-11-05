@@ -77,9 +77,10 @@ namespace Mycelium.Fabric.Mcp.Changes
         private const char PathSeparator = '.';
 
         /// <summary>
-        /// The comparison operators that a constraint can use.
+        /// The comparison operators that a constraint or the guard of a transition can use, as the schema of apply_changes lists
+        /// them.
         /// </summary>
-        private static readonly string[] ComparisonOperators = ["<", "<=", ">", ">=", "==", "!="];
+        internal static readonly IReadOnlyList<string> ComparisonOperators = ["<", "<=", ">", ">=", "==", "!="];
 
         /// <summary>
         /// Tells whether an element is a requirement, a satisfy link being no requirement of its own.
