@@ -373,7 +373,7 @@ describe("model health view", () => {
     }
 
     beforeEach(() => {
-        page = loadPage(path.join(APP_FOLDER, "model-health.html"), path.join(APP_FOLDER, "model-health.js"));
+        page = loadPage(path.join(APP_FOLDER, "model-health.html"), path.join(APP_FOLDER, "host.js"), path.join(APP_FOLDER, "model-health.js"));
     });
 
     afterEach(() => {

@@ -464,13 +464,13 @@ class FakeDocument {
 }
 
 /**
- * Loads a page and runs its script, as a host shows an MCP App in a frame.
+ * Loads a page and runs its scripts in order, as a host shows an MCP App in a frame.
  * @param {string} pagePath The path of the HTML file of the page.
- * @param {string} scriptPath The path of the script of the page.
+ * @param {...string} scriptPaths The paths of the scripts of the page, in the order of the page.
  * @returns {object} The page: its document, the messages sent to the host, and functions to send a message of the host, to
  * resize the view and to run the callbacks of its timers.
  */
-function loadPage(pagePath, scriptPath) {
+function loadPage(pagePath, ...scriptPaths) {
     const sent = [];
     const host = { postMessage: (message, targetOrigin) => sent.push({ message, targetOrigin }) };
     const messageListeners = [];
@@ -502,8 +502,10 @@ function loadPage(pagePath, scriptPath) {
         }
     };
 
-    delete require.cache[require.resolve(scriptPath)];
-    require(scriptPath);
+    for (const scriptPath of scriptPaths) {
+        delete require.cache[require.resolve(scriptPath)];
+        require(scriptPath);
+    }
 
     return {
         document: globalThis.document,
