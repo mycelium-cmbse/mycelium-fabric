@@ -140,20 +140,17 @@ function sendSize() {
 }
 
 /**
- * Starts the talk with the host: initializes, applies its theme, then tells it that the view is ready.
+ * Starts the talk with the host: initializes, applies its theme, then tells it that the view is ready. Shows why when the host
+ * refuses. Not async: the page is a classic script, where a call at the top level cannot be awaited.
  */
-async function start() {
-    try {
-        const result = await request("ui/initialize", {
-            protocolVersion: "2026-01-26",
-            appInfo: { name: "model-health", version: "0.1.0" },
-            appCapabilities: {}
-        });
-        applyTheme(result?.hostContext);
-        notify("ui/notifications/initialized", {});
-    } catch (error) {
-        showError("The host did not start the view: " + error.message);
-    }
+function start() {
+    const params = { protocolVersion: "2026-01-26", appInfo: { name: "model-health", version: "0.1.0" }, appCapabilities: {} };
+    request("ui/initialize", params)
+        .then(result => {
+            applyTheme(result?.hostContext);
+            notify("ui/notifications/initialized", {});
+        })
+        .catch(error => showError("The host did not start the view: " + error.message));
 }
 
 /**
@@ -915,11 +912,13 @@ async function sendToAssistant(text, element, note) {
 }
 
 // The events of the view: check again, show the issues of every rule, the size of the page and the time since the checks.
-$("check_again").addEventListener("click", () => refresh(true));
+$("check_again").addEventListener("click", () => {
+    void refresh(true);
+});
 $("show_all").addEventListener("click", () => {
     for (const rule of shownRules()) state.open.add("rule:" + rule.name);
     drawItems();
 });
 new ResizeObserver(sendSize).observe(document.body);
 window.setInterval(drawSubtitle, 30000);
-void start();
+start();
