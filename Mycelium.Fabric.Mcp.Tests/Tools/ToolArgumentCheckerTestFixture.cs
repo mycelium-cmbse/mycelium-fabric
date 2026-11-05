@@ -41,7 +41,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// </summary>
         private static readonly string[] OtherCaseArgumentProblems =
         [
-            "arguments: there is no property 'Changes'; the properties are changes.",
+            "arguments: there is no property 'Changes'; the properties are changes, plan.",
             "arguments: the required property 'changes' is missing."
         ];
 

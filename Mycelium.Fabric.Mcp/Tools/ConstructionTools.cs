@@ -23,6 +23,7 @@ namespace Mycelium.Fabric.Mcp.Tools
     using ModelContextProtocol.Server;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Plans;
     using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Resources;
     using Mycelium.Fabric.Mcp.Services;
@@ -87,6 +88,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         private readonly IAppHostDetector appHostDetector;
 
         /// <summary>
+        /// The <see cref="IConstructionPlanStore"/> that keeps the plan given by the AI assistant from one batch to the next.
+        /// </summary>
+        private readonly IConstructionPlanStore planStore;
+
+        /// <summary>
         /// The <see cref="ConstructionOptions"/>, which tell whether the new issues are returned and whether a batch waits for
         /// the decision of the user.
         /// </summary>
@@ -99,29 +105,37 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="modelValidator">The <see cref="IModelValidator"/> that finds the issues of the model.</param>
         /// <param name="pendingBatchStore">The <see cref="IPendingBatchStore"/> that keeps the batch waiting for the user.</param>
         /// <param name="appHostDetector">The <see cref="IAppHostDetector"/> that tells whether the host shows MCP Apps.</param>
+        /// <param name="planStore">The <see cref="IConstructionPlanStore"/> that keeps the plan of the AI assistant.</param>
         /// <param name="options">The <see cref="ConstructionOptions"/> read from the configuration of the host.</param>
         /// <exception cref="ArgumentNullException">Thrown when a parameter is <c>null</c>.</exception>
         public ConstructionTools(IModelProvider modelProvider, IModelValidator modelValidator, IPendingBatchStore pendingBatchStore, IAppHostDetector appHostDetector,
-            IOptions<ConstructionOptions> options)
+            IConstructionPlanStore planStore, IOptions<ConstructionOptions> options)
         {
             ArgumentNullException.ThrowIfNull(modelProvider);
             ArgumentNullException.ThrowIfNull(modelValidator);
             ArgumentNullException.ThrowIfNull(pendingBatchStore);
             ArgumentNullException.ThrowIfNull(appHostDetector);
+            ArgumentNullException.ThrowIfNull(planStore);
             ArgumentNullException.ThrowIfNull(options);
 
             this.modelProvider = modelProvider;
             this.modelValidator = modelValidator;
             this.pendingBatchStore = pendingBatchStore;
             this.appHostDetector = appHostDetector;
+            this.planStore = planStore;
             this.options = options.Value;
         }
 
         /// <summary>
         /// Applies a batch of changes to the model, all or nothing, or keeps it until the user decides when the host shows the
-        /// view of the batch and <see cref="ConstructionOptions.ReviewBatches"/> is on.
+        /// view of the batch and <see cref="ConstructionOptions.ReviewBatches"/> is on. A plan given with the batch is kept, so
+        /// that the result of each applied batch tells what is left of it.
         /// </summary>
         /// <param name="changes">The changes to apply, in order.</param>
+        /// <param name="plan">
+        /// The sections of the plan of the work, which replace the plan kept before; <c>null</c> or empty to keep it. A plan with
+        /// problems refuses the batch.
+        /// </param>
         /// <param name="server">
         /// The <see cref="McpServer"/> that receives the call, given by the SDK, whose client tells whether the host shows MCP
         /// Apps; <c>null</c> when unknown.
@@ -160,11 +174,15 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "Delete: the identity of the element and no payload; refused while another element references it, for example a port connected by an interface. Existing elements are designated by their identifier (Id). "
             + "Once a batch is applied, the result also lists the errors and warnings that it has introduced (newIssues, at most 20, and newIssueCount) and the number of issues it has resolved: "
             + "correct the errors in the next batch; a warning can wait when a later batch of your plan resolves it. "
+            + "Plan: for a work of several batches, give its plan with the first batch: its sections, each with the elements it creates (name and type). "
+            + "The server keeps it until a new plan replaces it, and the result of each applied batch then lists the sections done and the ones left, with their missing elements: go on until none is left. "
             + "When the host shows the batch to the user, a valid batch is not applied at once: it waits for the decision of the user. "
             + "Then send no other batch and wait for the user's message, which tells whether it has been applied, with the identifiers, or rejected, with a comment.")]
-        [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage, the errors and warnings that the batch has introduced "
-            + "and the number of issues it has resolved; if not, the problems, each with the number of its change. Or a message telling that the batch waits for the decision of the user.")]
+        [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage, the errors and warnings that the batch has introduced, "
+            + "the number of issues it has resolved and, when a plan has been given, the sections of the plan that are done and left; if not, the problems, each with the number of its change. "
+            + "Or a message telling that the batch waits for the decision of the user.")]
         public CallToolResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes,
+            [Description("Optional: the plan of the work, given with its first batch, as sections that each list the elements they create. It replaces the plan given before.")] IReadOnlyList<PlanSection> plan = null,
             [Description("Bound by the SDK to the server that receives the call, not part of the tool schema.")] McpServer server = null)
         {
             if (changes == null || changes.Count == 0)
@@ -182,6 +200,20 @@ namespace Mycelium.Fabric.Mcp.Tools
                 return showsApps
                     ? this.CreatePendingResult(waitingBatch, this.modelProvider.PreviewChanges(waitingBatch.Changes), BatchShownAgainMessage)
                     : CreateToolResult(new ApplyChangesResult([], [BatchAlreadyPendingProblem]), false);
+            }
+
+            if (plan is { Count: > 0 })
+            {
+                var constructionPlan = ConstructionPlan.Create(plan);
+
+                if (constructionPlan.IsError)
+                {
+                    // The changes are checked too, so that the plan and the batch are corrected at once.
+                    var problems = constructionPlan.Errors.Select(error => error.Description).Concat(this.modelProvider.PreviewChanges(changes).Problems);
+                    return CreateToolResult(new ApplyChangesResult([], [.. problems]), showsApps);
+                }
+
+                this.planStore.Plan = constructionPlan.Value;
             }
 
             if (!showsApps || !this.options.ReviewBatches)
@@ -347,19 +379,15 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Applies a batch of changes to the model and, when <see cref="ConstructionOptions.ReportNewIssues"/> is on, adds to
-        /// the result the issues that it has introduced and the number of issues that it has resolved.
+        /// Applies a batch of changes to the model and adds to the result, when <see cref="ConstructionOptions.ReportNewIssues"/>
+        /// is on, the issues that it has introduced and the number of issues that it has resolved, and, when a plan has been
+        /// given, what the model holds of the plan.
         /// </summary>
         /// <param name="changes">The changes to apply, in order.</param>
         /// <returns>The <see cref="ApplyChangesResult"/> that tells whether the batch has been applied.</returns>
         private ApplyChangesResult ApplyAndReport(IReadOnlyList<ModelChange> changes)
         {
-            if (!this.options.ReportNewIssues)
-            {
-                return this.modelProvider.ApplyChanges(changes);
-            }
-
-            var issuesBefore = this.FindIssues(this.modelProvider.Elements);
+            var issuesBefore = this.options.ReportNewIssues ? this.FindIssues(this.modelProvider.Elements) : null;
             var result = this.modelProvider.ApplyChanges(changes);
 
             if (!result.Applied)
@@ -367,9 +395,13 @@ namespace Mycelium.Fabric.Mcp.Tools
                 return result;
             }
 
-            var (newIssues, resolvedIssueCount) = CompareIssues(issuesBefore, this.FindIssues(this.modelProvider.Elements));
+            if (issuesBefore != null)
+            {
+                var (newIssues, resolvedIssueCount) = CompareIssues(issuesBefore, this.FindIssues(this.modelProvider.Elements));
+                result = result with { NewIssues = [.. newIssues.Take(MaximumIssueCount)], NewIssueCount = newIssues.Count, ResolvedIssueCount = resolvedIssueCount };
+            }
 
-            return result with { NewIssues = [.. newIssues.Take(MaximumIssueCount)], NewIssueCount = newIssues.Count, ResolvedIssueCount = resolvedIssueCount };
+            return result with { Plan = this.planStore.Plan?.GetProgress(this.modelProvider.Elements) };
         }
 
         /// <summary>

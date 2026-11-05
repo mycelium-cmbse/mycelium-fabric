@@ -23,6 +23,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Plans;
     using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
@@ -38,6 +39,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     [TestFixture]
     public class ConstructionToolsTestFixture
     {
+        private static readonly string[] MissionSectionNames = ["Mission"];
+
         private Mock<IModelProvider> modelProvider;
 
         private Mock<IModelValidator> modelValidator;
@@ -45,6 +48,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         private Mock<IAppHostDetector> appHostDetector;
 
         private PendingBatchStore pendingBatchStore;
+
+        private ConstructionPlanStore planStore;
 
         private IOptions<ConstructionOptions> options;
 
@@ -55,6 +60,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             this.modelValidator = new Mock<IModelValidator>();
             this.appHostDetector = new Mock<IAppHostDetector>();
             this.pendingBatchStore = new PendingBatchStore();
+            this.planStore = new ConstructionPlanStore();
             this.options = Options.Create(new ConstructionOptions());
 
             this.modelValidator.Setup(validator => validator.Validate(It.IsAny<IReadOnlyList<IElement>>(), null)).Returns([]);
@@ -66,11 +72,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new ConstructionTools(null, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, this.options), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ConstructionTools(this.modelProvider.Object, null, this.pendingBatchStore, this.appHostDetector.Object, this.options), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, null, this.appHostDetector.Object, this.options), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, null, this.options), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ConstructionTools(null, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ConstructionTools(this.modelProvider.Object, null, this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, null, this.appHostDetector.Object, this.planStore, this.options), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, null, this.planStore, this.options), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, null, this.options), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, this.planStore, null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => this.CreateTools(), Throws.Nothing);
             }
         }
@@ -90,6 +97,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(() => tools.ApplyChanges(null), Throws.TypeOf<McpException>());
                 Assert.That(() => tools.ApplyChanges([]), Throws.TypeOf<McpException>().With.Message.Contains("no change"));
                 Assert.That(ReadResult(toolResult).CreatedElements, Is.EqualTo(new[] { createdElement }));
+                Assert.That(ReadResult(toolResult).Plan, Is.Null);
+                Assert.That(toolResult.Content.OfType<TextContentBlock>().Single().Text, Does.Not.Contain("\"plan\""));
                 Assert.That(toolResult.StructuredContent, Is.Null);
                 Assert.That(toolResult.Meta, Is.Null);
                 this.modelProvider.Verify(provider => provider.ApplyChanges(It.IsAny<IReadOnlyList<ModelChange>>()), Times.Once);
@@ -342,7 +351,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void ApplyChanges_OnEmptyModel_BuildsAModelReadByTheBudgetTools()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
-            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
             var budgetTools = new BudgetTools(emptyModelProvider);
 
             var creation = ReadResult(tools.ApplyChanges(
@@ -399,7 +408,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void ApplyChanges_InAHostWithApps_PreviewsARequirementThatTheBatchBreaks()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
-            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
             var budgetTools = new BudgetTools(emptyModelProvider);
 
             // Built without the review: the host does not show MCP Apps yet.
@@ -461,7 +470,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void ApplyChanges_InAHostWithApps_PreviewsTheBudgetImpactOfEachUnitOfAPart()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
-            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
             var budgetTools = new BudgetTools(emptyModelProvider);
 
             // Built without the review: the host does not show MCP Apps yet.
@@ -493,7 +502,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void ApplyChanges_InAHostWithApps_PreviewsTheDefinitionValueAndOwnershipOfTheCreatedElements()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
-            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
             this.appHostDetector.Setup(detector => detector.ShowsApps(It.IsAny<ClientCapabilities>())).Returns(true);
 
             var review = ReadReview(tools.ApplyChanges(
@@ -541,7 +550,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         public void ApplyChanges_InAHostWithApps_PreviewsTheOwnershipOfTheElementsOfAMission()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
-            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
             this.appHostDetector.Setup(detector => detector.ShowsApps(It.IsAny<ClientCapabilities>())).Returns(true);
 
             var review = ReadReview(tools.ApplyChanges(
@@ -577,6 +586,86 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             }
         }
 
+        [Test]
+        public void ApplyChanges_WithAPlan_ReturnsWhatIsLeftAfterEachBatch()
+        {
+            var emptyModelProvider = CreateEmptyModelProvider();
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
+
+            IReadOnlyList<PlanSection> plan =
+            [
+                new PlanSection { Name = "Mission", Elements = [new PlannedElement { Name = "Mission", Type = "Package" }, new PlannedElement { Name = "spacecraft", Type = "PartUsage" }] },
+                new PlanSection { Name = "Equipment", Elements = [new PlannedElement { Name = "camera", Type = "PartUsage" }, new PlannedElement { Name = "starTracker", Type = "PartUsage" }] }
+            ];
+
+            var firstToolResult = tools.ApplyChanges(
+            [
+                new ModelChange { Identity = "missionPackage", Payload = new ElementPayload { Type = "Package", Name = "Mission" } },
+                new ModelChange { Identity = "spacecraft", Payload = new ElementPayload { Type = "PartUsage", Owner = "missionPackage", Name = "spacecraft" } }
+            ], plan);
+
+            var first = ReadResult(firstToolResult);
+            var second = ReadResult(tools.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "camera" } }]));
+            var last = ReadResult(tools.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "starTracker" } }], []));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(first.Applied, Is.True);
+                Assert.That(first.Plan.DoneSections, Is.EqualTo(MissionSectionNames));
+                Assert.That(first.Plan.RemainingSections.Single().Name, Is.EqualTo("Equipment"));
+                Assert.That(first.Plan.RemainingSections.Single().MissingElements, Is.EqualTo(plan[1].Elements));
+                Assert.That(firstToolResult.Content.OfType<TextContentBlock>().Single().Text, Does.Contain("\"remainingSections\""));
+                Assert.That(second.Plan.RemainingSections.Single().MissingElements.Single().Name, Is.EqualTo("starTracker"));
+                Assert.That(last.Plan.RemainingSections, Is.Empty);
+                Assert.That(last.Plan.Reminder, Is.EqualTo("Every element of the plan is in the model."));
+            }
+        }
+
+        [Test]
+        public void ApplyChanges_WithAnInvalidPlan_RefusesTheBatchWithTheProblemsOfBoth()
+        {
+            IReadOnlyList<ModelChange> changes = [new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "unknown", Name = "lens" } }];
+            this.modelProvider.Setup(provider => provider.PreviewChanges(changes)).Returns(new ModelPreview(["Change 1 (create): The owner 'unknown' is unknown."]));
+
+            var result = ReadResult(this.CreateTools().ApplyChanges(changes, [new PlanSection { Name = "Mission" }]));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.False);
+                Assert.That(result.Problems[0], Does.StartWith("Plan, section 1 ('Mission'): the section lists no element."));
+                Assert.That(result.Problems[1], Is.EqualTo("Change 1 (create): The owner 'unknown' is unknown."));
+                Assert.That(result.Plan, Is.Null);
+                Assert.That(this.planStore.Plan, Is.Null);
+                this.modelProvider.Verify(provider => provider.ApplyChanges(It.IsAny<IReadOnlyList<ModelChange>>()), Times.Never);
+            }
+        }
+
+        [Test]
+        public void ApplyChanges_WithAPlanInAHostWithApps_ReturnsWhatIsLeftOnceTheUserAppliesTheBatch()
+        {
+            var emptyModelProvider = CreateEmptyModelProvider();
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.planStore, this.options);
+            this.appHostDetector.Setup(detector => detector.ShowsApps(It.IsAny<ClientCapabilities>())).Returns(true);
+
+            IReadOnlyList<PlanSection> plan =
+            [
+                new PlanSection { Name = "Mission", Elements = [new PlannedElement { Name = "Mission", Type = "Package" }] },
+                new PlanSection { Name = "Equipment", Elements = [new PlannedElement { Name = "camera", Type = "PartUsage" }] }
+            ];
+
+            var preview = ReadReview(tools.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "Package", Name = "Mission" } }], plan)).Preview;
+            var application = tools.DecideBatch(preview.BatchId, preview.Token, true);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.planStore.Plan.Sections, Has.Count.EqualTo(2));
+                Assert.That(application.Status, Is.EqualTo(BatchReviewStatus.Applied));
+                Assert.That(application.Result.Plan.DoneSections, Is.EqualTo(MissionSectionNames));
+                Assert.That(application.Result.Plan.RemainingSections.Single().Name, Is.EqualTo("Equipment"));
+                Assert.That(application.Message, Does.Contain("\"remainingSections\""));
+            }
+        }
+
         /// <summary>
         /// Creates the <see cref="ConstructionTools"/> on the mocked model provider and validator.
         /// </summary>
@@ -584,7 +673,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="ConstructionTools"/>.</returns>
         private ConstructionTools CreateTools(IOptions<ConstructionOptions> constructionOptions = null)
         {
-            return new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, constructionOptions ?? this.options);
+            return new ConstructionTools(this.modelProvider.Object, this.modelValidator.Object, this.pendingBatchStore, this.appHostDetector.Object, this.planStore, constructionOptions ?? this.options);
         }
 
         /// <summary>

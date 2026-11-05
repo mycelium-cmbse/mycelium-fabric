@@ -18,6 +18,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using Microsoft.Extensions.AI;
 
     using Mycelium.Fabric.Mcp.Extensions;
+    using Mycelium.Fabric.Mcp.Plans;
 
     /// <summary>
     /// The options that build the input schema of apply_changes as a strict schema, which a client that supports structured
@@ -39,7 +40,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         public static readonly AIJsonSchemaCreateOptions CreateOptions = new()
         {
             TransformSchemaNode = TransformNode,
-            TransformOptions = new AIJsonSchemaTransformOptions { DisallowAdditionalProperties = true }
+            TransformOptions = new AIJsonSchemaTransformOptions { DisallowAdditionalProperties = true, MoveDefaultKeywordToDescription = true }
         };
 
         /// <summary>
@@ -53,8 +54,9 @@ namespace Mycelium.Fabric.Mcp.Changes
         };
 
         /// <summary>
-        /// Completes the schema that the SDK builds for a type or a property: the types of a <see cref="PayloadValue"/>, which a
-        /// converter reads, a required property that cannot be <c>null</c>, and the <see cref="AllowedValues"/>.
+        /// Completes the schema that the SDK builds for a type or a property: the plan, which accepts <c>null</c>, the types of a
+        /// <see cref="PayloadValue"/>, which a converter reads, a required property that cannot be <c>null</c>, and the
+        /// <see cref="AllowedValues"/>.
         /// </summary>
         /// <param name="context">The <see cref="AIJsonSchemaCreateContext"/> that tells which type or property the schema describes.</param>
         /// <param name="schema">The schema built by the SDK.</param>
@@ -64,6 +66,12 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (schema is not JsonObject node)
             {
                 return schema;
+            }
+
+            if (context.Path.IsEmpty && context.TypeInfo.Type == typeof(IReadOnlyList<PlanSection>))
+            {
+                // The plan is an optional argument: null means that it is not given.
+                node["type"] = new JsonArray("array", "null");
             }
 
             var nullableType = Nullable.GetUnderlyingType(context.TypeInfo.Type);

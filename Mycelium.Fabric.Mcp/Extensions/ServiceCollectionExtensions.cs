@@ -90,6 +90,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 });
 
                 services.AddSingleton<IPendingBatchStore, PendingBatchStore>();
+                services.AddSingleton<IConstructionPlanStore, ConstructionPlanStore>();
                 services.AddSingleton<IAppHostDetector, AppHostDetector>();
 
                 services.AddImplementations<IValidationRule>(typeof(IValidationRule).Assembly, ServiceLifetime.Singleton);
