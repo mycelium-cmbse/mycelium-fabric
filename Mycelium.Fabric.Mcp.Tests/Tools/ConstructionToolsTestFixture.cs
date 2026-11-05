@@ -458,6 +458,38 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         }
 
         [Test]
+        public void ApplyChanges_InAHostWithApps_PreviewsTheBudgetImpactOfEachUnitOfAPart()
+        {
+            var emptyModelProvider = CreateEmptyModelProvider();
+            var tools = new ConstructionTools(emptyModelProvider, CreateModelValidator(), this.pendingBatchStore, this.appHostDetector.Object, this.options);
+            var budgetTools = new BudgetTools(emptyModelProvider);
+
+            // Built without the review: the host does not show MCP Apps yet.
+            var creation = ReadResult(tools.ApplyChanges(
+            [
+                new ModelChange { Identity = "spacecraft", Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } },
+                new ModelChange { Identity = "eosat1", Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "eosat1" } },
+                new ModelChange { Identity = "heater", Payload = new ElementPayload { Type = "PartUsage", Owner = "eosat1", Name = "heater", Multiplicity = "4" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "heater", Name = "power", Value = 5, Unit = "W" } }
+            ]));
+
+            var eosat1Id = creation.CreatedElements.Single(created => created.QualifiedName == "Spacecraft::eosat1").Id;
+            var heaterPowerId = creation.CreatedElements.Single(created => created.QualifiedName == "Spacecraft::eosat1::heater::power").Id;
+
+            this.appHostDetector.Setup(detector => detector.ShowsApps(It.IsAny<ClientCapabilities>())).Returns(true);
+
+            var review = ReadReview(tools.ApplyChanges([new ModelChange { Identity = heaterPowerId.ToString(), Payload = new ElementPayload { Value = 6, Unit = "W" } }]));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(creation.Applied, Is.True);
+                Assert.That(budgetTools.SumAttribute(eosat1Id, "power").Total, Is.EqualTo(20));
+                Assert.That(review.Status, Is.EqualTo(BatchReviewStatus.Pending));
+                Assert.That(review.Preview.BudgetImpacts, Is.EqualTo(new[] { new BudgetImpact("Spacecraft::eosat1", "power", 20, 24, "W") }));
+            }
+        }
+
+        [Test]
         public void ApplyChanges_InAHostWithApps_PreviewsTheDefinitionValueAndOwnershipOfTheCreatedElements()
         {
             var emptyModelProvider = CreateEmptyModelProvider();
@@ -473,7 +505,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 new ModelChange { Identity = "eosat1", Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "eosat1" } },
                 new ModelChange { Identity = "thermal", Payload = new ElementPayload { Type = "PartUsage", Owner = "eosat1", Name = "thermalSubsystem" } },
                 new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "thermal", Name = "radiator", Definition = "Radiator" } },
-                new ModelChange { Identity = "heater", Payload = new ElementPayload { Type = "PartUsage", Owner = "thermal", Name = "heater" } },
+                new ModelChange { Identity = "heater", Payload = new ElementPayload { Type = "PartUsage", Owner = "thermal", Name = "heater", Multiplicity = "4" } },
                 new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "heater", Name = "power", Value = 5, Unit = "W" } },
                 new ModelChange { Payload = new ElementPayload { Type = "RequirementUsage", Owner = "spacecraft", Name = "heaterPower", ReqId = "REQ-THE-001", Text = "The heater shall draw at most 25 W." } },
                 new ModelChange { Identity = "testBench", Payload = new ElementPayload { Type = "PartUsage", Owner = "spacecraft", Name = "testBench" } },
@@ -491,8 +523,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                     ("Spacecraft::Radiator", null, null, null),
                     ("Spacecraft::Radiator::mass", null, "2 kg", null),
                     ("Spacecraft::Radiator::fin", null, null, null),
-                    ("Spacecraft::eosat1", null, "2 kg · 5 W", null),
-                    ("Spacecraft::eosat1::thermalSubsystem", null, "2 kg · 5 W", "THE"),
+                    ("Spacecraft::eosat1", null, "2 kg · 20 W", null),
+                    ("Spacecraft::eosat1::thermalSubsystem", null, "2 kg · 20 W", "THE"),
                     ("Spacecraft::eosat1::thermalSubsystem::radiator", "Radiator", "2 kg", "THE"),
                     ("Spacecraft::eosat1::thermalSubsystem::heater", null, "5 W", "THE"),
                     ("Spacecraft::eosat1::thermalSubsystem::heater::power", null, "5 W", "THE"),
