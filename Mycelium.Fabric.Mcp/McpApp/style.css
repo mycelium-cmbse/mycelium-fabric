@@ -1,13 +1,22 @@
 :root {
     color-scheme: light dark;
-    --card:       var(--color-background-primary,   light-dark(#FFFFFF, #262624));
-    --muted-bg:   var(--color-background-secondary, light-dark(#F0F5F7, #1f1e1d));
-    --fg:         var(--color-text-primary,         light-dark(#293342, #f2f1ed));
-    --fg2:        var(--color-text-secondary,       light-dark(#4D596B, #d0cec8));
-    --muted:      var(--color-text-secondary,       light-dark(#738294, #b5b3ad));
-    --border:     var(--color-border-primary,       light-dark(#E3E8ED, #4a4a46));
-    --danger:     var(--color-text-danger,          light-dark(#D44545, #f97066));
-    --success:    var(--color-text-success,         light-dark(#338C4D, #6cc08b));
+    /* Our own palette, light and dark: the colours the host sends, when it sends them, replace it. */
+    --bloom-card:     light-dark(#FFFFFF, #262624);
+    --bloom-muted-bg: light-dark(#F0F5F7, #1f1e1d);
+    --bloom-fg:       light-dark(#293342, #f2f1ed);
+    --bloom-fg2:      light-dark(#4D596B, #d0cec8);
+    --bloom-muted:    light-dark(#738294, #b5b3ad);
+    --bloom-border:   light-dark(#E3E8ED, #4a4a46);
+    --bloom-danger:   light-dark(#D44545, #f97066);
+    --bloom-success:  light-dark(#338C4D, #6cc08b);
+    --card:       var(--color-background-primary,   var(--bloom-card));
+    --muted-bg:   var(--color-background-secondary, var(--bloom-muted-bg));
+    --fg:         var(--color-text-primary,         var(--bloom-fg));
+    --fg2:        var(--color-text-secondary,       var(--bloom-fg2));
+    --muted:      var(--color-text-secondary,       var(--bloom-muted));
+    --border:     var(--color-border-primary,       var(--bloom-border));
+    --danger:     var(--color-text-danger,          var(--bloom-danger));
+    --success:    var(--color-text-success,         var(--bloom-success));
     --warning:    light-dark(#B45309, #f5b04c);
     --info:       light-dark(#2B66C9, #7aa7f0);
     --primary:    light-dark(#0F9E8C, #2bb5a2);

@@ -147,7 +147,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             var subsystemRequest = request with
             {
                 Choices = [Choice(PropulsionSubsystemId, Variant("electric", ("mass", 9))), new TradeOffChoice { Name = "radiator", Required = true, Variants = [Variant("small", ("mass", 1))] }],
-                Constraints = [Constraint("mass", "<", 200, null, 5), Constraint("mass", ">", 1, null, null)],
+                Constraints = [Constraint("mass", "<", 200, null, 5), Constraint("mass", ">", 1, null, null), Constraint("mass", " == ", 130, null, null)],
                 Rules = [new TradeOffRule { If = "propulsionSubsystem.electric", Then = ["radiator.small"] }],
                 CompareBy = " "
             };
@@ -157,8 +157,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(subsystemProblem.CompareDecisionIndex, Is.Null);
-                Assert.That(subsystemProblem.Limits.Select(limit => limit.Operator), Is.EqualTo([TradeOffOperator.LessThan, TradeOffOperator.GreaterThan]));
-                Assert.That(subsystemProblem.Limits.Select(limit => limit.Margin), Is.EqualTo([5, 0]));
+                Assert.That(subsystemProblem.Limits.Select(limit => limit.Operator), Is.EqualTo([TradeOffOperator.LessThan, TradeOffOperator.GreaterThan, TradeOffOperator.Equal]));
+                Assert.That(subsystemProblem.Limits.Select(limit => limit.Margin), Is.EqualTo([5, 0, 0]));
                 Assert.That(subsystemProblem.Decisions[0].Options[0].Values["mass"], Is.EqualTo(5.7).Within(1e-9));
                 Assert.That(subsystemProblem.FixedTotals["mass"], Is.EqualTo(120.1).Within(1e-9));
                 Assert.That(subsystemProblem.Decisions[1].Required, Is.True);
@@ -192,7 +192,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 AssertRejected(Request() with { CompareBy = "battery" }, "compareBy names 'battery'");
 
                 AssertRejected(Request(constraints: [Constraint(null, "<=", 150, null, null)]), "Constraint 1 needs an attribute");
-                AssertRejected(Request(constraints: [Constraint("mass", "==", 150, null, null)]), "the operator '=='");
+                AssertRejected(Request(constraints: [Constraint("mass", "=", 150, null, null)]), "the operator '=': use '<', '<=', '>', '>=' or '=='");
                 AssertRejected(Request(constraints: [Constraint("mass", "<=", 150, "power", null)]), "either a limit");
                 AssertRejected(Request(constraints: [Constraint("mass", "<=", null, " ", null)]), "either a limit");
                 AssertRejected(Request(constraints: [Constraint("mass", "<=", double.NaN, null, null)]), "not a number");
@@ -201,6 +201,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 AssertRejected(Request(constraints: [Constraint("mass", "<=", 150, null, -2.5)]), "margin of -2.5:");
                 AssertRejected(Request(constraints: [Constraint("mass", "<=", 150, null, double.PositiveInfinity)]), "margin of");
                 AssertRejected(Request(constraints: [Constraint("mass", ">=", 0, null, 10)]), "limit of 0 or less");
+                AssertRejected(Request(constraints: [Constraint("mass", "==", 150, null, 10)]), "a margin with '=='");
 
                 AssertRejected(Request([null]), "A choice is empty");
                 AssertRejected(Request([camera]) with { RootId = PayloadSubsystemId, Choices = [Choice(ReactionWheelId, Variant("light"))] }, "'reactionWheel1' is not a part under 'payloadSubsystem'");

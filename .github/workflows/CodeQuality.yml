@@ -49,7 +49,7 @@ jobs:
 
       - name: Run JavaScript Tests and Compute Coverage
         working-directory: Mycelium.Fabric.Mcp  # lcov paths must be relative to the project, which is the SonarQube module
-        run: node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info ../Mycelium.Fabric.Mcp.Tests/McpApp/script.test.js
+        run: node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info ../Mycelium.Fabric.Mcp.Tests/McpApp/*.test.js
 
       - name: Sonarqube end
         env:

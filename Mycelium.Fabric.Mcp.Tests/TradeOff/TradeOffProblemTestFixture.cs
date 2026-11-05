@@ -20,6 +20,16 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
     [TestFixture]
     public class TradeOffProblemTestFixture
     {
+        /// <summary>
+        /// The selections of the problem: the current or the light camera, each with the small fuel tank.
+        /// </summary>
+        private static readonly int[][] BothCameras = [[0, 1], [1, 1]];
+
+        /// <summary>
+        /// The only selection left when the light camera is excluded.
+        /// </summary>
+        private static readonly int[][] CurrentCamera = [[0, 1]];
+
         private TradeOffProblem problem;
 
         [SetUp]
@@ -102,6 +112,58 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(this.problem.IsSatisfied(massWithMargin, [1, 0]), Is.True);
                 Assert.That(this.problem.IsSatisfied(powerBalance, [0, 0]), Is.False);
                 Assert.That(this.problem.IsSatisfied(this.problem.Limits[2], [0, 0]), Is.True);
+            }
+        }
+
+        [Test]
+        public void VerifyIsAllowed()
+        {
+            var withoutLight = this.problem with { Excluded = [new TradeOffVariantReference(0, "light")] };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.problem.IsAllowed(0, 0), Is.True);
+                Assert.That(this.problem.IsAllowed(0, 1), Is.True);
+                Assert.That(this.problem.IsAllowed(1, 0), Is.False);
+                Assert.That(this.problem.IsAllowed(1, 1), Is.True);
+                Assert.That(this.problem.IsExcluded(new TradeOffVariantReference(0, "light")), Is.False);
+                Assert.That(withoutLight.IsExcluded(new TradeOffVariantReference(0, "light")), Is.True);
+                Assert.That(withoutLight.IsAllowed(0, 1), Is.False);
+                Assert.That((withoutLight with { CompareDecisionIndex = 0 }).GetAlternatives(), Is.EqualTo([new TradeOffVariantReference(0, "current")]));
+            }
+        }
+
+        [Test]
+        public void VerifyTryEnumerateSelections()
+        {
+            var withoutLight = this.problem with { Excluded = [new TradeOffVariantReference(0, "light")] };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.problem.TryEnumerateSelections(10, out var bothCameras), Is.True);
+                Assert.That(bothCameras, Is.EqualTo(BothCameras));
+                Assert.That(this.problem.TryEnumerateSelections(1, out var tooMany), Is.False);
+                Assert.That(tooMany, Is.Empty);
+                Assert.That(withoutLight.TryEnumerateSelections(10, out var currentCamera), Is.True);
+                Assert.That(currentCamera, Is.EqualTo(CurrentCamera));
+            }
+        }
+
+        [Test]
+        public void VerifyIsRespected()
+        {
+            var requires = new TradeOffDependency(TradeOffRuleKind.Requires, new TradeOffVariantReference(0, "light"), [new TradeOffVariantReference(1, "small")], "camera.light requires fuelTank.small");
+            var excludes = requires with { Kind = TradeOffRuleKind.Excludes };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => this.problem.IsRespected(null, [0, 0]), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.problem.IsRespected(requires, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(this.problem.IsRespected(requires, [0, 0]), Is.True);
+                Assert.That(this.problem.IsRespected(requires, [1, 0]), Is.False);
+                Assert.That(this.problem.IsRespected(requires, [1, 1]), Is.True);
+                Assert.That(this.problem.IsRespected(excludes, [1, 1]), Is.False);
+                Assert.That(this.problem.IsRespected(excludes, [1, 0]), Is.True);
             }
         }
 

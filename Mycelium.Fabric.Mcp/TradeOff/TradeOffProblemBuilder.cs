@@ -111,6 +111,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             var decisions = choices.Select((choice, index) => ReadDecision(choice, names[index], parts[index], attributes, units, libraryUnits)).ToList();
             var fixedTotals = attributes.ToDictionary(attribute => attribute, attribute => GetFixedTotal(root, attribute, parts, units[attribute]));
             var dependencies = (request.Rules ?? []).Select((rule, index) => ReadDependency(rule, index, decisions)).ToList();
+            var excluded = ReadExcluded(request.Excluded ?? [], decisions);
             int? compareDecisionIndex = null;
 
             if (!string.IsNullOrWhiteSpace(request.CompareBy))
@@ -122,7 +123,29 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     : throw new McpException($"compareBy names '{request.CompareBy}', which is not a choice. Give the name of a choice: {string.Join(", ", names)}.");
             }
 
-            return new TradeOffProblem(decisions, fixedTotals, objectives, limits, dependencies, request.Count, compareDecisionIndex, units);
+            return new TradeOffProblem(decisions, fixedTotals, objectives, limits, dependencies, request.Count, compareDecisionIndex, units, excluded);
+        }
+
+        /// <summary>
+        /// Resolves the variants turned off by the user, and checks that each choice keeps at least one variant.
+        /// </summary>
+        /// <param name="references">The turned-off variants, written <c>choice.variant</c>.</param>
+        /// <param name="decisions">The <see cref="TradeOffDecision"/>s of the problem.</param>
+        /// <returns>The <see cref="TradeOffVariantReference"/> of each turned-off variant, without duplicates.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when a reference does not designate a variant of a choice, or when every variant of a choice is turned off.
+        /// </exception>
+        private static List<TradeOffVariantReference> ReadExcluded(IReadOnlyList<string> references, List<TradeOffDecision> decisions)
+        {
+            var excluded = references.Select(reference => ReadReference(reference, "excluded", decisions)).Distinct().ToList();
+
+            var emptyDecision = decisions
+                .Where((decision, decisionIndex) => decision.Options.All(option => (decision.Required && option.IsCurrent) || excluded.Contains(new TradeOffVariantReference(decisionIndex, option.Variant))))
+                .FirstOrDefault();
+
+            return emptyDecision == null
+                ? excluded
+                : throw new McpException($"Every variant of '{emptyDecision.Name}' is turned off: keep at least one.");
         }
 
         /// <summary>
@@ -365,7 +388,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 "<=" => TradeOffOperator.LessThanOrEqual,
                 ">" => TradeOffOperator.GreaterThan,
                 ">=" => TradeOffOperator.GreaterThanOrEqual,
-                _ => throw new McpException($"{label} has the operator '{constraint.Operator}': use '<', '<=', '>' or '>='.")
+                "==" => TradeOffOperator.Equal,
+                _ => throw new McpException($"{label} has the operator '{constraint.Operator}': use '<', '<=', '>', '>=' or '=='.")
             };
 
             var attribute = constraint.Attribute.Trim();
@@ -397,12 +421,17 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 throw new McpException($"{label} has a margin of {margin.ToString(CultureInfo.InvariantCulture)}: give a percentage between 0 and 1000.");
             }
 
+            if (margin > 0 && comparison == TradeOffOperator.Equal)
+            {
+                throw new McpException($"{label} has a margin with '==': a margin only applies to '<', '<=', '>' or '>='. Write the margin into the limit instead.");
+            }
+
             if (margin > 0 && constraint.Limit <= 0)
             {
                 throw new McpException($"{label} has a margin with a limit of 0 or less, where a margin would make it easier to meet: write the margin into the limit instead.");
             }
 
-            return new TradeOffLimit(attribute, comparison, constraint.Limit, limitAttribute, margin);
+            return new TradeOffLimit(attribute, comparison, constraint.Limit, limitAttribute, margin, Name: string.IsNullOrWhiteSpace(constraint.Name) ? null : constraint.Name.Trim());
         }
 
         /// <summary>

@@ -98,6 +98,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             var closestUnderLimits = this.solver.Solve(problem with { Objectives = [], Limits = [Limit("mass", TradeOffOperator.LessThan, 38), Limit("power", TradeOffOperator.LessThanOrEqual, 65)] });
             var unchangedUnderLimits = this.solver.Solve(problem with { Objectives = [], Limits = [Limit("mass", TradeOffOperator.LessThanOrEqual, 38)] });
             var allCombinations = this.solver.Solve(problem with { Objectives = [Minimize("mass")], Count = 5 });
+            var exactPower = this.solver.Solve(problem with { Limits = [Limit("power", TradeOffOperator.Equal, 70)] });
+            var noExactPower = this.solver.Solve(problem with { Limits = [Limit("power", TradeOffOperator.Equal, 65)] });
 
             using (Assert.EnterMultipleScope())
             {
@@ -110,6 +112,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(allCombinations.Alternatives[0].Selections, Has.Count.EqualTo(3));
                 Assert.That(allCombinations.Alternatives[0].Selections.Take(2).Select(selection => selection[0]), Is.EquivalentTo([1, 2]));
                 Assert.That(allCombinations.Alternatives[0].Selections[2], Is.EqualTo([0]));
+                Assert.That(exactPower.Alternatives[0].Selections.Single(), Is.EqualTo([1]));
+                Assert.That(noExactPower.Status, Is.EqualTo(TradeOffStatus.Infeasible));
+                Assert.That(noExactPower.Alternatives.Single().Conflicts, Is.EqualTo(["constraint 1: power == 65"]));
             }
         }
 
@@ -150,6 +155,24 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(compared.Alternatives[1].Status, Is.EqualTo(TradeOffStatus.Infeasible));
                 Assert.That(compared.Alternatives[1].Conflicts, Is.EqualTo(["rule 2: propulsion.electric excludes fuelTank.small and fuelTank.large"]));
                 Assert.That(comparedTank.Alternatives.Select(alternative => alternative.Variant), Is.EqualTo(["small", "large"]));
+            }
+        }
+
+        [Test]
+        public void VerifySolveWithExcludedVariants()
+        {
+            var problem = CreatePropulsionProblem(1) with { Excluded = [new TradeOffVariantReference(0, "electric")] };
+
+            var withoutElectric = this.solver.Solve(problem);
+            var compared = this.solver.Solve(problem with { CompareDecisionIndex = 0 });
+            var namedLimit = this.solver.Solve(problem with { Limits = [.. problem.Limits, Limit("mass", TradeOffOperator.LessThanOrEqual, 90) with { Name = "REQ-SYS-001" }] });
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(withoutElectric.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(withoutElectric.Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
+                Assert.That(compared.Alternatives.Select(alternative => alternative.Variant), Is.EqualTo(["thermal"]));
+                Assert.That(namedLimit.Alternatives.Single().Conflicts, Is.EqualTo(["REQ-SYS-001: mass <= 90"]));
             }
         }
 

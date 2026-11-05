@@ -114,9 +114,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(documentParserRegistrations.Select(descriptor => descriptor.Lifetime), Has.All.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(documentReaderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(documentReaderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(14));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(15));
                 Assert.That(promptRegistrations, Has.Count.EqualTo(2));
-                Assert.That(resourceRegistrations, Has.Count.EqualTo(1));
+                Assert.That(resourceRegistrations, Has.Count.EqualTo(2));
                 Assert.That(pendingBatchStoreRegistrations, Has.Count.EqualTo(1));
                 Assert.That(pendingBatchStoreRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(pendingBatchStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(PendingBatchStore)));
