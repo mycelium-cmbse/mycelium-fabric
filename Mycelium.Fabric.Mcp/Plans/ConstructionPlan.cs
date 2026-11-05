@@ -173,7 +173,7 @@ namespace Mycelium.Fabric.Mcp.Plans
             var path = SplitName(element.Name);
 
             return namedElements[path[^1]].Any(named => named.Metaclass == element.Type && named.Path.Length >= path.Length
-                && named.Path[^path.Length..].SequenceEqual(path, StringComparer.Ordinal));
+                && named.Path.AsSpan()[^path.Length..].SequenceEqual(path, StringComparer.Ordinal));
         }
 
         /// <summary>
