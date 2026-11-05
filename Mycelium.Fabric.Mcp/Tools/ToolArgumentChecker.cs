@@ -18,6 +18,8 @@ namespace Mycelium.Fabric.Mcp.Tools
     using ModelContextProtocol.Protocol;
     using ModelContextProtocol.Server;
 
+    using Mycelium.Fabric.Mcp.Extensions;
+
     /// <summary>
     /// Checks the arguments of a tool whose input schema is strict, as the one of apply_changes is, against this schema before
     /// the SDK reads them, and returns every difference at once, as apply_changes returns every problem of a batch. Without
@@ -67,7 +69,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             return (context, cancellationToken) =>
             {
-                if (context.MatchedPrimitive is McpServerTool tool && IsStrict(tool.ProtocolTool.InputSchema))
+                if (context.MatchedPrimitive is McpServerTool tool && tool.ProtocolTool.InputSchema.IsStrictSchema())
                 {
                     var problems = FindProblems(context.Params?.Arguments, tool.ProtocolTool.InputSchema);
 
@@ -104,17 +106,6 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Tells whether a schema is strict: it refuses the properties that it does not declare.
-        /// </summary>
-        /// <param name="schema">The schema.</param>
-        /// <returns><c>true</c> when the schema is strict.</returns>
-        private static bool IsStrict(JsonElement schema)
-        {
-            return schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty("additionalProperties", out var additionalProperties)
-                && additionalProperties.ValueKind == JsonValueKind.False;
-        }
-
-        /// <summary>
         /// Checks a value against its schema.
         /// </summary>
         /// <param name="value">The value.</param>
@@ -130,17 +121,17 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             if (schema.TryGetProperty("anyOf", out var choices) && !choices.EnumerateArray().Any(choice => Accepts(choice, value, path)))
             {
-                problems.Add($"{path}: {DescribeTypes(choices.EnumerateArray())} is expected, not {Show(value)}.");
+                problems.Add($"{path}: {DescribeTypes(choices.EnumerateArray())} is expected, not {value.ToShortText(MaximumShownValueLength)}.");
                 return;
             }
 
-            if (schema.TryGetProperty("type", out var type) && !HasType(value, type))
+            if (schema.TryGetProperty("type", out var type) && !value.HasSchemaType(type))
             {
-                problems.Add($"{path}: {DescribeTypes([schema])} is expected, not {Show(value)}.");
+                problems.Add($"{path}: {DescribeTypes([schema])} is expected, not {value.ToShortText(MaximumShownValueLength)}.");
                 return;
             }
 
-            if (schema.TryGetProperty("enum", out var allowedValues) && !allowedValues.EnumerateArray().Any(allowedValue => AreEqual(allowedValue, value)))
+            if (schema.TryGetProperty("enum", out var allowedValues) && !allowedValues.EnumerateArray().Any(allowedValue => allowedValue.EqualsIgnoringCase(value)))
             {
                 problems.Add($"{path}: {DescribeAllowedValues(allowedValues, schema, value)}");
                 return;
@@ -190,7 +181,7 @@ namespace Mycelium.Fabric.Mcp.Tools
                 {
                     CheckValue(value, propertySchema, path.Length == 0 ? name : $"{path}.{name}", problems);
                 }
-                else if (IsStrict(schema))
+                else if (schema.IsStrictSchema())
                 {
                     problems.Add($"{location}: there is no property '{name}'; the properties are {string.Join(", ", declaredProperties.Keys)}.");
                 }
@@ -221,50 +212,6 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Tells whether a value has one of the types of a schema.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="type">The <c>type</c> of the schema: a type, such as <c>"string"</c>, or an array of types.</param>
-        /// <returns><c>true</c> when the value has one of the types.</returns>
-        private static bool HasType(JsonElement value, JsonElement type)
-        {
-            return GetTypeNames(type).Any(typeName => typeName switch
-            {
-                "string" => value.ValueKind == JsonValueKind.String,
-                "number" => value.ValueKind == JsonValueKind.Number,
-                "integer" => value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out _),
-                "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-                "array" => value.ValueKind == JsonValueKind.Array,
-                "object" => value.ValueKind == JsonValueKind.Object,
-                "null" => value.ValueKind == JsonValueKind.Null,
-                _ => true
-            });
-        }
-
-        /// <summary>
-        /// Tells whether a value is one of the values that a schema lists, a text being compared without case.
-        /// </summary>
-        /// <param name="allowedValue">The listed value.</param>
-        /// <param name="value">The value.</param>
-        /// <returns><c>true</c> when the values are equal.</returns>
-        private static bool AreEqual(JsonElement allowedValue, JsonElement value)
-        {
-            return allowedValue.ValueKind == JsonValueKind.String && value.ValueKind == JsonValueKind.String
-                ? string.Equals(allowedValue.GetString(), value.GetString(), StringComparison.OrdinalIgnoreCase)
-                : JsonElement.DeepEquals(allowedValue, value);
-        }
-
-        /// <summary>
-        /// Gets the names of the types of a schema.
-        /// </summary>
-        /// <param name="type">The <c>type</c> of the schema: a type or an array of types.</param>
-        /// <returns>The names of the types.</returns>
-        private static IEnumerable<string> GetTypeNames(JsonElement type)
-        {
-            return type.ValueKind == JsonValueKind.Array ? type.EnumerateArray().Select(typeName => typeName.GetString()) : [type.GetString()];
-        }
-
-        /// <summary>
         /// Describes the types that a value must have, <c>null</c> being left out when there are others.
         /// </summary>
         /// <param name="schemas">The schema of the value, or the choices of its <c>anyOf</c>.</param>
@@ -275,7 +222,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         private static string DescribeTypes(IEnumerable<JsonElement> schemas)
         {
             var typeNames = schemas
-                .SelectMany(schema => schema.TryGetProperty("type", out var type) ? GetTypeNames(type) : [])
+                .SelectMany(schema => schema.TryGetProperty("type", out var type) ? type.GetTypeNames() : [])
                 .Distinct()
                 .ToList();
 
@@ -319,24 +266,12 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             if (listedValues.Count <= MaximumListedValueCount)
             {
-                return $"one of {string.Join(", ", listedValues.Select(listedValue => $"'{listedValue}'"))} is expected, not {Show(value)}.";
+                return $"one of {string.Join(", ", listedValues.Select(listedValue => $"'{listedValue}'"))} is expected, not {value.ToShortText(MaximumShownValueLength)}.";
             }
 
             var description = schema.TryGetProperty("description", out var text) ? $": {text.GetString()}" : ".";
 
-            return $"{Show(value)} is not one of the {listedValues.Count} values that the schema lists{description}";
-        }
-
-        /// <summary>
-        /// Writes a wrong value as in JSON, a text between double quotes, shortened when it is long.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <returns>The value, for example <c>"input"</c> or <c>4</c>.</returns>
-        private static string Show(JsonElement value)
-        {
-            var text = value.ValueKind == JsonValueKind.String ? $"\"{value.GetString()}\"" : value.GetRawText();
-
-            return text.Length <= MaximumShownValueLength ? text : $"{text[..MaximumShownValueLength]}…";
+            return $"{value.ToShortText(MaximumShownValueLength)} is not one of the {listedValues.Count} values that the schema lists{description}";
         }
 
         /// <summary>

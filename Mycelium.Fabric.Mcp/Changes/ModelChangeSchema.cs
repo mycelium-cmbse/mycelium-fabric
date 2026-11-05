@@ -17,6 +17,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
     using Microsoft.Extensions.AI;
 
+    using Mycelium.Fabric.Mcp.Extensions;
+
     /// <summary>
     /// The options that build the input schema of apply_changes as a strict schema, which a client that supports structured
     /// outputs can impose on the AI assistant: every object refuses the properties that it does not declare, a value is a
@@ -79,7 +81,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (property.IsRequired && node["type"] is JsonArray types)
             {
-                node["type"] = RemoveNull(types);
+                node["type"] = types.GetTypesWithoutNull();
             }
 
             if (context.PropertyAttributeProvider is MemberInfo member && AllowedValues.TryGetValue((context.DeclaringType, member.Name), out var values))
@@ -107,18 +109,6 @@ namespace Mycelium.Fabric.Mcp.Changes
             string[] valueTypes = isNullable ? ["number", "boolean", "string", "null"] : ["number", "boolean", "string"];
 
             return new JsonArray([.. valueTypes.Select(valueType => (JsonNode)new JsonObject { ["type"] = valueType })]);
-        }
-
-        /// <summary>
-        /// Removes <c>null</c> from the types of a property, for example <c>["string", "null"]</c>.
-        /// </summary>
-        /// <param name="types">The types of the property.</param>
-        /// <returns>The other type, or the other types when there are several.</returns>
-        private static JsonNode RemoveNull(JsonArray types)
-        {
-            var otherTypes = types.Select(type => type.GetValue<string>()).Where(type => type != "null").ToList();
-
-            return otherTypes.Count == 1 ? JsonValue.Create(otherTypes[0]) : new JsonArray([.. otherTypes.Select(type => (JsonNode)type)]);
         }
     }
 }
