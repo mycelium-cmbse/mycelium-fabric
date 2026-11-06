@@ -50,9 +50,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <see cref="ConstructionOptions"/> that tell whether apply_changes returns the new issues of a batch, all read from
             /// the configuration of the host, a <see cref="ModelValidator"/> with the <see cref="IValidationRule"/>s of this
             /// assembly, and for the review of a batch by the user in a host that shows MCP Apps, a <see cref="PendingBatchStore"/>,
-            /// an <see cref="AppHostDetector"/> and the <see cref="BatchReviewResource"/> that serves the view of a batch. The input
-            /// schema of apply_changes is the strict schema of <see cref="ModelChangeSchema"/>, and the
-            /// <see cref="ToolArgumentChecker"/> checks the arguments of a tool against such a schema before the tool is called.
+            /// an <see cref="AppHostDetector"/> and the <see cref="BatchReviewResource"/> that serves the view of a batch, and for the
+            /// review of the requirements found in a document, a <see cref="RequirementProposalStore"/>. The input schema of
+            /// apply_changes is the strict schema of <see cref="ModelChangeSchema"/>, and the <see cref="ToolArgumentChecker"/>
+            /// checks the arguments of a tool against such a schema before the tool is called.
             /// </summary>
             /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
             /// <returns>
@@ -90,6 +91,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 });
 
                 services.AddSingleton<IPendingBatchStore, PendingBatchStore>();
+                services.AddSingleton<IRequirementProposalStore, RequirementProposalStore>();
                 services.AddSingleton<IAppHostDetector, AppHostDetector>();
 
                 services.AddImplementations<IValidationRule>(typeof(IValidationRule).Assembly, ServiceLifetime.Singleton);
@@ -121,10 +123,11 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     .WithTools<TradeOffTools>(TradeOffTools.StudySerializerOptions)
                     .WithTools<ValidationTools>()
                     .WithTools<DocumentTools>()
+                    .WithTools<RequirementExtractionTools>()
                     .WithRequestFilters(filters => filters.AddCallToolFilter(ToolArgumentChecker.CheckArguments))
                     // A static class cannot be a type argument: the prompts are registered by their type.
                     .WithPrompts([typeof(GenerationPrompts), typeof(RequirementPrompts)])
-                    .WithResources([typeof(BatchReviewResource), typeof(TradeOffResource), typeof(ModelHealthResource)])
+                    .WithResources([typeof(BatchReviewResource), typeof(TradeOffResource), typeof(ModelHealthResource), typeof(RequirementExtractionResource)])
                     // Last, so that the MCP Apps metadata of every tool registered above is written.
                     .WithMcpApps();
             }

@@ -84,6 +84,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var promptRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerPrompt)).ToList();
             var resourceRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerResource)).ToList();
             var pendingBatchStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IPendingBatchStore)).ToList();
+            var proposalStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IRequirementProposalStore)).ToList();
             var appHostDetectorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IAppHostDetector)).ToList();
 
             using (Assert.EnterMultipleScope())
@@ -118,12 +119,15 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(documentParserRegistrations.Select(descriptor => descriptor.Lifetime), Has.All.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(documentReaderRegistrations, Has.Count.EqualTo(1));
                 Assert.That(documentReaderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-                Assert.That(toolRegistrations, Has.Count.EqualTo(15));
+                Assert.That(toolRegistrations, Has.Count.EqualTo(17));
                 Assert.That(promptRegistrations, Has.Count.EqualTo(2));
-                Assert.That(resourceRegistrations, Has.Count.EqualTo(3));
+                Assert.That(resourceRegistrations, Has.Count.EqualTo(4));
                 Assert.That(pendingBatchStoreRegistrations, Has.Count.EqualTo(1));
                 Assert.That(pendingBatchStoreRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(pendingBatchStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(PendingBatchStore)));
+                Assert.That(proposalStoreRegistrations, Has.Count.EqualTo(1));
+                Assert.That(proposalStoreRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(proposalStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(RequirementProposalStore)));
                 Assert.That(appHostDetectorRegistrations, Has.Count.EqualTo(1));
                 Assert.That(appHostDetectorRegistrations[0].ImplementationType, Is.EqualTo(typeof(AppHostDetector)));
             }
