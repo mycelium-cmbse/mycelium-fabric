@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model health</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="model-health.css">
+</head>
+<body>
+<div class="mcp mh" id="view">
+    <div class="ap-h">
+        <div>
+            <div class="ap-t" id="title">Model health</div>
+            <div class="ap-s" id="subtitle">Waiting for the checks…</div>
+        </div>
+        <button class="ap-c mh-again" id="check_again" type="button" title="Check again" aria-label="Check again" disabled>
+            <svg class="ic" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5M12 8v4.5l3 2"/></svg>
+        </button>
+    </div>
+    <div class="mh-error" id="error" role="alert" hidden></div>
+
+    <div class="kpis" id="kpis" hidden>
+        <div class="kpi">
+            <div class="k">Requirements met</div>
+            <div class="v" id="met"></div>
+            <div class="bar" id="met_track"><i id="met_bar"></i></div>
+            <div class="s" id="met_detail"></div>
+        </div>
+        <div class="kpi">
+            <div class="k">Validation</div>
+            <div class="v" id="errors"></div>
+            <div class="bar neutral"><i id="validation_bar"></i></div>
+            <div class="s" id="validation_detail"></div>
+        </div>
+    </div>
+
+    <div id="items"></div>
+
+    <details class="oklist" id="met_list" hidden>
+        <summary>
+            <svg class="ic" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>
+            <span id="met_summary"></span>
+        </summary>
+        <div class="mh-rows" id="met_rows"></div>
+    </details>
+
+    <div class="ap-f">
+        <button class="btn" id="show_all" type="button" hidden>
+            <svg class="ic" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>
+            Show every issue
+        </button>
+        <div class="note" id="ignored" hidden></div>
+        <div class="note">Reveal shows the element and its details here. The view only reads the model: Fix with Hypha and Run trade-off write to the assistant.</div>
+    </div>
+</div>
+<script src="host.js"></script>
+<script src="model-health.js"></script>
+</body>
+</html>

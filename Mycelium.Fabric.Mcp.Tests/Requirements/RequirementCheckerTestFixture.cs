@@ -18,6 +18,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.DTO.Kernel.Expressions;
+    using SysML2.NET.Core.DTO.Kernel.Packages;
     using SysML2.NET.Core.DTO.Systems.Requirements;
     using SysML2.NET.Core.Systems.Requirements;
     using SysML2.NET.Serializer.Json;
@@ -127,6 +128,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 Assert.That(checks.Select(check => check.Status), Is.EqualTo([
                     RequirementStatus.NotEvaluated, RequirementStatus.NotSatisfied, RequirementStatus.Satisfied, RequirementStatus.NotVerifiable, RequirementStatus.NotVerifiable,
                     RequirementStatus.NotEvaluated, RequirementStatus.NotEvaluated, RequirementStatus.Satisfied, RequirementStatus.NotVerifiable]));
+                Assert.That(checks[0].Text, Is.EqualTo("The camera shall weigh at most 40 kg."));
                 Assert.That(checks[0].Constraint, Is.EqualTo("subj.mass <= 40 and (unreadable)"));
                 Assert.That(checks[0].Value, Is.EqualTo(38));
                 Assert.That(checks[0].Gap, Is.Null);
@@ -153,9 +155,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 Assert.That(checks[7].Gap, Is.EqualTo(60));
                 Assert.That(checks[7].Explanation, Is.EqualTo("420 >= 360"));
                 Assert.That(checks[8].Name, Is.EqualTo("untracedRequirement"));
+                Assert.That(checks[8].Text, Is.EqualTo("A requirement without identifier."));
                 Assert.That(checks[8].Explanation, Does.StartWith("The requirement has no required constraint").And.Contains("No part satisfies the requirement"));
                 Assert.That(checks.Select(check => check.ValueWithoutMargins), Is.All.Null);
                 Assert.That(checks.Select(check => check.Warnings), Is.All.Null);
+            }
+        }
+
+        [Test]
+        public void CheckRequirements_WithoutText_GivesNoText()
+        {
+            var builder = new DtoModelBuilder();
+            var package = builder.AddMember(builder.RootNamespace, new Package { DeclaredName = "Requirements" });
+            builder.AddMember(package, new RequirementUsage { DeclaredName = "textless", ReqId = "REQ-1" });
+
+            var check = new RequirementChecker(builder.Build()).CheckRequirements().Single();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(check.Name, Is.EqualTo("textless"));
+                Assert.That(check.Text, Is.Null);
+                Assert.That(check.Status, Is.EqualTo(RequirementStatus.NotVerifiable));
             }
         }
 

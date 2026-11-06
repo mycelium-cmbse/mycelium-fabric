@@ -16,11 +16,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Microsoft.Extensions.Options;
 
     using ModelContextProtocol;
+    using ModelContextProtocol.Extensions.Apps;
+    using ModelContextProtocol.Server;
 
     using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Requirements;
+    using Mycelium.Fabric.Mcp.Resources;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
@@ -105,6 +108,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(allChecks.SatisfiedCount + allChecks.NotSatisfiedCount + allChecks.NotEvaluatedCount, Is.EqualTo(0));
                 Assert.That(allChecks.TotalFound, Is.EqualTo(6));
                 Assert.That(allChecks.Requirements.Select(check => check.ReqId), Is.EqualTo(["REQ-SYS-001", "REQ-SYS-002", "REQ-SYS-003", "REQ-SYS-004", "REQ-SYS-005", "REQ-SYS-006"]));
+                Assert.That(allChecks.Requirements[4].Text, Is.EqualTo("The X-band downlink shall provide a data rate of at least 150 Mbps."));
                 Assert.That(allChecks.NextOffset, Is.Null);
                 Assert.That(firstPage.Requirements, Has.Count.EqualTo(4));
                 Assert.That(firstPage.NextOffset, Is.EqualTo(4));
@@ -112,6 +116,23 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(lastPage.NextOffset, Is.Null);
                 Assert.That(satisfiedChecks.TotalFound, Is.EqualTo(0));
                 Assert.That(satisfiedChecks.NotVerifiableCount, Is.EqualTo(6));
+            }
+        }
+
+        [Test]
+        public void CheckRequirements_InAHostThatShowsMcpApps_OpensTheViewOfTheHealthOfTheModel()
+        {
+            var tool = McpServerTool.Create(new Func<RequirementStatus?, int, int, RequirementChecks>(new RequirementTools(this.modelProvider.Object).CheckRequirements));
+
+            McpApps.ApplyAppUiAttributes(tool);
+
+            var ui = tool.ProtocolTool.Meta?["ui"];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tool.ProtocolTool.Name, Is.EqualTo("check_requirements"));
+                Assert.That(ui?["resourceUri"]?.GetValue<string>(), Is.EqualTo(ModelHealthResource.Uri));
+                Assert.That(ui?["visibility"], Is.Null);
             }
         }
 

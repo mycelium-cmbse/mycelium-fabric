@@ -305,7 +305,7 @@ describe("trade-off view", () => {
     }
 
     beforeEach(() => {
-        page = loadPage(path.join(APP_FOLDER, "trade-off.html"), path.join(APP_FOLDER, "trade-off.js"));
+        page = loadPage(path.join(APP_FOLDER, "trade-off.html"), path.join(APP_FOLDER, "host.js"), path.join(APP_FOLDER, "trade-off.js"));
     });
 
     describe("talking with the host", () => {

@@ -35,6 +35,12 @@ namespace Mycelium.Fabric.Mcp.Requirements
         public string Name { get; init; }
 
         /// <summary>
+        /// Gets the text of the requirement, for example <c>The launch mass shall not exceed 150 kg.</c>, or <c>null</c> when it
+        /// has none.
+        /// </summary>
+        public string Text { get; init; }
+
+        /// <summary>
         /// Gets the outcome of the check.
         /// </summary>
         public RequirementStatus Status { get; init; }
