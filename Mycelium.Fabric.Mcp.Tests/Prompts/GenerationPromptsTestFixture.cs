@@ -66,6 +66,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Prompts
                 Assert.That(namesInProcedure, Does.Contain("apply_changes").And.Contain("check_requirements"));
                 Assert.That(namesInProcedure, Does.Contain("validate_model"));
                 Assert.That(procedure, Does.Contain("3 rounds").And.Contain("never change a value"));
+                Assert.That(procedure, Does.Contain("give the approved plan to apply_changes in plan").And.Contain("remainingSections"));
                 Assert.That(namesInProcedure, Is.SubsetOf(toolNames), "The procedure names a tool that the server does not have.");
             }
         }
