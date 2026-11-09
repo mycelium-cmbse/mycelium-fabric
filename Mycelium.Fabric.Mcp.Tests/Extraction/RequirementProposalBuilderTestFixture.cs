@@ -26,7 +26,6 @@ namespace Mycelium.Fabric.Mcp.Tests.Extraction
     using SysML2.NET.Core.POCO.Kernel.Packages;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Parts;
-    using SysML2.NET.Core.POCO.Systems.Requirements;
 
     /// <summary>
     /// Suite of tests for the <see cref="RequirementProposalBuilder"/> class.
@@ -64,7 +63,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extraction
             }
 
             this.modelProvider = new Mock<IModelProvider>();
-            this.modelProvider.Setup(provider => provider.Elements).Returns([Mock.Of<IRequirementUsage>(requirement => requirement.ReqId == "REQ-SYS-001")]);
+            this.modelProvider.Setup(provider => provider.GetRequirementIds()).Returns(new HashSet<string> { "REQ-SYS-001" });
             this.modelProvider.Setup(provider => provider.GetRequiredElementById(OwnerId)).Returns(Mock.Of<IPackage>(package => package.qualifiedName == "EOSat1::Requirements"));
             this.modelProvider.Setup(provider => provider.GetRequiredElementById(PartId)).Returns(new Mock<IPartUsage>().Object);
             this.modelProvider.Setup(provider => provider.PreviewChanges(It.IsAny<IReadOnlyList<ModelChange>>())).Returns(new ModelPreview([]));
@@ -148,6 +147,42 @@ namespace Mycelium.Fabric.Mcp.Tests.Extraction
                 this.modelProvider.Verify(provider => provider.PreviewChanges(It.Is<IReadOnlyList<ModelChange>>(changes => changes.Count == 2 && changes[0].Payload.Type == "Package")),
                     Times.Exactly(4));
             }
+
+            var ground = this.requirements[0];
+            var storage = this.requirements[1];
+            var withMerges = RequirementProposalBuilder.Build(this.modelProvider.Object, this.document, 5,
+            [
+                ground,
+                storage with { Constraint = null, MergeInto = "REQ-PAY-001" },
+                this.requirements[2] with { MergeInto = "REQ-PAY-001" },
+                ground with { ReqId = "REQ-PAY-010", Name = "self", MergeInto = "REQ-PAY-010" },
+                ground with { ReqId = "REQ-PAY-011", Name = "outside", MergeInto = "REQ-PAY-099" },
+                ground with { ReqId = "REQ-PAY-012", Name = "modelled", MergeInto = "REQ-SYS-001" },
+                this.requirements[3] with { MergeInto = "REQ-PAY-001" },
+                ground with { ReqId = "REQ-PAY-013", Name = "blank", MergeInto = " " }
+            ], OwnerId, "PayloadRequirements", null).Requirements;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(withMerges[1].Requirement.MergeInto, Is.EqualTo("REQ-PAY-001"));
+                Assert.That(withMerges[1].Findings.Select(finding => finding.Kind), Is.EqualTo(new[] { ExtractionFindingKind.ToClarify }));
+                Assert.That(withMerges[1].Findings[0].Message, Is.EqualTo("The assistant suggests merging it into REQ-PAY-001."));
+                Assert.That(withMerges[2].Requirement.MergeInto, Is.EqualTo("REQ-PAY-001"));
+                Assert.That(withMerges[2].Findings.Select(finding => finding.Message), Has.None.Contains("suggests merging"));
+                Assert.That(withMerges[3].Requirement.MergeInto, Is.Null);
+                Assert.That(withMerges[3].Findings.Select(finding => finding.Kind), Is.EqualTo(new[] { ExtractionFindingKind.InvalidMerge }));
+                Assert.That(withMerges[3].Findings[0].Message, Is.EqualTo("It cannot be merged into itself."));
+                Assert.That(withMerges[3].IsBlocked, Is.False);
+                Assert.That(withMerges[4].Requirement.MergeInto, Is.Null);
+                Assert.That(withMerges[4].Findings[0].Message, Is.EqualTo("It cannot be merged into REQ-PAY-099: this requirement is not in the list."));
+                Assert.That(withMerges[5].Requirement.MergeInto, Is.Null);
+                Assert.That(withMerges[5].Findings[0].Message, Does.StartWith("It cannot be merged into REQ-SYS-001: the model already has this requirement"));
+                Assert.That(withMerges[6].Requirement.MergeInto, Is.Null);
+                Assert.That(withMerges[6].Findings.Select(finding => finding.Kind), Has.None.EqualTo(ExtractionFindingKind.InvalidMerge));
+                Assert.That(withMerges[7].IsReady, Is.True);
+            }
+
+            this.modelProvider.Invocations.Clear();
 
             var inExistingPackage = RequirementProposalBuilder.Build(this.modelProvider.Object, this.document, 6, [this.requirements[0]], OwnerId, " ", null);
 

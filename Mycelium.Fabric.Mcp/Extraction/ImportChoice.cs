@@ -25,7 +25,13 @@ namespace Mycelium.Fabric.Mcp.Extraction
         /// <summary>
         /// Gets how the requirement is imported.
         /// </summary>
-        [Description("AsWritten, WithRewrite or AsGoal (without constraint).")]
+        [Description("AsWritten, WithRewrite, AsGoal (without constraint) or MergeInto (not created).")]
         public ImportOption Option { get; init; }
+
+        /// <summary>
+        /// Gets the identifier of the requirement that receives this one, with <see cref="ImportOption.MergeInto"/>, or <c>null</c>.
+        /// </summary>
+        [Description("With MergeInto: the reqId of the requirement of the same import that receives this one.")]
+        public string MergeInto { get; init; }
     }
 }

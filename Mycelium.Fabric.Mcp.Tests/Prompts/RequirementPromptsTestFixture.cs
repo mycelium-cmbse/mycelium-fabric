@@ -33,7 +33,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Prompts
                 Assert.That(message, Does.StartWith("Model the requirements of a document"));
                 Assert.That(message, Does.Contain("read_document").And.Contain("idPattern").And.Contain("apply_changes").And.Contain("requirements.missing"));
                 Assert.That(message, Does.Contain("Never create a requirement whose identifier is"));
-                Assert.That(message, Does.Contain("propose_requirements").And.Contain("send nothing else and wait for the user's"));
+                Assert.That(message, Does.Contain("propose_requirements").And.Contain("send nothing else and wait for the user's").And.Contain("mergeInto"));
                 Assert.That(message, Does.Contain("Document: 'EOSat1-requirements.md' in the document folder. Scope: the whole document."));
                 Assert.That(message, Does.EndWith("without calling apply_changes."));
                 Assert.That(scopedMessage, Does.Contain("Document: 'SSS.md' in the document folder. Scope: the sections '5.2.2' and their subsections."));

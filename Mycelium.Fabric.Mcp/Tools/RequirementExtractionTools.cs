@@ -135,7 +135,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         [Description("Proposes the requirements that you have found in one section of a document of the document folder, and its subsections, before they are modelled. Changes nothing. "
             + "Give each requirement with its identifier, a name, the statement copied word for word, its kind, a constraint when the statement sets a numeric limit, "
             + "and for a requirement to clarify (TBD, vague term, several requirements in one) the reason and, if the document allows it, a rewritten statement. "
-            + "The server checks each one: statement not written as such in the section, identifier already modelled or given twice, requirement that apply_changes would refuse; "
+            + "When a requirement only repeats another one of the list, give the reason and that requirement in mergeInto. "
+            + "The server checks each one: statement not written as such in the section, identifier already modelled or given twice, requirement that apply_changes would refuse, merge that cannot be done; "
             + "with idPattern, it also lists the identifiers of the section that the list misses. "
             + "When the host shows the result in a view, the user imports the requirements they keep from it: then do not use apply_changes for them, wait for the user's message.")]
         [return: Description("A message that tells what to do next, then the proposal: the section, the package, each requirement with where its statement is written and the findings of the server, "
@@ -164,7 +165,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             }
 
             var keptProposal = this.proposalStore.Add(proposal);
-            var toolResult = CreateProposalResult(ReviewedInViewMessage, keptProposal with { Token = null });
+            var toolResult = CreateProposalResult(ReviewedInViewMessage, keptProposal with { Token = null, SavedRows = null });
             toolResult.StructuredContent = JsonSerializer.SerializeToElement(keptProposal, McpJsonUtilities.DefaultOptions);
 
             return toolResult;
@@ -193,7 +194,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         public CallToolResult ImportRequirements(
             [Description("The identifier of the proposal (id of the proposal).")] Guid proposalId,
             [Description("The secret token of the proposal (token of the proposal).")] string token,
-            [Description("The requirements to import, each with its option: AsWritten, WithRewrite or AsGoal.")] IReadOnlyList<ImportChoice> choices)
+            [Description("The requirements to import, each with its option: AsWritten, WithRewrite, AsGoal or MergeInto.")] IReadOnlyList<ImportChoice> choices)
         {
             var proposal = this.proposalStore.TryGet(proposalId, token)
                 ?? throw new McpException("This proposal can no longer be imported: it has been imported already, or the server has restarted. "
@@ -218,6 +219,39 @@ namespace Mycelium.Fabric.Mcp.Tools
                 Content = [new TextContentBlock { Text = import.Message }],
                 StructuredContent = JsonSerializer.SerializeToElement(import, McpJsonUtilities.DefaultOptions)
             };
+        }
+
+        /// <summary>
+        /// Keeps the rows of the view as the user has left them, in the memory of the server, without importing anything: when
+        /// the same section of the same document is proposed again, the view restores them. Only the view calls this tool.
+        /// </summary>
+        /// <param name="proposalId">The identifier of the proposal.</param>
+        /// <param name="token">The secret token of the proposal.</param>
+        /// <param name="rows">The <see cref="SavedRow"/>s of the view.</param>
+        /// <returns>A message that tells what has been saved.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when no proposal has this identifier and this token, or when a row has no identifier; nothing is then saved.
+        /// </exception>
+        [McpServerTool(Name = "save_requirement_list", ReadOnly = false, Destructive = false, OpenWorld = false)]
+        [McpAppUi(ResourceUri = RequirementExtractionResource.Uri, Visibility = [McpUiToolVisibility.App])]
+        [Description("Keeps the rows of the view of the extraction, with the choices of the user, in the memory of the server. Imports nothing. Called by the view only.")]
+        [return: Description("A message that tells what has been saved.")]
+        public string SaveRequirementList(
+            [Description("The identifier of the proposal (id of the proposal).")] Guid proposalId,
+            [Description("The secret token of the proposal (token of the proposal).")] string token,
+            [Description("The rows of the view, as the user has left them.")] IReadOnlyList<SavedRow> rows)
+        {
+            var proposal = this.proposalStore.TryGet(proposalId, token)
+                ?? throw new McpException("This list can no longer be saved: it has been imported already, or the server has restarted. Ask the assistant to propose the requirements again.");
+
+            if (rows == null || rows.Count == 0 || rows.Any(row => string.IsNullOrWhiteSpace(row?.ReqId)))
+            {
+                throw new McpException("Nothing has been saved: give the rows of the view, each with its reqId.");
+            }
+
+            this.proposalStore.SaveRows(proposal, rows);
+
+            return $"Saved {rows.Count} row{(rows.Count == 1 ? string.Empty : "s")} of section {proposal.SectionNumber} of '{proposal.FileName}'. Nothing has been imported.";
         }
 
         /// <summary>
@@ -258,11 +292,14 @@ namespace Mycelium.Fabric.Mcp.Tools
             }
 
             var chosenIds = choices.Select(choice => choice.ReqId).ToHashSet(StringComparer.Ordinal);
-            var imported = string.Join(", ", choices.Select(choice => $"{choice.ReqId} ({DescribeOption(choice.Option)})"));
+            var created = choices.Where(choice => choice.Option != ImportOption.MergeInto).ToList();
+            var imported = string.Join(", ", created.Select(choice => $"{choice.ReqId} ({DescribeOption(choice.Option)})"));
+            var merged = choices.Where(choice => choice.Option == ImportOption.MergeInto).Select(choice => $"{choice.ReqId} into {choice.MergeInto}").ToList();
+            var mergedText = merged.Count == 0 ? string.Empty : $" Merged by the user, so not created: {string.Join(", ", merged)}.";
             var leftOut = proposal.Requirements.Select(row => row.Requirement.ReqId).Where(reqId => !chosenIds.Contains(reqId)).Distinct(StringComparer.Ordinal).ToList();
             var leftOutText = leftOut.Count == 0 ? string.Empty : $" Left out by the user: {string.Join(", ", leftOut)}.";
 
-            return $"The user has imported {choices.Count} requirement{(choices.Count == 1 ? string.Empty : "s")} of {section} in one batch: {imported}.{leftOutText} "
+            return $"The user has imported {created.Count} requirement{(created.Count == 1 ? string.Empty : "s")} of {section} in one batch: {imported}.{mergedText}{leftOutText} "
                 + $"Result of apply_changes: {resultText} "
                 + "Go on with the next section of the plan.";
         }

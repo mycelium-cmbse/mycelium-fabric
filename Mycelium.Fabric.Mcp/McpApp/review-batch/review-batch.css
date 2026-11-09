@@ -1,0 +1,38 @@
+/* The rows, the tabs and the checks of the view "Batch review". */
+.pill { font: 600 11px/1 var(--mono); padding: 4px 6px; border-radius: 4px; }
+.pill.add { background: var(--success-bg); color: var(--success); }
+.pill.mod { background: var(--warning-bg); color: var(--warning); }
+.pill.del { background: var(--danger-bg); color: var(--danger); }
+.seg { display: flex; gap: 2px; margin: 0 14px; border-bottom: 1px solid var(--border); }
+.seg button { padding: 6px 10px 7px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: 5px; }
+.seg button.on { color: var(--fg); font-weight: 600; border-color: var(--primary); }
+.cnt { font-size: 10px; font-weight: 600; border-radius: 8px; padding: 1px 5px; background: var(--muted-bg); color: var(--fg2); }
+.cnt.warn { background: var(--warning-bg); color: var(--warning); }
+.segp { display: none; }
+.segp.on { display: block; }
+.chg { padding: 6px 8px 4px; }
+.cr { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 5px; font-size: 12px; min-height: 24px; }
+.cr:hover { background: var(--muted-bg); }
+.cr .op { width: 14px; font: 700 13px/1 var(--mono); text-align: center; flex: none; }
+.cr.add .op { color: var(--success); }
+.cr.mod .op { color: var(--warning); }
+.cr.del .op { color: var(--danger); }
+.cr .ti { color: var(--fg2); }
+.cr .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr .nm i { color: var(--muted); font-style: normal; font-size: 11px; }
+.cr .v { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.cr .own { flex: none; font: 600 9.5px/1 var(--mono); letter-spacing: .02em; color: var(--fg2); border: 1px solid var(--border); border-left: 3px solid var(--oc); border-radius: 3px; padding: 3px 5px 3px 4px; }
+.impact { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 14px 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.chk-list { padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.chk { display: flex; gap: 9px; align-items: flex-start; font-size: 12px; line-height: 1.45; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--border); }
+.chk .ic { margin-top: 1px; }
+.chk > div { min-width: 0; overflow-wrap: anywhere; }
+.chk.ok .ic { color: var(--success); }
+.chk.bad { background: var(--danger-bg); }
+.chk.bad .ic { color: var(--danger); }
+.chk.warn { background: var(--warning-bg); }
+.chk.warn .ic { color: var(--warning); }
+.chk.info .ic { color: var(--info); }
+.chk small { display: block; color: var(--muted); font-size: 11px; }
+textarea { width: 100%; min-height: 56px; resize: vertical; font: inherit; font-size: 12px; color: var(--fg); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+textarea::placeholder { color: var(--muted); }

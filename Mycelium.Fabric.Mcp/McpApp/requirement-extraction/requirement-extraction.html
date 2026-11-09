@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract requirements</title>
+    <link rel="stylesheet" href="../fonts.css">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="requirement-extraction.css">
+</head>
+<body>
+<div class="mcp rx bloom-palette" id="view">
+    <div class="pg-h">
+        <div class="pg-t">
+            <button class="back" id="back" type="button" hidden>Hypha conversation</button>
+            <h1 id="title">Extract requirements</h1>
+            <div class="sub" id="subtitle">Waiting for the requirements…</div>
+        </div>
+        <div class="fchips" id="filters" role="group" aria-label="Show the requirements" hidden>
+            <button class="fchip on" type="button" data-filter="all" aria-pressed="true">All<b id="count_all"></b></button>
+            <button class="fchip" type="button" data-filter="ready" aria-pressed="false">Ready<b id="count_ready"></b></button>
+            <button class="fchip" type="button" data-filter="attention" aria-pressed="false">Needs attention<b id="count_attention"></b></button>
+        </div>
+    </div>
+    <div class="rx-banner rx-error" id="error" role="alert" hidden></div>
+    <div class="rx-banner" id="missed" hidden></div>
+
+    <div class="g-ext" id="body" hidden>
+        <div class="card rx-main">
+            <div class="rx-scroll">
+                <table class="t ext">
+                    <thead id="head">
+                    <tr>
+                        <th class="rx-tick"><span class="vh">Import</span></th>
+                        <th class="rx-idc"><button class="rx-sort" type="button" data-sort="id">ID</button></th>
+                        <th><button class="rx-sort" type="button" data-sort="requirement">Requirement</button></th>
+                        <th class="rx-kind"><button class="rx-sort" type="button" data-sort="kind">Kind</button></th>
+                        <th class="rx-cst"><button class="rx-sort" type="button" data-sort="constraint">Verifiable as</button></th>
+                        <th class="rx-q"><button class="rx-sort" type="button" data-sort="quality">Quality</button></th>
+                    </tr>
+                    </thead>
+                    <tbody id="rows"></tbody>
+                </table>
+            </div>
+            <div class="foot-bar">
+                <button class="cb" id="all" type="button" role="checkbox" aria-checked="false" aria-label="Tick all the requirements"></button>
+                <span id="summary"></span>
+                <span class="rx-reason" id="reason" role="alert" hidden></span>
+                <span class="sp"></span>
+                <button class="btn" id="export" type="button" disabled>Export list</button>
+                <button class="btn pri" id="import" type="button" disabled>Import as 1 batch</button>
+            </div>
+            <div class="rx-note" id="note" role="status"></div>
+        </div>
+        <section class="card rx-detail" id="detail" aria-live="polite" hidden></section>
+    </div>
+</div>
+<script src="../host.js"></script>
+<script src="requirement-extraction.js"></script>
+</body>
+</html>

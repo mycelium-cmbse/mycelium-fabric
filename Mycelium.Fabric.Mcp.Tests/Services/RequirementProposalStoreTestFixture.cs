@@ -23,6 +23,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     {
         private static readonly RequirementProposal Proposal = new("EOSat1-requirements.md", 5, "3. Payload requirements", null, "PayloadRequirements", [], []);
 
+        private static readonly SavedRow[] FirstRows = [new SavedRow { ReqId = "REQ-PAY-001", Option = ImportOption.AsWritten, Ticked = true }];
+
+        private static readonly SavedRow[] SecondRows = [new SavedRow { ReqId = "REQ-PAY-004", Option = ImportOption.AsGoal, Ticked = true }];
+
         private RequirementProposalStore store;
 
         [SetUp]
@@ -76,18 +80,65 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         }
 
         [Test]
+        public void VerifySaveRows()
+        {
+            var otherSection = Proposal with { SectionNumber = 6 };
+            var otherDocument = Proposal with { FileName = "Other.md" };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.store.Add(Proposal).SavedRows, Is.Null);
+                Assert.That(() => this.store.SaveRows(null, FirstRows), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => this.store.SaveRows(Proposal, null), Throws.TypeOf<ArgumentNullException>());
+            }
+
+            this.store.SaveRows(Proposal, FirstRows);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.store.Add(Proposal).SavedRows, Is.SameAs(FirstRows));
+                Assert.That(this.store.Add(otherSection).SavedRows, Is.Null);
+                Assert.That(this.store.Add(otherDocument).SavedRows, Is.Null);
+            }
+
+            this.store.SaveRows(Proposal, SecondRows);
+
+            Assert.That(this.store.Add(Proposal).SavedRows, Is.SameAs(SecondRows));
+
+            // Once full, the store forgets the oldest saved section first.
+            foreach (var section in Enumerable.Range(100, RequirementProposalStore.MaximumCount - 1))
+            {
+                this.store.SaveRows(Proposal with { SectionNumber = section }, FirstRows);
+            }
+
+            Assert.That(this.store.Add(Proposal).SavedRows, Is.SameAs(SecondRows));
+
+            this.store.SaveRows(otherSection, FirstRows);
+
+            Assert.That(this.store.Add(Proposal).SavedRows, Is.Null);
+        }
+
+        [Test]
         public void VerifyRemove()
         {
             var kept = this.store.Add(Proposal);
             var other = this.store.Add(Proposal);
+            var otherSection = this.store.Add(Proposal with { SectionNumber = 6 });
+
+            this.store.SaveRows(Proposal, FirstRows);
+            this.store.SaveRows(otherSection, SecondRows);
+            this.store.Remove(Guid.NewGuid());
+
+            Assert.That(this.store.Add(Proposal).SavedRows, Is.SameAs(FirstRows));
 
             this.store.Remove(kept.Id);
-            this.store.Remove(Guid.NewGuid());
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(this.store.TryGet(kept.Id, kept.Token), Is.Null);
                 Assert.That(this.store.TryGet(other.Id, other.Token), Is.SameAs(other));
+                Assert.That(this.store.Add(Proposal).SavedRows, Is.Null);
+                Assert.That(this.store.Add(otherSection).SavedRows, Is.SameAs(SecondRows));
             }
         }
     }

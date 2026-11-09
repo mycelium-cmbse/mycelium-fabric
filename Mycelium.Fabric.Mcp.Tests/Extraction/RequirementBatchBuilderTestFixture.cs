@@ -148,13 +148,42 @@ namespace Mycelium.Fabric.Mcp.Tests.Extraction
                     Throws.TypeOf<McpException>().With.Message.StartsWith("Nothing has been imported.")
                         .And.Message.Contains("'REQ-XXX-001' is not a requirement of the proposal.")
                         .And.Message.Contains("REQ-SYS-001 cannot be imported: The model already has a requirement REQ-SYS-001")
-                        .And.Message.Contains("The option of REQ-PAY-002 must be AsWritten, WithRewrite or AsGoal.")
+                        .And.Message.Contains("The option of REQ-PAY-002 must be AsWritten, WithRewrite, AsGoal or MergeInto.")
                         .And.Message.Contains("REQ-PAY-009 has no valid rewrite")
                         .And.Message.Contains("REQ-PAY-004 is chosen more than once.")
                         .And.Message.Contains("'' is not a requirement of the proposal."));
 
                 Assert.That(() => RequirementBatchBuilder.Build(this.proposal, [new ImportChoice { ReqId = "REQ-PAY-002", Option = ImportOption.WithRewrite }]),
                     Throws.TypeOf<McpException>().With.Message.Contains("REQ-PAY-002 has no valid rewrite"));
+            }
+
+            var withMerge = RequirementBatchBuilder.Build(this.proposal,
+            [
+                new ImportChoice { ReqId = "REQ-PAY-002", Option = ImportOption.AsWritten },
+                new ImportChoice { ReqId = "REQ-PAY-004", Option = ImportOption.MergeInto, MergeInto = "REQ-PAY-002" }
+            ]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(withMerge, Has.Count.EqualTo(2));
+                Assert.That(withMerge[1].Payload.ReqId, Is.EqualTo("REQ-PAY-002"));
+
+                Assert.That(() => RequirementBatchBuilder.Build(this.proposal,
+                    [
+                        new ImportChoice { ReqId = "REQ-PAY-002", Option = ImportOption.MergeInto },
+                        new ImportChoice { ReqId = "REQ-PAY-004", Option = ImportOption.MergeInto, MergeInto = "REQ-PAY-004" },
+                        new ImportChoice { ReqId = "REQ-PAY-009", Option = ImportOption.MergeInto, MergeInto = "REQ-PAY-001" }
+                    ]),
+                    Throws.TypeOf<McpException>().With.Message.Contains("REQ-PAY-002 must name the requirement that it is merged into.")
+                        .And.Message.Contains("REQ-PAY-004 cannot be merged into itself.")
+                        .And.Message.Contains("REQ-PAY-009 is merged into REQ-PAY-001, which is not imported."));
+
+                Assert.That(() => RequirementBatchBuilder.Build(this.proposal,
+                    [
+                        new ImportChoice { ReqId = "REQ-PAY-002", Option = ImportOption.MergeInto, MergeInto = "REQ-PAY-004" },
+                        new ImportChoice { ReqId = "REQ-PAY-004", Option = ImportOption.MergeInto, MergeInto = "REQ-PAY-002" }
+                    ]),
+                    Throws.TypeOf<McpException>().With.Message.Contains("REQ-PAY-002 is merged into REQ-PAY-004, which is merged too."));
             }
         }
     }

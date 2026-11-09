@@ -43,29 +43,40 @@ namespace Mycelium.Fabric.Mcp.Services
         private readonly List<RequirementProposal> proposals = [];
 
         /// <summary>
+        /// The saved rows of each section, the oldest first. Guarded by <see cref="proposalLock"/>.
+        /// </summary>
+        private readonly List<(string FileName, int SectionNumber, IReadOnlyList<SavedRow> Rows)> savedLists = [];
+
+        /// <summary>
         /// Keeps a proposal, with a new identifier and a new secret token drawn by a cryptographic random number generator, so
-        /// that it cannot be guessed; the oldest proposal is forgotten when <see cref="MaximumCount"/> are kept.
+        /// that it cannot be guessed, and with the rows saved for its section; the oldest proposal is forgotten when
+        /// <see cref="MaximumCount"/> are kept.
         /// </summary>
         /// <param name="proposal">The <see cref="RequirementProposal"/> to keep.</param>
-        /// <returns>The kept <see cref="RequirementProposal"/>, with its identifier and its token.</returns>
+        /// <returns>The kept <see cref="RequirementProposal"/>, with its identifier, its token and its saved rows.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="proposal"/> is <c>null</c>.</exception>
         public RequirementProposal Add(RequirementProposal proposal)
         {
             ArgumentNullException.ThrowIfNull(proposal);
 
-            var keptProposal = proposal with { Id = Guid.NewGuid(), Token = RandomNumberGenerator.GetHexString(TokenLength, true) };
-
             lock (this.proposalLock)
             {
+                var keptProposal = proposal with
+                {
+                    Id = Guid.NewGuid(),
+                    Token = RandomNumberGenerator.GetHexString(TokenLength, true),
+                    SavedRows = this.savedLists.Find(saved => IsSameSection(saved.FileName, saved.SectionNumber, proposal)).Rows
+                };
+
                 if (this.proposals.Count == MaximumCount)
                 {
                     this.proposals.RemoveAt(0);
                 }
 
                 this.proposals.Add(keptProposal);
-            }
 
-            return keptProposal;
+                return keptProposal;
+            }
         }
 
         /// <summary>
@@ -90,15 +101,59 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Forgets a proposal, once imported; nothing happens when no proposal has this identifier.
+        /// Saves the rows of a section of a document as the user has left them, in place of the rows saved earlier for this
+        /// section; the oldest saved section is forgotten when <see cref="MaximumCount"/> are kept.
+        /// </summary>
+        /// <param name="proposal">The <see cref="RequirementProposal"/> whose rows are saved.</param>
+        /// <param name="rows">The <see cref="SavedRow"/>s.</param>
+        /// <exception cref="ArgumentNullException">Thrown when a parameter is <c>null</c>.</exception>
+        public void SaveRows(RequirementProposal proposal, IReadOnlyList<SavedRow> rows)
+        {
+            ArgumentNullException.ThrowIfNull(proposal);
+            ArgumentNullException.ThrowIfNull(rows);
+
+            lock (this.proposalLock)
+            {
+                this.savedLists.RemoveAll(saved => IsSameSection(saved.FileName, saved.SectionNumber, proposal));
+
+                if (this.savedLists.Count == MaximumCount)
+                {
+                    this.savedLists.RemoveAt(0);
+                }
+
+                this.savedLists.Add((proposal.FileName, proposal.SectionNumber, rows));
+            }
+        }
+
+        /// <summary>
+        /// Forgets a proposal, once imported, and the rows saved for its section; nothing happens when no proposal has this
+        /// identifier.
         /// </summary>
         /// <param name="proposalId">The identifier of the proposal.</param>
         public void Remove(Guid proposalId)
         {
             lock (this.proposalLock)
             {
-                this.proposals.RemoveAll(proposal => proposal.Id == proposalId);
+                var proposal = this.proposals.Find(candidate => candidate.Id == proposalId);
+
+                if (proposal != null)
+                {
+                    this.proposals.Remove(proposal);
+                    this.savedLists.RemoveAll(saved => IsSameSection(saved.FileName, saved.SectionNumber, proposal));
+                }
             }
+        }
+
+        /// <summary>
+        /// Tells whether saved rows belong to the section of a proposal.
+        /// </summary>
+        /// <param name="fileName">The name of the document of the saved rows.</param>
+        /// <param name="sectionNumber">The number of the section of the saved rows.</param>
+        /// <param name="proposal">The <see cref="RequirementProposal"/>.</param>
+        /// <returns><c>true</c> when the saved rows belong to the section of the proposal.</returns>
+        private static bool IsSameSection(string fileName, int sectionNumber, RequirementProposal proposal)
+        {
+            return fileName == proposal.FileName && sectionNumber == proposal.SectionNumber;
         }
     }
 }

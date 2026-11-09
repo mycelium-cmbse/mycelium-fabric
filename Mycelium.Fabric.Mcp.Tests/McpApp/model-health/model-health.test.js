@@ -7,16 +7,16 @@
 //  </copyright>
 //  ------------------------------------------------------------------------------------------------
 
-// Tests of the view "Model health" (McpApp/model-health.js), run by Node.js:
-// node --test Mycelium.Fabric.Mcp.Tests/McpApp/model-health.test.js
+// Tests of the view "Model health" (McpApp/model-health/model-health.js), run by Node.js:
+// node --test Mycelium.Fabric.Mcp.Tests/McpApp/model-health/model-health.test.js
 
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const { loadPage } = require("./fake-page.js");
+const { loadPage } = require("../fake-page.js");
 
-const APP_FOLDER = path.join(__dirname, "..", "..", "Mycelium.Fabric.Mcp", "McpApp");
+const APP_FOLDER = path.join(__dirname, "..", "..", "..", "Mycelium.Fabric.Mcp", "McpApp");
 const HOST_ORIGIN = "https://host.example";
 
 // The tools that the view may call: it reads the model, and never changes it.
@@ -373,7 +373,7 @@ describe("model health view", () => {
     }
 
     beforeEach(() => {
-        page = loadPage(path.join(APP_FOLDER, "model-health.html"), path.join(APP_FOLDER, "host.js"), path.join(APP_FOLDER, "model-health.js"));
+        page = loadPage(path.join(APP_FOLDER, "model-health", "model-health.html"), path.join(APP_FOLDER, "host.js"), path.join(APP_FOLDER, "model-health", "model-health.js"));
     });
 
     afterEach(() => {

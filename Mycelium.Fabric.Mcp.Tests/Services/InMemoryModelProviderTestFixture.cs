@@ -46,6 +46,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     [TestFixture]
     public class InMemoryModelProviderTestFixture
     {
+        private static readonly string[] SatelliteRequirementIds = ["REQ-SYS-001", "REQ-SYS-002", "REQ-SYS-003", "REQ-SYS-004", "REQ-SYS-005", "REQ-SYS-006"];
+
         /// <summary>
         /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
         /// </summary>
@@ -121,6 +123,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.LoadModel(this.emptyModelPath);
 
             Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
+        }
+
+        [Test]
+        public void VerifyGetRequirementIds()
+        {
+            Assert.That(this.modelProvider.GetRequirementIds(), Is.Empty);
+
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+
+            var identifiers = this.modelProvider.GetRequirementIds();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(identifiers, Is.EquivalentTo(SatelliteRequirementIds));
+                Assert.That(identifiers, Does.Not.Contain("req-sys-001"));
+            }
+
+            this.modelProvider.LoadModel(this.emptyModelPath);
+
+            Assert.That(this.modelProvider.GetRequirementIds(), Is.Empty);
         }
 
         [Test]

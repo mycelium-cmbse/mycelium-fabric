@@ -1,17 +1,4 @@
-/* The card of the mock-up (screen 4, model health), in our palette whatever the host's colours: only light or dark follows the
-   host, as in the cards of the trade-off. */
-.mh {
-    --card:     var(--bloom-card);
-    --muted-bg: var(--bloom-muted-bg);
-    --fg:       var(--bloom-fg);
-    --fg2:      var(--bloom-fg2);
-    --muted:    var(--bloom-muted);
-    --border:   var(--bloom-border);
-    --danger:   var(--bloom-danger);
-    --success:  var(--bloom-success);
-    color: var(--fg);
-}
-
+/* The card of the mock-up (screen 4, model health). */
 .mh-again { width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); }
 .mh-again:hover:not(:disabled) { background: var(--muted-bg); color: var(--fg); }
 .mh-again:disabled { cursor: default; }

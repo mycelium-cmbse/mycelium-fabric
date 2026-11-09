@@ -1,4 +1,4 @@
-// The talk of a view with its host, shared by the views of the trade-off and of the health of the model: JSON-RPC messages
+// The talk of a view with its host, shared by the views of the trade-off, of the health of the model and of the extraction: JSON-RPC messages
 // through postMessage, as MCP Apps define them. The page loads this script before its own.
 
 // The origin of the host, known from its first message: until then, the messages go to the parent frame whatever its origin.
@@ -42,8 +42,9 @@ function request(method, params) {
  * Listens to the messages of the host: the responses to the requests of the view, the result of the tool that the view
  * shows, the changes of theme, and its own requests, answered with an empty result.
  * @param {function(object): void} onToolResult Called with the result of the tool that the view shows.
+ * @param {function(object): void} [onHostContext] Called with what has changed in the context of the host, such as the display mode.
  */
-function listenToHost(onToolResult) {
+function listenToHost(onToolResult, onHostContext) {
     window.addEventListener("message", event => {
         if (event.source !== window.parent || !isHostOrigin(event.origin)) return;
         const message = event.data;
@@ -59,7 +60,10 @@ function listenToHost(onToolResult) {
         if (message.id !== undefined) send({ jsonrpc: "2.0", id: message.id, result: {} });
 
         if (message.method === "ui/notifications/tool-result") onToolResult(message.params);
-        if (message.method === "ui/notifications/host-context-changed") applyTheme(message.params);
+        if (message.method === "ui/notifications/host-context-changed") {
+            applyTheme(message.params);
+            onHostContext?.(message.params);
+        }
     });
 }
 
@@ -100,13 +104,14 @@ function sendSize() {
 /**
  * Starts the talk with the host: initializes, applies its theme, then tells it that the view is ready.
  * @param {string} name The name of the view, for example model-health.
- * @returns {Promise<void>} Resolved once the host knows that the view is ready, or rejected with the error of the host.
+ * @returns {Promise<object>} The context of the host, once it knows that the view is ready, or a rejection with the error of the host.
  */
 function initializeView(name) {
     const params = { protocolVersion: "2026-01-26", appInfo: { name, version: "0.1.0" }, appCapabilities: {} };
     return request("ui/initialize", params).then(result => {
         applyTheme(result?.hostContext);
         notify("ui/notifications/initialized", {});
+        return result?.hostContext;
     });
 }
 

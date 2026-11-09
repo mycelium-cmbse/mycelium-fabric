@@ -55,6 +55,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             ReqId = "REQ-PAY-004", Name = "downlinkDelay", Text = "The images shall be downlinked within a responsive time (target TBD).", Clarification = "TBD target"
         };
 
+        private static readonly SavedRow[] SavedRows = [new SavedRow { ReqId = "REQ-PAY-001", Option = ImportOption.AsWritten, Ticked = true }];
+
         private Mock<IModelProvider> modelProvider;
 
         private Mock<IDocumentReader> documentReader;
@@ -82,7 +84,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             }
 
             this.modelProvider = new Mock<IModelProvider>();
-            this.modelProvider.Setup(provider => provider.Elements).Returns([]);
+            this.modelProvider.Setup(provider => provider.GetRequirementIds()).Returns([]);
             this.modelProvider.Setup(provider => provider.GetRequiredElementById(OwnerId)).Returns(Mock.Of<IPackage>(package => package.qualifiedName == "EOSat1::Requirements"));
             this.modelProvider.Setup(provider => provider.PreviewChanges(It.IsAny<IReadOnlyList<ModelChange>>())).Returns(new ModelPreview([]));
 
@@ -161,11 +163,44 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(viewProposal.Requirements, Has.Count.EqualTo(2));
                 Assert.That(viewProposal.Requirements[1].Findings[0].Kind, Is.EqualTo(ExtractionFindingKind.ToClarify));
                 this.proposalStore.Verify(store => store.Add(It.Is<RequirementProposal>(proposal => proposal.SectionNumber == 5 && proposal.Token == null)), Times.Once);
+                Assert.That(viewProposal.SavedRows, Is.Null);
 
                 Assert.That(() => tools.ProposeRequirementsAsync(FileName, 0, [GroundSampling], OwnerId), Throws.TypeOf<McpException>().With.Message.Contains("has no section 0"));
                 Assert.That(() => tools.ProposeRequirementsAsync(FileName, 9, [GroundSampling], OwnerId), Throws.TypeOf<McpException>().With.Message.Contains("from 1 to 8"));
                 Assert.That(() => tools.ProposeRequirementsAsync("Missing.md", 1, [GroundSampling], OwnerId), Throws.TypeOf<McpException>().With.Message.Contains("Missing.md"));
                 Assert.That(() => tools.ProposeRequirementsAsync(FileName, 5, [], OwnerId), Throws.TypeOf<McpException>().With.Message.Contains("empty"));
+            }
+
+            // The saved rows go to the view, never to the AI assistant.
+            this.proposalStore.Setup(store => store.Add(It.IsAny<RequirementProposal>())).Returns<RequirementProposal>(proposal => proposal with { Id = ProposalId, Token = Token, SavedRows = SavedRows });
+
+            var savedResult = await tools.ProposeRequirementsAsync(FileName, 5, [GroundSampling], OwnerId, "PayloadRequirements");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(savedResult.StructuredContent.Value.Deserialize<RequirementProposal>(McpJsonUtilities.DefaultOptions).SavedRows, Is.EqualTo(SavedRows));
+                Assert.That(ReadText(savedResult, 1), Does.Not.Contain("savedRows"));
+            }
+        }
+
+        [Test]
+        public void VerifySaveRequirementList()
+        {
+            var tools = this.CreateTools();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tools.SaveRequirementList(ProposalId, Token, SavedRows), Is.EqualTo("Saved 1 row of section 5 of 'EOSat1-requirements.md'. Nothing has been imported."));
+                Assert.That(tools.SaveRequirementList(ProposalId, Token, [SavedRows[0], SavedRows[0]]), Does.StartWith("Saved 2 rows"));
+                this.proposalStore.Verify(store => store.SaveRows(this.keptProposal, SavedRows), Times.Once);
+                this.modelProvider.Verify(provider => provider.ApplyChanges(It.IsAny<IReadOnlyList<ModelChange>>()), Times.Never);
+
+                Assert.That(() => tools.SaveRequirementList(ProposalId, "wrong", SavedRows), Throws.TypeOf<McpException>().With.Message.Contains("can no longer be saved"));
+                Assert.That(() => tools.SaveRequirementList(ProposalId, Token, null), Throws.TypeOf<McpException>().With.Message.Contains("Nothing has been saved"));
+                Assert.That(() => tools.SaveRequirementList(ProposalId, Token, []), Throws.TypeOf<McpException>().With.Message.Contains("Nothing has been saved"));
+                Assert.That(() => tools.SaveRequirementList(ProposalId, Token, [new SavedRow()]), Throws.TypeOf<McpException>().With.Message.Contains("Nothing has been saved"));
+                Assert.That(() => tools.SaveRequirementList(ProposalId, Token, [null]), Throws.TypeOf<McpException>().With.Message.Contains("Nothing has been saved"));
+                this.proposalStore.Verify(store => store.SaveRows(It.IsAny<RequirementProposal>(), It.IsAny<IReadOnlyList<SavedRow>>()), Times.Exactly(2));
             }
         }
 
@@ -192,6 +227,21 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 this.proposalStore.Verify(store => store.Remove(ProposalId), Times.Once);
             }
 
+            var merged = tools.ImportRequirements(ProposalId, Token,
+            [
+                new ImportChoice { ReqId = "REQ-PAY-001", Option = ImportOption.AsWritten },
+                new ImportChoice { ReqId = "REQ-PAY-004", Option = ImportOption.MergeInto, MergeInto = "REQ-PAY-001" }
+            ]).StructuredContent.Value.Deserialize<RequirementImport>(McpJsonUtilities.DefaultOptions);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(merged.Message, Does.StartWith("The user has imported 1 requirement of section 5 '3. Payload requirements' of 'EOSat1-requirements.md' in one batch: "
+                    + "REQ-PAY-001 (as written). Merged by the user, so not created: REQ-PAY-004 into REQ-PAY-001."));
+                Assert.That(merged.Message, Does.Not.Contain("Left out"));
+            }
+
+            this.proposalStore.Invocations.Clear();
+
             this.modelProvider.Setup(provider => provider.ApplyChanges(It.IsAny<IReadOnlyList<ModelChange>>())).Returns(new ApplyChangesResult([], ["Change 2 (create RequirementUsage): refused."]));
 
             var refused = tools.ImportRequirements(ProposalId, Token, [new ImportChoice { ReqId = "REQ-PAY-004", Option = ImportOption.AsGoal }])
@@ -201,7 +251,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             {
                 Assert.That(refused.Imported, Is.False);
                 Assert.That(refused.Message, Does.Contain("the batch has been refused and nothing has been applied").And.Contain("refused."));
-                this.proposalStore.Verify(store => store.Remove(ProposalId), Times.Once);
+                this.proposalStore.Verify(store => store.Remove(ProposalId), Times.Never);
 
                 Assert.That(() => tools.ImportRequirements(ProposalId, "wrong", [new ImportChoice { ReqId = "REQ-PAY-001" }]),
                     Throws.TypeOf<McpException>().With.Message.Contains("can no longer be imported"));
@@ -215,7 +265,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             {
                 Assert.That(() => tools.ImportRequirements(ProposalId, Token, [new ImportChoice { ReqId = "REQ-PAY-001" }]),
                     Throws.TypeOf<McpException>().With.Message.Contains("A batch of changes waits for your decision"));
-                this.modelProvider.Verify(provider => provider.ApplyChanges(It.IsAny<IReadOnlyList<ModelChange>>()), Times.Exactly(2));
+                this.modelProvider.Verify(provider => provider.ApplyChanges(It.IsAny<IReadOnlyList<ModelChange>>()), Times.Exactly(3));
             }
         }
 

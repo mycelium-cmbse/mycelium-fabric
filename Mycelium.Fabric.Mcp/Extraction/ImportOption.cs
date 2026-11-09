@@ -30,6 +30,12 @@ namespace Mycelium.Fabric.Mcp.Extraction
         /// <summary>
         /// The statement as written, without constraint: a design goal, which is not checked.
         /// </summary>
-        AsGoal
+        AsGoal,
+
+        /// <summary>
+        /// The requirement is not created, because another requirement imported by the same batch already says the same; that
+        /// requirement does not change.
+        /// </summary>
+        MergeInto
     }
 }

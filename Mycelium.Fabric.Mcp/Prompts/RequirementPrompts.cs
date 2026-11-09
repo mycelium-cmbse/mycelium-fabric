@@ -50,8 +50,9 @@ namespace Mycelium.Fabric.Mcp.Prompts
                subsections hold few requirements (about 20 in all), read them too: they are proposed with the section.
             6. Call propose_requirements once for the section: every requirement whose identifier is missing, with a name,
                the statement, its kind, its constraint if any, and for a requirement to clarify, the reason and, when the
-               document allows it, a rewritten statement with its constraint; the package (ownerId, newPackage or both) and
-               the idPattern. Never create a requirement whose identifier is already modelled. A subsection proposed with its
+               document allows it, a rewritten statement with its constraint; for a requirement that only repeats another one
+               of the list, the reason and that requirement in mergeInto; the package (ownerId, newPackage or both) and the
+               idPattern. Never create a requirement whose identifier is already modelled. A subsection proposed with its
                section is done.
             7. If the result says that the user reviews the requirements in a view, send nothing else and wait for the user's
                message, which tells what has been imported. Otherwise, send one apply_changes batch for the section: its

@@ -30,7 +30,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <EmbeddedResource Include="McpApp\*.html;McpApp\*.css;McpApp\*.js" LogicalName="Mycelium.Fabric.Mcp.McpApp.%(Filename)%(Extension)" />
+      <EmbeddedResource Include="McpApp\**\*.html;McpApp\**\*.css;McpApp\**\*.js" LogicalName="Mycelium.Fabric.Mcp.McpApp.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

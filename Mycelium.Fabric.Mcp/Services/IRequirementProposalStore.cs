@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.Mcp.Services
 {
     using System;
+    using System.Collections.Generic;
 
     using Mycelium.Fabric.Mcp.Extraction;
 
@@ -19,10 +20,11 @@ namespace Mycelium.Fabric.Mcp.Services
     public interface IRequirementProposalStore
     {
         /// <summary>
-        /// Keeps a proposal, with a new identifier and a new secret token.
+        /// Keeps a proposal, with a new identifier and a new secret token, and with the rows saved for the same section of the
+        /// same document, if any.
         /// </summary>
         /// <param name="proposal">The <see cref="RequirementProposal"/> to keep.</param>
-        /// <returns>The kept <see cref="RequirementProposal"/>, with its identifier and its token.</returns>
+        /// <returns>The kept <see cref="RequirementProposal"/>, with its identifier, its token and its saved rows.</returns>
         RequirementProposal Add(RequirementProposal proposal);
 
         /// <summary>
@@ -34,7 +36,14 @@ namespace Mycelium.Fabric.Mcp.Services
         RequirementProposal TryGet(Guid proposalId, string token);
 
         /// <summary>
-        /// Forgets a proposal, once imported.
+        /// Saves the rows of a section of a document as the user has left them, in place of the rows saved earlier for this section.
+        /// </summary>
+        /// <param name="proposal">The <see cref="RequirementProposal"/> whose rows are saved.</param>
+        /// <param name="rows">The <see cref="SavedRow"/>s.</param>
+        void SaveRows(RequirementProposal proposal, IReadOnlyList<SavedRow> rows);
+
+        /// <summary>
+        /// Forgets a proposal, once imported, and the rows saved for its section.
         /// </summary>
         /// <param name="proposalId">The identifier of the proposal.</param>
         void Remove(Guid proposalId);

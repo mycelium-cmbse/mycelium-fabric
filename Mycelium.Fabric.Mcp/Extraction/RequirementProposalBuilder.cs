@@ -17,7 +17,6 @@ namespace Mycelium.Fabric.Mcp.Extraction
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Documents;
-    using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
     using SysML2.NET.Core.POCO.Kernel.Packages;
@@ -211,7 +210,67 @@ namespace Mycelium.Fabric.Mcp.Extraction
                 findings.Add(new ExtractionFinding(ExtractionFindingKind.ToClarify, requirement.Clarification.Trim()));
             }
 
-            return new ExtractedRequirement(requirement, passage?.SectionTitle, passage == null ? null : GetExcerpt(passage.Text, statement), findings);
+            return new ExtractedRequirement(CheckMerge(context, requirement, findings), passage?.SectionTitle, passage == null ? null : GetExcerpt(passage.Text, statement), findings);
+        }
+
+        /// <summary>
+        /// Checks the requirement that the AI assistant proposes to merge into. A proposal of merge always asks the user: without
+        /// a reason given by the assistant, the server writes one.
+        /// </summary>
+        /// <param name="context">The <see cref="ProposalContext"/>.</param>
+        /// <param name="requirement">The <see cref="ProposedRequirement"/>.</param>
+        /// <param name="findings">The findings of the requirement, to which the findings of the merge are added.</param>
+        /// <returns>The <see cref="ProposedRequirement"/>, without its target when the target cannot be used.</returns>
+        private static ProposedRequirement CheckMerge(ProposalContext context, ProposedRequirement requirement, List<ExtractionFinding> findings)
+        {
+            if (string.IsNullOrWhiteSpace(requirement.MergeInto))
+            {
+                return requirement;
+            }
+
+            if (findings.Exists(finding => finding.Kind is ExtractionFindingKind.AlreadyModelled or ExtractionFindingKind.Repeated))
+            {
+                return requirement with { MergeInto = null };
+            }
+
+            var problem = GetMergeProblem(context, requirement);
+
+            if (problem != null)
+            {
+                findings.Add(new ExtractionFinding(ExtractionFindingKind.InvalidMerge, problem));
+
+                return requirement with { MergeInto = null };
+            }
+
+            if (string.IsNullOrWhiteSpace(requirement.Clarification))
+            {
+                findings.Add(new ExtractionFinding(ExtractionFindingKind.ToClarify, $"The assistant suggests merging it into {requirement.MergeInto}."));
+            }
+
+            return requirement;
+        }
+
+        /// <summary>
+        /// Tells why a requirement cannot be merged into the one that the AI assistant proposes.
+        /// </summary>
+        /// <param name="context">The <see cref="ProposalContext"/>.</param>
+        /// <param name="requirement">The <see cref="ProposedRequirement"/>, which has a target.</param>
+        /// <returns>The problem, or <c>null</c> when the target can receive the requirement.</returns>
+        private static string GetMergeProblem(ProposalContext context, ProposedRequirement requirement)
+        {
+            var target = requirement.MergeInto;
+
+            if (target == requirement.ReqId)
+            {
+                return "It cannot be merged into itself.";
+            }
+
+            if (context.Requirements.All(other => other.ReqId != target))
+            {
+                return $"It cannot be merged into {target}: this requirement is not in the list.";
+            }
+
+            return context.ModelledIds.Contains(target) ? $"It cannot be merged into {target}: the model already has this requirement, so it is not imported." : null;
         }
 
         /// <summary>

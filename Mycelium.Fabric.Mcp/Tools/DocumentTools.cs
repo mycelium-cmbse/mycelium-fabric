@@ -21,7 +21,6 @@ namespace Mycelium.Fabric.Mcp.Tools
     using ModelContextProtocol.Server;
 
     using Mycelium.Fabric.Mcp.Documents;
-    using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
 
     /// <summary>

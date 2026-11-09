@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------------------------------------
-//  <copyright file="script.test.js" company="Starion Group S.A.">
+//  <copyright file="review-batch.test.js" company="Starion Group S.A.">
 //
 //    Copyright 2026 Starion Group S.A.
 //    SPDX-License-Identifier: Apache-2.0
@@ -7,15 +7,15 @@
 //  </copyright>
 //  ------------------------------------------------------------------------------------------------
 
-// Tests of the view "Batch review" (McpApp/script.js), run by Node.js: node --test Mycelium.Fabric.Mcp.Tests/McpApp/script.test.js
+// Tests of the view "Batch review" (McpApp/review-batch/review-batch.js), run by Node.js: node --test Mycelium.Fabric.Mcp.Tests/McpApp/review-batch/review-batch.test.js
 
 const { describe, it, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const { loadPage } = require("./fake-page.js");
+const { loadPage } = require("../fake-page.js");
 
-const APP_FOLDER = path.join(__dirname, "..", "..", "Mycelium.Fabric.Mcp", "McpApp");
+const APP_FOLDER = path.join(__dirname, "..", "..", "..", "Mycelium.Fabric.Mcp", "McpApp");
 const HOST_ORIGIN = "https://host.example";
 
 /**
@@ -103,7 +103,7 @@ describe("review-batch view", () => {
     let page;
 
     beforeEach(() => {
-        page = loadPage(path.join(APP_FOLDER, "review-batch.html"), path.join(APP_FOLDER, "script.js"));
+        page = loadPage(path.join(APP_FOLDER, "review-batch", "review-batch.html"), path.join(APP_FOLDER, "review-batch", "review-batch.js"));
     });
 
     describe("talking with the host", () => {

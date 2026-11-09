@@ -83,11 +83,12 @@ namespace Mycelium.Fabric.Mcp.Extraction
         /// </summary>
         /// <param name="proposal">The <see cref="RequirementProposal"/> kept by the server.</param>
         /// <param name="choices">The <see cref="ImportChoice"/>s of the user.</param>
-        /// <returns>The changes: the new package if any, then one requirement usage per choice.</returns>
+        /// <returns>The changes: the new package if any, then one requirement usage per choice that is not merged.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="proposal"/> is <c>null</c>.</exception>
         /// <exception cref="McpException">
         /// Thrown when no requirement is chosen, or when a choice is not a requirement of the proposal, is chosen twice, cannot be
-        /// imported or asks for a rewrite that the requirement does not have.
+        /// imported, asks for a rewrite that the requirement does not have, or is merged into a requirement that this batch does
+        /// not create.
         /// </exception>
         public static IReadOnlyList<ModelChange> Build(RequirementProposal proposal, IReadOnlyList<ImportChoice> choices)
         {
@@ -105,6 +106,7 @@ namespace Mycelium.Fabric.Mcp.Extraction
                 .Concat(choices.GroupBy(choice => choice?.ReqId, StringComparer.Ordinal)
                     .Where(group => group.Key != null && group.Count() > 1)
                     .Select(group => $"{group.Key} is chosen more than once."))
+                .Concat(CheckMerges(choices))
                 .Where(problem => problem != null)
                 .ToList();
 
@@ -119,7 +121,7 @@ namespace Mycelium.Fabric.Mcp.Extraction
             [
                 .. CreatePackageChanges(proposal.OwnerId, proposal.NewPackage),
                 .. proposal.Requirements
-                    .Where(row => !row.IsBlocked && options.ContainsKey(row.Requirement.ReqId))
+                    .Where(row => !row.IsBlocked && options.TryGetValue(row.Requirement.ReqId, out var option) && option != ImportOption.MergeInto)
                     .Select(row => CreateRequirementChange(row.Requirement, options[row.Requirement.ReqId], proposal.OwnerId, proposal.NewPackage))
             ];
         }
@@ -146,7 +148,7 @@ namespace Mycelium.Fabric.Mcp.Extraction
 
             if (!Enum.IsDefined(choice.Option))
             {
-                return $"The option of {choice.ReqId} must be AsWritten, WithRewrite or AsGoal.";
+                return $"The option of {choice.ReqId} must be AsWritten, WithRewrite, AsGoal or MergeInto.";
             }
 
             var hasValidRewrite = !string.IsNullOrWhiteSpace(row.Requirement.RewrittenText) && row.Findings.All(finding => finding.Kind != ExtractionFindingKind.InvalidRewrite);
@@ -154,6 +156,45 @@ namespace Mycelium.Fabric.Mcp.Extraction
             return choice.Option == ImportOption.WithRewrite && !hasValidRewrite
                 ? $"{choice.ReqId} has no valid rewrite: import it as written or as a goal."
                 : null;
+        }
+
+        /// <summary>
+        /// Checks the choices that merge a requirement into another one: the target must be created by the same batch.
+        /// </summary>
+        /// <param name="choices">The <see cref="ImportChoice"/>s of the user, some of which may be <c>null</c>.</param>
+        /// <returns>One problem, or <c>null</c>, per choice that merges a requirement.</returns>
+        private static IEnumerable<string> CheckMerges(IReadOnlyList<ImportChoice> choices)
+        {
+            var options = choices.Where(choice => choice?.ReqId != null).GroupBy(choice => choice.ReqId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().Option, StringComparer.Ordinal);
+
+            return choices.Where(choice => choice?.ReqId != null && choice.Option == ImportOption.MergeInto).Select(choice => CheckMerge(choice, options));
+        }
+
+        /// <summary>
+        /// Checks a choice that merges a requirement into another one.
+        /// </summary>
+        /// <param name="choice">The <see cref="ImportChoice"/>.</param>
+        /// <param name="options">The <see cref="ImportOption"/> of each chosen requirement.</param>
+        /// <returns>The problem, or <c>null</c> when the target is created by the batch.</returns>
+        private static string CheckMerge(ImportChoice choice, Dictionary<string, ImportOption> options)
+        {
+            if (string.IsNullOrWhiteSpace(choice.MergeInto))
+            {
+                return $"{choice.ReqId} must name the requirement that it is merged into.";
+            }
+
+            if (choice.MergeInto == choice.ReqId)
+            {
+                return $"{choice.ReqId} cannot be merged into itself.";
+            }
+
+            if (!options.TryGetValue(choice.MergeInto, out var targetOption))
+            {
+                return $"{choice.ReqId} is merged into {choice.MergeInto}, which is not imported.";
+            }
+
+            return targetOption == ImportOption.MergeInto ? $"{choice.ReqId} is merged into {choice.MergeInto}, which is merged too." : null;
         }
     }
 }

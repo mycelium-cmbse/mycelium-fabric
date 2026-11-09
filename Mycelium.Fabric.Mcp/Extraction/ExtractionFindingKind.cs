@@ -44,6 +44,11 @@ namespace Mycelium.Fabric.Mcp.Extraction
         InvalidRewrite,
 
         /// <summary>
+        /// The requirement that the AI assistant proposes to merge into cannot receive it. Found by the server.
+        /// </summary>
+        InvalidMerge,
+
+        /// <summary>
         /// The requirement must be clarified, for the reason given by the AI assistant.
         /// </summary>
         ToClarify

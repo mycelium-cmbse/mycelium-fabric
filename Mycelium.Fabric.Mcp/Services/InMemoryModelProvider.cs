@@ -29,6 +29,7 @@ namespace Mycelium.Fabric.Mcp.Services
     using SysML2.NET.Core.POCO.Systems.Connections;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Ports;
+    using SysML2.NET.Core.POCO.Systems.Requirements;
     using SysML2.NET.Core.POCO.Systems.States;
     using SysML2.NET.Dal;
     using SysML2.NET.PSM.DTO;
@@ -292,6 +293,19 @@ namespace Mycelium.Fabric.Mcp.Services
         {
             return this.GetElementById(elementId)
                 ?? throw new McpException($"No element has the identifier '{elementId}'. Use find_elements_by_name or list_children to get a valid identifier.");
+        }
+
+        /// <summary>
+        /// Gets the identifiers of the requirements of the loaded model: the <c>reqId</c> of its requirement definitions and usages.
+        /// </summary>
+        /// <returns>The identifiers, compared character by character.</returns>
+        public HashSet<string> GetRequirementIds()
+        {
+            var elements = this.Elements;
+
+            return new HashSet<string>(elements.OfType<IRequirementUsage>().Select(requirement => requirement.ReqId)
+                .Concat(elements.OfType<IRequirementDefinition>().Select(requirement => requirement.ReqId))
+                .Where(identifier => !string.IsNullOrWhiteSpace(identifier)), StringComparer.Ordinal);
         }
 
         /// <summary>

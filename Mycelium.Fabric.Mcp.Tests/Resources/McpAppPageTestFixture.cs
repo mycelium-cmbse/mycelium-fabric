@@ -26,6 +26,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Resources
             {
                 Assert.That(page, Does.Contain("<style>"));
                 Assert.That(page, Does.Contain("<script>"));
+                Assert.That(page, Does.Contain("@font-face").And.Contain(".bloom-palette").And.Contain(".chk-list"));
                 Assert.That(page, Does.Not.Contain("<link rel=\"stylesheet\""));
                 Assert.That(page, Does.Not.Contain("<script src="));
                 Assert.That(page, Does.Contain("${count}"));

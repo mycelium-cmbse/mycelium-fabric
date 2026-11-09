@@ -47,5 +47,11 @@ namespace Mycelium.Fabric.Mcp.Extraction
         /// view only, never to the AI assistant; <c>null</c> until the server keeps the proposal.
         /// </summary>
         public string Token { get; init; }
+
+        /// <summary>
+        /// Gets the rows that the user has saved for this section of this document, so that the view restores their choices;
+        /// <c>null</c> when there are none. The findings of the proposal are always computed again.
+        /// </summary>
+        public IReadOnlyList<SavedRow> SavedRows { get; init; }
     }
 }

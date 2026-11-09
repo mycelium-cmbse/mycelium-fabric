@@ -66,5 +66,11 @@ namespace Mycelium.Fabric.Mcp.Extraction
         /// </summary>
         [Description("Optional, with a rewritten statement: its constraint, as in apply_changes.")]
         public ConstraintPayload RewrittenConstraint { get; init; }
+
+        /// <summary>
+        /// Gets the identifier of the requirement of the list that already says the same as this one, or <c>null</c>.
+        /// </summary>
+        [Description("Optional: the reqId of another requirement of this list when this one only repeats it. The user chooses whether it is merged, and then it is not created.")]
+        public string MergeInto { get; init; }
     }
 }
