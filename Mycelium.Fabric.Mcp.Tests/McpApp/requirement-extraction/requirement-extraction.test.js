@@ -176,7 +176,7 @@ function rows(page) {
         const tick = tr.querySelector(".cb");
         return {
             reqId: tr.querySelector(".rx-id").textContent,
-            ticked: tick.getAttribute("aria-checked") === "true",
+            ticked: tick.checked,
             disabled: tick.disabled,
             constraint: tr.querySelector(".cst").textContent,
             quality: tr.querySelector(".qtag").textContent
@@ -645,15 +645,18 @@ describe("requirement extraction view", () => {
             const all = page.document.getElementById("all");
             selectRow(page, "REQ-PAY-004");
             page.document.getElementById("apply").dispatch("click");
-            assert.equal(all.getAttribute("aria-checked"), "true");
+            assert.equal(all.checked, true);
+            assert.equal(all.indeterminate, false);
 
             all.dispatch("click");
             assert.deepEqual(rows(page).map(item => item.ticked), [false, false, false, false]);
-            assert.equal(all.getAttribute("aria-checked"), "false");
+            assert.equal(all.checked, false);
+            assert.equal(all.indeterminate, false);
             assert.equal(summary(page), "Nothing selected");
 
             tick(page, "REQ-PAY-001");
-            assert.equal(all.getAttribute("aria-checked"), "mixed");
+            assert.equal(all.checked, false);
+            assert.equal(all.indeterminate, true);
             all.dispatch("click");
             assert.deepEqual(rows(page).map(item => item.ticked), [true, true, false, true]);
 

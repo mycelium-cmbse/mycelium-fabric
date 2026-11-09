@@ -16,11 +16,11 @@
             <h1 id="title">Extract requirements</h1>
             <div class="sub" id="subtitle">Waiting for the requirements…</div>
         </div>
-        <div class="fchips" id="filters" role="group" aria-label="Show the requirements" hidden>
+        <fieldset class="fchips" id="filters" aria-label="Show the requirements" hidden>
             <button class="fchip on" type="button" data-filter="all" aria-pressed="true">All<b id="count_all"></b></button>
             <button class="fchip" type="button" data-filter="ready" aria-pressed="false">Ready<b id="count_ready"></b></button>
             <button class="fchip" type="button" data-filter="attention" aria-pressed="false">Needs attention<b id="count_attention"></b></button>
-        </div>
+        </fieldset>
     </div>
     <div class="rx-banner rx-error" id="error" role="alert" hidden></div>
     <div class="rx-banner" id="missed" hidden></div>
@@ -43,14 +43,14 @@
                 </table>
             </div>
             <div class="foot-bar">
-                <button class="cb" id="all" type="button" role="checkbox" aria-checked="false" aria-label="Tick all the requirements"></button>
+                <input class="cb" id="all" type="checkbox" aria-label="Tick all the requirements">
                 <span id="summary"></span>
                 <span class="rx-reason" id="reason" role="alert" hidden></span>
                 <span class="sp"></span>
                 <button class="btn" id="export" type="button" disabled>Export list</button>
                 <button class="btn pri" id="import" type="button" disabled>Import as 1 batch</button>
             </div>
-            <div class="rx-note" id="note" role="status"></div>
+            <output class="rx-note" id="note"></output>
         </div>
         <section class="card rx-detail" id="detail" aria-live="polite" hidden></section>
     </div>

@@ -470,16 +470,13 @@ function sortStateOf(column) {
 function createRow(row, index) {
     const requirement = row.requirement;
     const tr = el("tr", "rx-row" + (row.isReady ? "" : " need") + (state.selected === index ? " sel" : ""));
-    tr.setAttribute("data-index", String(index));
+    tr.dataset.index = String(index);
 
-    const ticked = Boolean(appliedOf(row)?.ticked);
-    const tick = el("button", "cb" + (ticked ? " on" : ""));
-    tick.type = "button";
-    tick.setAttribute("role", "checkbox");
-    tick.setAttribute("aria-checked", String(ticked));
+    const tick = el("input", "cb");
+    tick.type = "checkbox";
+    tick.checked = Boolean(appliedOf(row)?.ticked);
     tick.setAttribute("aria-label", "Import " + requirement.reqId);
     tick.disabled = row.isBlocked || state.importedText !== null;
-    if (ticked) tick.append(icon("check", 11));
 
     tr.append(
         cell(tick, "rx-tick"),
@@ -808,24 +805,11 @@ function summaryOf(chosen, merged) {
  */
 function drawTickAll(ticked, done) {
     const count = tickableRows().length;
-    const checked = tickStateOf(ticked, count);
     const box = $("all");
     box.hidden = done;
     box.disabled = count === 0;
-    box.className = "cb" + (checked === "true" ? " on" : "") + (checked === "mixed" ? " mixed" : "");
-    box.setAttribute("aria-checked", checked);
-    box.replaceChildren(...(checked === "true" ? [icon("check", 11)] : []));
-}
-
-/**
- * Tells the state of the box that ticks all the rows.
- * @param {number} ticked How many rows are ticked.
- * @param {number} count How many rows can be ticked.
- * @returns {string} The value of aria-checked: true, false or mixed.
- */
-function tickStateOf(ticked, count) {
-    if (ticked === 0) return "false";
-    return ticked === count ? "true" : "mixed";
+    box.checked = ticked > 0 && ticked === count;
+    box.indeterminate = ticked > 0 && ticked < count;
 }
 
 /**
