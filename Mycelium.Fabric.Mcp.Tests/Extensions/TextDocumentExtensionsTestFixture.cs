@@ -30,6 +30,12 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
         private static readonly string[] GroundIds = ["REQ-GND-001"];
 
+        private static readonly int[] PreambleSection = [1];
+
+        private static readonly int[] SectionWithoutSubsection = [4];
+
+        private static readonly int[] LastSection = [8];
+
         private TextDocument document;
 
         [SetUp]
@@ -45,10 +51,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(this.document.GetSectionAndSubsections(5).Select(section => section.Title), Is.EqualTo(PayloadTitles));
-                Assert.That(this.document.GetSectionAndSubsections(4).Select(section => section.Number), Is.EqualTo(new[] { 4 }));
+                Assert.That(this.document.GetSectionAndSubsections(4).Select(section => section.Number), Is.EqualTo(SectionWithoutSubsection));
                 Assert.That(this.document.GetSectionAndSubsections(2).Select(section => section.Number), Is.EqualTo(Enumerable.Range(2, 7)));
-                Assert.That(this.document.GetSectionAndSubsections(1).Select(section => section.Number), Is.EqualTo(new[] { 1 }));
-                Assert.That(this.document.GetSectionAndSubsections(8).Select(section => section.Number), Is.EqualTo(new[] { 8 }));
+                Assert.That(this.document.GetSectionAndSubsections(1).Select(section => section.Number), Is.EqualTo(PreambleSection));
+                Assert.That(this.document.GetSectionAndSubsections(8).Select(section => section.Number), Is.EqualTo(LastSection));
                 Assert.That(() => this.document.GetSectionAndSubsections(0), Throws.TypeOf<ArgumentOutOfRangeException>());
                 Assert.That(() => this.document.GetSectionAndSubsections(9), Throws.TypeOf<ArgumentOutOfRangeException>());
                 Assert.That(() => ((TextDocument)null).GetSectionAndSubsections(1), Throws.TypeOf<ArgumentNullException>());

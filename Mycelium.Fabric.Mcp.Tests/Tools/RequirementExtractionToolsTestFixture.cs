@@ -18,6 +18,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
     using ModelContextProtocol;
     using ModelContextProtocol.Protocol;
+    using ModelContextProtocol.Server;
 
     using Moq;
 
@@ -64,6 +65,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
         private Mock<IAppHostDetector> appHostDetector;
 
+        private Mock<McpServer> server;
+
+        private ClientCapabilities clientCapabilities;
+
         private RequirementProposal keptProposal;
 
         [SetUp]
@@ -99,6 +104,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             this.pendingBatchStore = new Mock<IPendingBatchStore>();
             this.appHostDetector = new Mock<IAppHostDetector>();
+
+            this.clientCapabilities = new ClientCapabilities();
+            this.server = new Mock<McpServer>();
+            this.server.Setup(mcpServer => mcpServer.ClientCapabilities).Returns(this.clientCapabilities);
         }
 
         [Test]
@@ -106,16 +115,18 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new RequirementExtractionTools(null, this.documentReader.Object, this.proposalStore.Object, this.pendingBatchStore.Object, this.appHostDetector.Object),
-                    Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, null, this.proposalStore.Object, this.pendingBatchStore.Object, this.appHostDetector.Object),
-                    Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, null, this.pendingBatchStore.Object, this.appHostDetector.Object),
-                    Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, this.proposalStore.Object, null, this.appHostDetector.Object),
-                    Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, this.proposalStore.Object, this.pendingBatchStore.Object, null),
-                    Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new RequirementExtractionTools(null, this.documentReader.Object, this.proposalStore.Object, this.pendingBatchStore.Object,
+                    this.appHostDetector.Object, this.server.Object), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, null, this.proposalStore.Object, this.pendingBatchStore.Object,
+                    this.appHostDetector.Object, this.server.Object), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, null, this.pendingBatchStore.Object,
+                    this.appHostDetector.Object, this.server.Object), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, this.proposalStore.Object, null,
+                    this.appHostDetector.Object, this.server.Object), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, this.proposalStore.Object, this.pendingBatchStore.Object,
+                    null, this.server.Object), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, this.proposalStore.Object, this.pendingBatchStore.Object,
+                    this.appHostDetector.Object, null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(this.CreateTools, Throws.Nothing);
             }
         }
@@ -136,7 +147,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 this.proposalStore.Verify(store => store.Add(It.IsAny<RequirementProposal>()), Times.Never);
             }
 
-            this.appHostDetector.Setup(detector => detector.ShowsApps(It.IsAny<ClientCapabilities>())).Returns(true);
+            this.appHostDetector.Setup(detector => detector.ShowsApps(this.clientCapabilities)).Returns(true);
 
             var viewResult = await tools.ProposeRequirementsAsync(FileName, 5, [GroundSampling, DownlinkDelay], OwnerId, "PayloadRequirements");
             var viewProposal = viewResult.StructuredContent.Value.Deserialize<RequirementProposal>(McpJsonUtilities.DefaultOptions);
@@ -216,7 +227,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         private RequirementExtractionTools CreateTools()
         {
             return new RequirementExtractionTools(this.modelProvider.Object, this.documentReader.Object, this.proposalStore.Object, this.pendingBatchStore.Object,
-                this.appHostDetector.Object);
+                this.appHostDetector.Object, this.server.Object);
         }
     }
 }

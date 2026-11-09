@@ -75,6 +75,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         private readonly IAppHostDetector appHostDetector;
 
         /// <summary>
+        /// The <see cref="McpServer"/> of the request, which tells what the host can show.
+        /// </summary>
+        private readonly McpServer server;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="RequirementExtractionTools"/> class.
         /// </summary>
         /// <param name="modelProvider">The <see cref="IModelProvider"/> that gives access to the model.</param>
@@ -82,21 +87,24 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="proposalStore">The <see cref="IRequirementProposalStore"/> that keeps the proposals.</param>
         /// <param name="pendingBatchStore">The <see cref="IPendingBatchStore"/> that keeps the batch waiting for the user.</param>
         /// <param name="appHostDetector">The <see cref="IAppHostDetector"/> that tells whether the host shows MCP Apps.</param>
+        /// <param name="server">The <see cref="McpServer"/> of the request, given by the SDK, which tells what the host can show.</param>
         /// <exception cref="ArgumentNullException">Thrown when a parameter is <c>null</c>.</exception>
         public RequirementExtractionTools(IModelProvider modelProvider, IDocumentReader documentReader, IRequirementProposalStore proposalStore, IPendingBatchStore pendingBatchStore,
-            IAppHostDetector appHostDetector)
+            IAppHostDetector appHostDetector, McpServer server)
         {
             ArgumentNullException.ThrowIfNull(modelProvider);
             ArgumentNullException.ThrowIfNull(documentReader);
             ArgumentNullException.ThrowIfNull(proposalStore);
             ArgumentNullException.ThrowIfNull(pendingBatchStore);
             ArgumentNullException.ThrowIfNull(appHostDetector);
+            ArgumentNullException.ThrowIfNull(server);
 
             this.modelProvider = modelProvider;
             this.documentReader = documentReader;
             this.proposalStore = proposalStore;
             this.pendingBatchStore = pendingBatchStore;
             this.appHostDetector = appHostDetector;
+            this.server = server;
         }
 
         /// <summary>
@@ -109,7 +117,6 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="ownerId">The <c>Id</c> of the package that owns the requirements or the new package, or <c>null</c>.</param>
         /// <param name="newPackage">The name of a package to create for the requirements, or <c>null</c>.</param>
         /// <param name="idPattern">The regular expression of the identifiers of the document, or <c>null</c>.</param>
-        /// <param name="server">The <see cref="McpServer"/> of the request, which tells what the host can show.</param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> of the request, canceled when the client cancels it. It is not a parameter of the
         /// tool.
@@ -140,7 +147,6 @@ namespace Mycelium.Fabric.Mcp.Tools
             [Description("Optional: the identifier (Id) of the package that owns the requirements, or under which newPackage is created.")] Guid? ownerId = null,
             [Description("Optional: the name of a package to create for the requirements, for example 'PayloadRequirements'.")] string newPackage = null,
             [Description("Optional: the regular expression of the identifiers, as in read_document, to list the identifiers that the list misses.")] string idPattern = null,
-            [Description("Bound by the SDK to the server that receives the call, not part of the tool schema.")] McpServer server = null,
             [Description("Bound by the SDK to the cancellation of the request, not part of the tool schema.")] CancellationToken cancellationToken = default)
         {
             var document = await this.documentReader.ReadAsync(fileName, cancellationToken);
@@ -152,7 +158,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             var proposal = RequirementProposalBuilder.Build(this.modelProvider, document, section, requirements, ownerId, newPackage, idPattern);
 
-            if (!this.appHostDetector.ShowsApps(server?.ClientCapabilities))
+            if (!this.appHostDetector.ShowsApps(this.server.ClientCapabilities))
             {
                 return CreateProposalResult(NoViewMessage, proposal);
             }
