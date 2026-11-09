@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 {
     using System.Collections.Generic;
 
+    using Mycelium.Fabric.Mcp.Plans;
     using Mycelium.Fabric.Mcp.Validation;
 
     /// <summary>
@@ -41,5 +42,11 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Gets the number of errors and warnings of the model that the applied batch has resolved.
         /// </summary>
         public int ResolvedIssueCount { get; init; }
+
+        /// <summary>
+        /// Gets what the model holds of the plan that the AI assistant has given, after the applied batch; <c>null</c> when
+        /// no plan has been given or the batch has not been applied.
+        /// </summary>
+        public PlanProgress Plan { get; init; }
     }
 }

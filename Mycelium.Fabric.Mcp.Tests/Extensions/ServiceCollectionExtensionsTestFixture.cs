@@ -84,6 +84,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var promptRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerPrompt)).ToList();
             var resourceRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(McpServerResource)).ToList();
             var pendingBatchStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IPendingBatchStore)).ToList();
+            var planStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConstructionPlanStore)).ToList();
             var appHostDetectorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IAppHostDetector)).ToList();
 
             using (Assert.EnterMultipleScope())
@@ -124,6 +125,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(pendingBatchStoreRegistrations, Has.Count.EqualTo(1));
                 Assert.That(pendingBatchStoreRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
                 Assert.That(pendingBatchStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(PendingBatchStore)));
+                Assert.That(planStoreRegistrations, Has.Count.EqualTo(1));
+                Assert.That(planStoreRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(planStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(ConstructionPlanStore)));
                 Assert.That(appHostDetectorRegistrations, Has.Count.EqualTo(1));
                 Assert.That(appHostDetectorRegistrations[0].ImplementationType, Is.EqualTo(typeof(AppHostDetector)));
             }
