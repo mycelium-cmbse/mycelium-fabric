@@ -103,7 +103,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
             this.versioningService
                 .Setup(service => service.GetTagsAsync(ProjectId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new PagedResult<Tag> { Records = [Record()], Previous = new Page { Epoch = 2, Identifier = TagId } });
+                .ReturnsAsync(new PagedResult<Tag> { Records = [Record()], Previous = Page.FromCursor(2, TagId) });
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, $"/projects/{ProjectId}/tags");
 

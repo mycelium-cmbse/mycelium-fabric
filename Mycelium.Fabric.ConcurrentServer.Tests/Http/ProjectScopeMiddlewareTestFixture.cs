@@ -15,7 +15,6 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
     using System.Threading.Tasks;
 
     using Microsoft.AspNetCore.Http;
-    using Microsoft.AspNetCore.Mvc.Testing;
     using Microsoft.AspNetCore.Routing;
     using Microsoft.AspNetCore.Routing.Patterns;
     using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +24,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
     using Mycelium.Fabric.ConcurrentServer.Http;
     using Mycelium.Fabric.ConcurrentServer.Modules;
     using Mycelium.Fabric.ConcurrentServer.Persistence;
+    using Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers;
 
     [TestFixture]
     public class ProjectScopeMiddlewareTestFixture
@@ -99,7 +99,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
         [Test]
         public async Task VerifyInvokeAsyncOnEveryRoute()
         {
-            using var application = new WebApplicationFactory<ApiBase>();
+            using var application = new FabricApplicationFactory();
 
             var endpoints = application.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
             var middleware = new ProjectScopeMiddleware(this.next.Object);

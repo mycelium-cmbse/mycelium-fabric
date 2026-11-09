@@ -45,10 +45,21 @@ namespace Mycelium.Fabric.AppHost
 
             var functionalData = postgres.AddDatabase("functionaldata", "mycelium_functional_data");
 
+            var concurrentServerVolumeName = builder.Configuration["ConcurrentServerData:VolumeName"] ?? "mycelium-fabric-concurrent_server-pg18";
+
+            var concurrentServerPostgres = builder.AddPostgres("concurrent-server-postgres")
+                .WithImageTag("18.6")
+                .WithArgs("-c", "max_locks_per_transaction=4096")
+                .WithDataVolume(concurrentServerVolumeName);
+
+            var concurrentServerData = concurrentServerPostgres.AddDatabase("concurrentserverdata", "mycelium_concurrent_server");
+
             builder.AddProject<Projects.Mycelium_Fabric_ConcurrentServer>("concurrent-server")
                 .WithHttpEndpoint()
                 .WithReference(functionalData)
-                .WaitFor(functionalData, WaitBehavior.WaitOnResourceUnavailable);
+                .WaitFor(functionalData, WaitBehavior.WaitOnResourceUnavailable)
+                .WithReference(concurrentServerData)
+                .WaitFor(concurrentServerData, WaitBehavior.WaitOnResourceUnavailable);
 
             builder.Build().Run();
         }

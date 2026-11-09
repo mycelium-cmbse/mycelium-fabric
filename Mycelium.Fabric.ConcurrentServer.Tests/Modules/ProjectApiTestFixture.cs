@@ -104,7 +104,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
             this.projectService
                 .Setup(service => service.GetProjectsAsync(It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new PagedResult<Project> { Records = [Record()], Next = new Page { Epoch = 1, Identifier = ProjectId } });
+                .ReturnsAsync(new PagedResult<Project> { Records = [Record()], Next = Page.FromCursor(1, ProjectId) });
 
             invocation = await EndpointInvocation.SendAsync(EndpointHost.Client, HttpMethod.Get, "/projects?page[size]=3");
 
