@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 {
     using System;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -46,13 +47,20 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
         public async Task VerifyInitializeAsync()
         {
             var logger = new Mock<ILogger<FunctionalDataInitializer>>();
+
+            logger.Setup(log => log.IsEnabled(LogLevel.Debug)).Returns(true);
+
             var configuration = CreateConfiguration(null);
             var initializer = new FunctionalDataInitializer(configuration.Object, logger.Object);
 
             Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("reading connection configuration"));
+                Throws.TypeOf<InvalidOperationException>().With.InnerException.TypeOf<InvalidOperationException>()
+                    .And.InnerException.Message.Contains("'functionaldata' connection string"));
 
-            logger.Verify(log => log.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), null,
+            logger.Verify(log => log.Log(LogLevel.Debug, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("reading the connection configuration")),
+                null, It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
+
+            logger.Verify(log => log.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<InvalidOperationException>(),
                 It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
 
             string[] invalidTimeouts = ["0", "-1", "invalid", "4294967295"];
@@ -79,14 +87,18 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             initializer = new FunctionalDataInitializer(configuration.Object, logger.Object);
 
             Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("opening the Functional Data database").And.Message.Not.Contains(secret));
+                Throws.TypeOf<InvalidOperationException>().With.Message.Not.Contains(secret)
+                    .And.InnerException.Not.Null.And.InnerException.Message.Not.Contains(secret));
 
-            foreach (var invocation in logger.Invocations)
+            logger.Verify(log => log.Log(LogLevel.Debug, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("opening the Functional Data database")),
+                null, It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
+
+            foreach (var invocation in logger.Invocations.Where(invocation => invocation.Method.Name == nameof(ILogger.Log)))
             {
                 using (Assert.EnterMultipleScope())
                 {
                     Assert.That(invocation.Arguments[2].ToString(), Does.Not.Contain(secret));
-                    Assert.That(invocation.Arguments[3], Is.Null);
+                    Assert.That(invocation.Arguments[3]?.ToString() ?? string.Empty, Does.Not.Contain(secret));
                 }
             }
         }

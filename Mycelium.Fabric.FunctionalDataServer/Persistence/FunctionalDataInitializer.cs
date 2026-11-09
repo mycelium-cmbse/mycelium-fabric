@@ -89,125 +89,125 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
             var elapsed = Stopwatch.StartNew();
             var token = deadline.Token;
-            var stage = "reading connection configuration";
-            Exception initializationFailure;
-            string errorCode;
 
             try
             {
                 token.ThrowIfCancellationRequested();
 
+                this.LogStep("reading the connection configuration");
+
                 var connectionString = this.configuration.GetConnectionString("functionaldata");
 
                 if (string.IsNullOrWhiteSpace(connectionString))
                 {
-                    throw new InvalidOperationException();
+                    throw new InvalidOperationException("The 'functionaldata' connection string is not configured.");
                 }
 
-                stage = "loading the packaged schema and model versions";
+                this.LogStep("loading the packaged schema and model versions");
 
-                var script = await ReadSchemaAsync(token).ConfigureAwait(false);
+                var script = await ReadSchemaAsync(token);
                 var fabricVersion = ReadModelVersion(script, "Fabric");
                 var primitivesVersion = ReadModelVersion(script, "CommonPrimitives");
 
-                stage = "opening the Functional Data database";
+                this.LogStep("opening the Functional Data database");
 
                 await using var connection = new NpgsqlConnection(connectionString);
 
-                await connection.OpenAsync(token).ConfigureAwait(false);
+                await connection.OpenAsync(token);
 
-                await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token).ConfigureAwait(false);
+                await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token);
 
                 var manager = new InitializationConnectionManager(connection, transaction, timeout, elapsed, token);
 
-                stage = "acquiring the initialization lock";
+                this.LogStep("acquiring the initialization lock");
 
                 await using (var command = manager.CreateCommand("SELECT pg_advisory_xact_lock(@key)"))
                 {
                     command.Parameters.AddWithValue("key", InitializationLockKey);
 
-                    await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    await command.ExecuteNonQueryAsync(token);
                 }
 
-                stage = "checking initialization state";
+                this.LogStep("checking the initialization state");
 
-                var schemaExists = await SchemaExistsAsync(manager, token).ConfigureAwait(false);
+                var schemaExists = await SchemaExistsAsync(manager, token);
                 var upgrader = PostgresqlExtensions.PostgresqlDatabase(manager, "public")
                     .WithScript(SchemaResourceName, script)
                     .WithVariablesDisabled()
-                    .LogToNowhere()
+                    .LogTo(this.logger)
                     .Build();
 
-                var executedScripts = await Task.Run(upgrader.GetExecutedScripts, token).ConfigureAwait(false);
+                var executedScripts = await Task.Run(upgrader.GetExecutedScripts, token);
 
                 if (schemaExists)
                 {
                     if (executedScripts.Count != 1 || !string.Equals(executedScripts[0], SchemaResourceName, StringComparison.Ordinal))
                     {
-                        throw new InvalidOperationException();
+                        throw new InvalidOperationException("The 'fabric' schema exists without a matching initialization journal entry.");
                     }
 
-                    stage = "checking installed model versions";
+                    this.LogStep("checking the installed model versions");
 
-                    await VerifyVersionsAsync(manager, fabricVersion, primitivesVersion, token).ConfigureAwait(false);
+                    await VerifyVersionsAsync(manager, fabricVersion, primitivesVersion, token);
                 }
                 else
                 {
                     if (executedScripts.Count != 0)
                     {
-                        throw new InvalidOperationException();
+                        throw new InvalidOperationException("The initialization journal records executed scripts, but the 'fabric' schema does not exist.");
                     }
 
-                    stage = "executing the initial schema";
+                    this.LogStep("executing the initial schema");
 
-                    var result = await Task.Run(upgrader.PerformUpgrade, token).ConfigureAwait(false);
+                    var result = await Task.Run(upgrader.PerformUpgrade, token);
 
                     token.ThrowIfCancellationRequested();
 
                     if (!result.Successful)
                     {
-                        throw result.Error ?? new InvalidOperationException();
+                        throw result.Error ?? new InvalidOperationException("DbUp reported an unsuccessful schema execution.");
                     }
 
-                    stage = "recording installed model versions";
+                    this.LogStep("recording the installed model versions");
 
-                    await StoreVersionsAsync(manager, fabricVersion, primitivesVersion, token).ConfigureAwait(false);
+                    await StoreVersionsAsync(manager, fabricVersion, primitivesVersion, token);
                 }
 
-                stage = "committing initialization";
+                this.LogStep("committing the initialization");
 
                 token.ThrowIfCancellationRequested();
 
-                await transaction.CommitAsync(token).ConfigureAwait(false);
+                await transaction.CommitAsync(token);
 
                 if (this.logger.IsEnabled(LogLevel.Information))
                 {
                     this.logger.LogInformation("Functional Data initialization completed. Created schema: {CreatedSchema}.", !schemaExists);
                 }
-
-                return;
             }
-            catch (Exception) when (token.IsCancellationRequested)
+            catch (Exception exception) when (token.IsCancellationRequested)
             {
-                errorCode = null;
-                initializationFailure = new OperationCanceledException("Functional Data initialization was canceled or exceeded its deadline.", token);
+                this.logger.LogWarning(exception, "Functional Data initialization was canceled or exceeded its deadline.");
+
+                throw new OperationCanceledException("Functional Data initialization was canceled or exceeded its deadline.", exception, token);
             }
             catch (Exception exception)
             {
-                errorCode = exception is PostgresException postgresException ? postgresException.SqlState : exception.GetType().Name;
-                initializationFailure = new InvalidOperationException($"Functional Data initialization failed during {stage}. Error code: {errorCode}.");
-            }
+                this.logger.LogError(exception, "Functional Data initialization failed.");
 
-            if (initializationFailure is OperationCanceledException)
-            {
-                this.logger.LogWarning("Functional Data initialization was canceled or exceeded its deadline during {Stage}.", stage);
+                throw new InvalidOperationException("Functional Data initialization failed.", exception);
             }
-            else
-            {
-                this.logger.LogError("Functional Data initialization failed during {Stage}. Error code: {ErrorCode}.", stage, errorCode);
-            }
+        }
 
-            throw initializationFailure;
+        /// <summary>
+        /// Logs the initialization step that is starting, so a failure can be located from the log.
+        /// </summary>
+        /// <param name="step">The step description.</param>
+        private void LogStep(string step)
+        {
+            if (this.logger.IsEnabled(LogLevel.Debug))
+            {
+                this.logger.LogDebug("Functional Data initialization: {Step}.", step);
+            }
         }
 
         /// <summary>
@@ -247,7 +247,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
             using var reader = new StreamReader(stream);
 
-            return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            return await reader.ReadToEndAsync(cancellationToken);
         }
 
         /// <summary>
@@ -282,7 +282,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         {
             await using var command = manager.CreateCommand("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'fabric')");
 
-            return (bool)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return (bool)await command.ExecuteScalarAsync(cancellationToken);
         }
 
         /// <summary>
@@ -300,12 +300,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         {
             await using var command = manager.CreateCommand("SELECT fabric_version, common_primitives_version FROM fabric.initialization_metadata");
 
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            if (!await reader.ReadAsync(cancellationToken)
                 || !string.Equals(reader.GetString(0), fabricVersion, StringComparison.Ordinal)
                 || !string.Equals(reader.GetString(1), primitivesVersion, StringComparison.Ordinal)
-                || await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                || await reader.ReadAsync(cancellationToken))
             {
                 throw new InvalidOperationException("The installed Functional Data model versions are incompatible.");
             }
@@ -340,7 +340,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             command.Parameters.AddWithValue("fabricVersion", fabricVersion);
             command.Parameters.AddWithValue("primitivesVersion", primitivesVersion);
 
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         /// <summary>
