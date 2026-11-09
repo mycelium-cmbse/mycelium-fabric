@@ -14,7 +14,6 @@ namespace Mycelium.Fabric.Mcp.Tools
     using System.ComponentModel;
     using System.Linq;
     using System.Text;
-    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -22,9 +21,8 @@ namespace Mycelium.Fabric.Mcp.Tools
     using ModelContextProtocol.Server;
 
     using Mycelium.Fabric.Mcp.Documents;
+    using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
-
-    using SysML2.NET.Core.POCO.Systems.Requirements;
 
     /// <summary>
     /// The MCP tools that let an AI assistant read a long document, such as a specification, one piece at a time, and see
@@ -53,11 +51,6 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// The title shown for the text before the first heading, which has none.
         /// </summary>
         private const string UntitledSectionTitle = "(text before the first heading)";
-
-        /// <summary>
-        /// The time after which the identifier pattern given by the AI assistant stops matching a line.
-        /// </summary>
-        private static readonly TimeSpan PatternTimeout = TimeSpan.FromSeconds(1);
 
         /// <summary>
         /// The <see cref="IModelProvider"/> that gives access to the model.
@@ -134,8 +127,8 @@ namespace Mycelium.Fabric.Mcp.Tools
                 throw new McpException($"The document '{document.FileName}' has no section {number}: use a number from 1 to {document.Sections.Count}, as given by the outline.");
             }
 
-            var identifiers = string.IsNullOrWhiteSpace(idPattern) ? null : FindIdentifiers(document, idPattern);
-            var modelledIdentifiers = identifiers == null ? null : this.GetModelledIdentifiers();
+            var identifiers = string.IsNullOrWhiteSpace(idPattern) ? null : document.FindIdentifiersMatching(idPattern);
+            var modelledIdentifiers = identifiers == null ? null : this.modelProvider.GetRequirementIds();
 
             if (section == null)
             {
@@ -157,38 +150,6 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             return new DocumentContent(document.FileName, document.Sections.Count, null, Summarize(readSection, readIdentifiers, modelledIdentifiers), text,
                 Cover(readIdentifiers, modelledIdentifiers), nextOffset);
-        }
-
-        /// <summary>
-        /// Finds the requirement identifiers of each section of a document with the pattern given by the AI assistant.
-        /// </summary>
-        /// <param name="document">The <see cref="TextDocument"/> to search.</param>
-        /// <param name="idPattern">The regular expression that matches a requirement identifier.</param>
-        /// <returns>The identifiers of each section, in the order of the sections.</returns>
-        /// <exception cref="McpException">
-        /// Thrown when <paramref name="idPattern"/> is not a valid regular expression, or takes too long to match a line.
-        /// </exception>
-        private static IReadOnlyList<IReadOnlyList<string>> FindIdentifiers(TextDocument document, string idPattern)
-        {
-            Regex identifierPattern;
-
-            try
-            {
-                identifierPattern = new Regex(idPattern, RegexOptions.CultureInvariant, PatternTimeout);
-            }
-            catch (ArgumentException exception)
-            {
-                throw new McpException($"The idPattern '{idPattern}' is not a valid regular expression: {exception.Message}");
-            }
-
-            try
-            {
-                return document.FindIdentifiers(identifierPattern);
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                throw new McpException($"The idPattern '{idPattern}' takes too long to match the document: write a simpler one, such as REQ-[A-Z]+-\\d{{3}}.");
-            }
         }
 
         /// <summary>
@@ -247,19 +208,6 @@ namespace Mycelium.Fabric.Mcp.Tools
             var missingIdentifiers = identifiers.Where(identifier => !modelledIdentifiers.Contains(identifier)).ToList();
 
             return new RequirementCoverage(identifiers.Count, identifiers.Count - missingIdentifiers.Count, [.. missingIdentifiers.Take(MaximumMissingCount)]);
-        }
-
-        /// <summary>
-        /// Gets the identifiers of the requirements of the model: the <c>reqId</c> of its requirement definitions and usages.
-        /// </summary>
-        /// <returns>The identifiers, compared character by character.</returns>
-        private HashSet<string> GetModelledIdentifiers()
-        {
-            var elements = this.modelProvider.Elements;
-
-            return new HashSet<string>(elements.OfType<IRequirementUsage>().Select(requirement => requirement.ReqId)
-                .Concat(elements.OfType<IRequirementDefinition>().Select(requirement => requirement.ReqId))
-                .Where(identifier => !string.IsNullOrWhiteSpace(identifier)), StringComparer.Ordinal);
         }
     }
 }
