@@ -20,11 +20,8 @@
     <ItemGroup>
         <PackageReference Include="dbup-postgresql" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />
+        <PackageReference Include="Mycelium.SDK" />
         <PackageReference Include="Npgsql" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <EmbeddedResource Include="Persistence/Sql/schema.sql" LogicalName="Mycelium.Fabric.FunctionalDataServer.Persistence.Sql.schema.sql" />
     </ItemGroup>
 
 </Project>

@@ -28,6 +28,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.Logging;
 
+    using Mycelium.SDK.DTO;
+
     using Npgsql;
 
     /// <summary>
@@ -36,9 +38,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     public class FunctionalDataInitializer
     {
         /// <summary>
-        /// The embedded script name used as the stable DbUp journal identity.
+        /// The <c>Mycelium.SDK</c> manifest-resource name of the packaged schema, also used as the stable DbUp journal identity.
         /// </summary>
-        private const string SchemaResourceName = "Mycelium.Fabric.FunctionalDataServer.Persistence.Sql.schema.sql";
+        private const string SchemaResourceName = "Mycelium.SDK.Sql.schema.sql";
 
         /// <summary>
         /// The PostgreSQL advisory-lock key shared by Functional Data initializers.
@@ -71,7 +73,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Initializes the database atomically, or verifies that the installed model versions match the embedded artifact.
+        /// Initializes the database atomically, or verifies that the installed model versions match the packaged artifact.
         /// </summary>
         /// <param name="cancellationToken">The token canceling initialization.</param>
         /// <returns>A task that completes after the initialization transaction commits.</returns>
@@ -102,7 +104,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
                     throw new InvalidOperationException();
                 }
 
-                stage = "loading the embedded schema and model versions";
+                stage = "loading the packaged schema and model versions";
 
                 var script = await ReadSchemaAsync(token).ConfigureAwait(false);
                 var fabricVersion = ReadModelVersion(script, "Fabric");
@@ -231,17 +233,17 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Reads the generator-owned schema from this service's assembly.
+        /// Reads the generator-owned schema packaged in the <c>Mycelium.SDK</c> assembly.
         /// </summary>
         /// <param name="cancellationToken">The token canceling resource loading.</param>
-        /// <returns>The complete, unmodified embedded SQL text.</returns>
-        /// <exception cref="InvalidOperationException">The embedded schema is missing.</exception>
+        /// <returns>The complete, unmodified packaged SQL text.</returns>
+        /// <exception cref="InvalidOperationException">The packaged schema is missing.</exception>
         /// <exception cref="IOException">The resource cannot be read.</exception>
         /// <exception cref="OperationCanceledException">Loading is canceled.</exception>
         private static async Task<string> ReadSchemaAsync(CancellationToken cancellationToken)
         {
-            await using var stream = typeof(FunctionalDataInitializer).Assembly.GetManifestResourceStream(SchemaResourceName)
-                ?? throw new InvalidOperationException("The embedded Functional Data schema is missing.");
+            await using var stream = typeof(User).Assembly.GetManifestResourceStream(SchemaResourceName)
+                ?? throw new InvalidOperationException("The packaged Functional Data schema is missing from Mycelium.SDK.");
 
             using var reader = new StreamReader(stream);
 
@@ -251,7 +253,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <summary>
         /// Reads one model-package version from the schema's deterministic header comments.
         /// </summary>
-        /// <param name="script">The complete embedded schema.</param>
+        /// <param name="script">The complete packaged schema.</param>
         /// <param name="modelName">The model-package suffix.</param>
         /// <returns>The version recorded by the producer.</returns>
         /// <exception cref="InvalidOperationException">A version comment is missing, duplicated or malformed.</exception>
@@ -262,7 +264,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
             if (versions.Length != 1 || !Version.TryParse(versions[0], out _))
             {
-                throw new InvalidOperationException("The embedded schema's model-version comments are invalid.");
+                throw new InvalidOperationException("The packaged schema's model-version comments are invalid.");
             }
 
             return versions[0];
@@ -273,12 +275,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// </summary>
         /// <param name="manager">The locked transaction's command factory.</param>
         /// <param name="cancellationToken">The token canceling the query.</param>
-        /// <returns>Whether the case-sensitive Fabric schema exists.</returns>
+        /// <returns>Whether the <c>fabric</c> schema exists.</returns>
         /// <exception cref="NpgsqlException">The state query fails.</exception>
         /// <exception cref="OperationCanceledException">The query is canceled.</exception>
         private static async Task<bool> SchemaExistsAsync(InitializationConnectionManager manager, CancellationToken cancellationToken)
         {
-            await using var command = manager.CreateCommand("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'Fabric')");
+            await using var command = manager.CreateCommand("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'fabric')");
 
             return (bool)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -287,8 +289,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// Requires exactly one installed metadata record with matching model-package versions.
         /// </summary>
         /// <param name="manager">The locked transaction's command factory.</param>
-        /// <param name="fabricVersion">The embedded Fabric model version.</param>
-        /// <param name="primitivesVersion">The embedded CommonPrimitives model version.</param>
+        /// <param name="fabricVersion">The packaged Fabric model version.</param>
+        /// <param name="primitivesVersion">The packaged CommonPrimitives model version.</param>
         /// <param name="cancellationToken">The token canceling the query.</param>
         /// <returns>A task that completes when installed versions match.</returns>
         /// <exception cref="InvalidOperationException">The installed versions are missing, duplicated or incompatible.</exception>
@@ -296,7 +298,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <exception cref="OperationCanceledException">The query is canceled.</exception>
         private static async Task VerifyVersionsAsync(InitializationConnectionManager manager, string fabricVersion, string primitivesVersion, CancellationToken cancellationToken)
         {
-            await using var command = manager.CreateCommand("SELECT fabric_version, common_primitives_version FROM \"Fabric\".\"__InitializationMetadata\"");
+            await using var command = manager.CreateCommand("SELECT fabric_version, common_primitives_version FROM fabric.initialization_metadata");
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
 
@@ -313,8 +315,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// Records model-package versions in consumer-owned metadata in the schema-creation transaction.
         /// </summary>
         /// <param name="manager">The locked transaction's command factory.</param>
-        /// <param name="fabricVersion">The embedded Fabric model version.</param>
-        /// <param name="primitivesVersion">The embedded CommonPrimitives model version.</param>
+        /// <param name="fabricVersion">The packaged Fabric model version.</param>
+        /// <param name="primitivesVersion">The packaged CommonPrimitives model version.</param>
         /// <param name="cancellationToken">The token canceling metadata creation.</param>
         /// <returns>A task that completes after inserting the single metadata row.</returns>
         /// <exception cref="NpgsqlException">Metadata creation fails.</exception>
@@ -322,12 +324,14 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private static async Task StoreVersionsAsync(InitializationConnectionManager manager, string fabricVersion, string primitivesVersion, CancellationToken cancellationToken)
         {
             const string sql = """
-                CREATE TABLE "Fabric"."__InitializationMetadata" (
-                    singleton boolean NOT NULL DEFAULT TRUE PRIMARY KEY CHECK (singleton),
+                CREATE TABLE fabric.initialization_metadata (
+                    singleton boolean NOT NULL DEFAULT TRUE,
                     fabric_version text NOT NULL,
-                    common_primitives_version text NOT NULL
+                    common_primitives_version text NOT NULL,
+                    CONSTRAINT initialization_metadata_singleton_check CHECK (singleton),
+                    CONSTRAINT initialization_metadata_pkey PRIMARY KEY (singleton)
                 );
-                INSERT INTO "Fabric"."__InitializationMetadata" (fabric_version, common_primitives_version)
+                INSERT INTO fabric.initialization_metadata (fabric_version, common_primitives_version)
                 VALUES (@fabricVersion, @primitivesVersion);
                 """;
 
