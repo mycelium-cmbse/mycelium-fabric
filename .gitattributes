@@ -1,2 +1,0 @@
-# Preserve the SDK-generated SQL artifact's LF line endings on checkout.
-Mycelium.Fabric.FunctionalDataServer/Persistence/Sql/schema.sql text eol=lf
