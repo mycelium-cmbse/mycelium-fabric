@@ -55,19 +55,19 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
                 Assert.That(outcome.Value.PageBefore, Is.Null);
             }
 
-            var cursor = PageCursor.Encode(new Page { Epoch = 7, Identifier = Identifier });
+            var cursor = Page.FromCursor(7, Identifier).Token;
 
             outcome = Request($"?page[size]=3&page[after]={Uri.EscapeDataString(cursor)}").ReadQueryParameters();
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(outcome.Value.PageSize, Is.EqualTo(3));
-                Assert.That(outcome.Value.PageAfter!.Value.Identifier, Is.EqualTo(Identifier));
+                Assert.That(outcome.Value.PageAfter!.Value.Token, Is.EqualTo(cursor));
             }
 
             outcome = Request($"?page[before]={Uri.EscapeDataString(cursor)}").ReadQueryParameters();
 
-            Assert.That(outcome.Value.PageBefore!.Value.Epoch, Is.EqualTo(7));
+            Assert.That(outcome.Value.PageBefore!.Value.Token, Is.EqualTo(cursor));
 
             using (Assert.EnterMultipleScope())
             {

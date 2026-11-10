@@ -9,6 +9,7 @@
 
 namespace Mycelium.Fabric.ConcurrentServer
 {
+    using System;
     using System.Threading.Tasks;
 
     using Carter;
@@ -16,10 +17,15 @@ namespace Mycelium.Fabric.ConcurrentServer
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Diagnostics;
     using Microsoft.AspNetCore.WebUtilities;
+    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
 
+    using Mycelium.Fabric.ConcurrentServer.Hosting;
     using Mycelium.Fabric.ConcurrentServer.Http;
+    using Mycelium.Fabric.ConcurrentServer.Persistence;
     using Mycelium.Fabric.ConcurrentServer.Serialization;
+
+    using Npgsql;
 
     /// <summary>
     /// Entry class of this application
@@ -30,6 +36,7 @@ namespace Mycelium.Fabric.ConcurrentServer
         /// Entry method of this application
         /// </summary>
         /// <param name="args">The launch arguments</param>
+        /// <exception cref="InvalidOperationException">The connection string to the SysML v2 database is not configured.</exception>
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +44,17 @@ namespace Mycelium.Fabric.ConcurrentServer
             builder.Services.AddLogging();
             builder.Services.AddExceptionHandler<NegotiatedExceptionHandler>();
             builder.Services.AddRequiredServices();
+
+            var schemaConnectionString = builder.Configuration.GetConnectionString(SqlSchemaMigrator.ConnectionStringName);
+
+            if (string.IsNullOrWhiteSpace(schemaConnectionString))
+            {
+                throw new InvalidOperationException($"The '{SqlSchemaMigrator.ConnectionStringName}' connection string is required.");
+            }
+
+            builder.Services.AddSingleton(NpgsqlDataSource.Create(schemaConnectionString));
+            builder.Services.AddSingleton<ISqlSchemaMigrator, SqlSchemaMigrator>();
+            builder.Services.AddHostedService<SqlSchemaInitializer>();
 
             var app = builder.Build();
 

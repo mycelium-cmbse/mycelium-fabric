@@ -25,6 +25,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
 
     using Mycelium.Fabric.ConcurrentServer.Modules;
     using Mycelium.Fabric.ConcurrentServer.Services;
+    using Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers;
 
     [SetUpFixture]
     [NonParallelizable]
@@ -73,7 +74,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
         [OneTimeSetUp]
         public void Start()
         {
-            application = new WebApplicationFactory<ApiBase>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            application = new FabricApplicationFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             {
                 RegisterLoggers(services);
                 services.AddSingleton(VersioningService.Object);
@@ -82,7 +83,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Modules
                 services.AddSingleton(QueryService.Object);
             }));
 
-            bareApplication = new WebApplicationFactory<ApiBase>().WithWebHostBuilder(builder => builder.ConfigureTestServices(RegisterLoggers));
+            bareApplication = new FabricApplicationFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(RegisterLoggers));
 
             Client = application.CreateClient();
             WithoutServices = bareApplication.CreateClient();

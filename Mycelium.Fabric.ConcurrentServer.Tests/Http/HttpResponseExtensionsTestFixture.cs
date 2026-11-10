@@ -62,7 +62,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
 
             Assert.That(response.Headers[HeaderNames.Link].ToString(), Is.Empty);
 
-            response.AddPaginationLinks(new PagedResult<string> { Next = new Page { Epoch = 7, Identifier = Identifier } }, 3);
+            response.AddPaginationLinks(new PagedResult<string> { Next = Page.FromCursor(7, Identifier) }, 3);
 
             var link = response.Headers[HeaderNames.Link].ToString();
 
@@ -78,8 +78,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
             response.AddPaginationLinks(
                 new PagedResult<string>
                 {
-                    Next = new Page { Epoch = 7, Identifier = Identifier },
-                    Previous = new Page { Epoch = 6, Identifier = Identifier }
+                    Next = Page.FromCursor(7, Identifier),
+                    Previous = Page.FromCursor(6, Identifier)
                 },
                 0);
 
@@ -99,7 +99,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Http
             response = Response();
             response.HttpContext.Request.QueryString = new QueryString("?baseCommitId=abc&changeTypes=CREATED,UPDATED&page[after]=old&page[size]=9");
 
-            response.AddPaginationLinks(new PagedResult<string> { Next = new Page { Epoch = 7, Identifier = Identifier } }, 3);
+            response.AddPaginationLinks(new PagedResult<string> { Next = Page.FromCursor(7, Identifier) }, 3);
 
             link = response.Headers[HeaderNames.Link].ToString();
 

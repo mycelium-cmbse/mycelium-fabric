@@ -80,7 +80,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
 
                 if (request.Query.TryGetValue(PageAfterParameter, out var pageAfter))
                 {
-                    if (!PageCursor.TryDecode(pageAfter.ToString(), out var after))
+                    if (!TryReadPage(pageAfter.ToString(), out var after))
                     {
                         return Error.Validation("page.after.invalid", $"The '{PageAfterParameter}' query parameter is not a well-formed page cursor.");
                     }
@@ -93,7 +93,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
                     return queryParameters;
                 }
 
-                if (!PageCursor.TryDecode(pageBefore.ToString(), out var before))
+                if (!TryReadPage(pageBefore.ToString(), out var before))
                 {
                     return Error.Validation("page.before.invalid", $"The '{PageBeforeParameter}' query parameter is not a well-formed page cursor.");
                 }
@@ -257,6 +257,19 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
             literal = name == null ? default : Enum.Parse<TEnum>(name);
 
             return name != null;
+        }
+
+        /// <summary>
+        /// Reads a §8.1.3 page cursor, accepting only a token that decodes to an epoch and an identifier.
+        /// </summary>
+        /// <param name="cursor">The cursor from the query string.</param>
+        /// <param name="page">The page addressed by <paramref name="cursor"/>.</param>
+        /// <returns><c>true</c> when <paramref name="cursor"/> is well formed.</returns>
+        private static bool TryReadPage(string cursor, out Page page)
+        {
+            page = string.IsNullOrWhiteSpace(cursor) ? default : new Page(cursor);
+
+            return page.TryDecode(out _, out _);
         }
 
         /// <summary>

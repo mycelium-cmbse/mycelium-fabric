@@ -26,6 +26,8 @@
         <PackageReference Include="ErrorOr" />
         <PackageReference Include="MessagePack" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />
+        <PackageReference Include="Npgsql" />
+        <PackageReference Include="SysML2.NET.Dal" />
         <PackageReference Include="SysML2.NET.Serializer.Json" />
         <PackageReference Include="SysML2.NET.Serializer.MessagePack" />
     </ItemGroup>

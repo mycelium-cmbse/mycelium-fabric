@@ -102,7 +102,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Http
             url.Append('?')
                 .Append(cursorParameter)
                 .Append('=')
-                .Append(Uri.EscapeDataString(PageCursor.Encode(page)));
+                .Append(Uri.EscapeDataString(page.Token));
 
             if (pageSize > 0)
             {
