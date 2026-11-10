@@ -55,13 +55,13 @@ namespace Mycelium.Fabric.AppHost
             var concurrentServerData = concurrentServerPostgres.AddDatabase("concurrentserverdata", "mycelium_concurrent_server");
 
             builder.AddProject<Projects.Mycelium_Fabric_ConcurrentServer>("concurrent-server")
-                .WithHttpEndpoint();
+                .WithHttpEndpoint()
+                .WithReference(concurrentServerData)
+                .WaitFor(concurrentServerData, WaitBehavior.WaitOnResourceUnavailable);
 
             builder.AddProject<Projects.Mycelium_Fabric_FunctionalDataServer>("functional-data-server")
                 .WithReference(functionalData)
-                .WaitFor(functionalData, WaitBehavior.WaitOnResourceUnavailable)
-                .WithReference(concurrentServerData)
-                .WaitFor(concurrentServerData, WaitBehavior.WaitOnResourceUnavailable);
+                .WaitFor(functionalData, WaitBehavior.WaitOnResourceUnavailable);
 
             builder.Build().Run();
         }
