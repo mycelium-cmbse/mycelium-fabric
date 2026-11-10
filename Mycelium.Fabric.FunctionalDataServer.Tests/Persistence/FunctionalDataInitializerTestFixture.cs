@@ -58,8 +58,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Throws.TypeOf<InvalidOperationException>().With.InnerException.TypeOf<InvalidOperationException>()
                     .And.InnerException.Message.Contains("'functionaldata' connection string"));
 
-            logger.Verify(log => log.Log(LogLevel.Debug, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("reading the connection configuration")),
-                null, It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
+            Assert.That(CountDebugLogs(logger, "reading the connection configuration"), Is.EqualTo(1));
 
             logger.Verify(log => log.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<InvalidOperationException>(),
                 It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
@@ -91,8 +90,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Throws.TypeOf<InvalidOperationException>().With.Message.Not.Contains(secret)
                     .And.InnerException.Not.Null.And.InnerException.Message.Not.Contains(secret));
 
-            logger.Verify(log => log.Log(LogLevel.Debug, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("opening the Functional Data database")),
-                null, It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
+            Assert.That(CountDebugLogs(logger, "opening the Functional Data database"), Is.EqualTo(1));
 
             foreach (var invocation in logger.Invocations.Where(invocation => invocation.Method.Name == nameof(ILogger.Log)))
             {
@@ -129,6 +127,14 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Assert.That(packaged, Does.Not.Contain("\r"));
                 Assert.That(packaged, Does.EndWith("\n"));
             }
+        }
+
+        private static int CountDebugLogs(Mock<ILogger<FunctionalDataInitializer>> logger, string message)
+        {
+            return logger.Invocations.Count(invocation => invocation.Method.Name == nameof(ILogger.Log)
+                                                          && invocation.Arguments[0] is LogLevel.Debug
+                                                          && invocation.Arguments[2].ToString()!.Contains(message, StringComparison.Ordinal)
+                                                          && invocation.Arguments[3] is null);
         }
 
         private static Mock<IConfiguration> CreateConfiguration(string connectionString)
