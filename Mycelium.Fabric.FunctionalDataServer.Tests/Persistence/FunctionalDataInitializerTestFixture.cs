@@ -133,7 +133,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
         {
             return logger.Invocations.Count(invocation => invocation.Method.Name == nameof(ILogger.Log)
                                                           && invocation.Arguments[0] is LogLevel.Debug
-                                                          && invocation.Arguments[2].ToString()!.Contains(message, StringComparison.Ordinal)
+                                                          && invocation.Arguments[2].ToString().Contains(message, StringComparison.Ordinal)
                                                           && invocation.Arguments[3] is null);
         }
 
