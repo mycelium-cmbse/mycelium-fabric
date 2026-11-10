@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.FunctionalDataServer
 {
     using System;
+    using System.Diagnostics.CodeAnalysis;
     using System.Threading.Tasks;
 
     using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
     /// <summary>
     /// Hosts the Functional Data microservice and its awaited database initialization.
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public static class Program
     {
         /// <summary>

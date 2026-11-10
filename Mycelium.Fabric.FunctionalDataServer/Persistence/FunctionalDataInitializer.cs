@@ -13,6 +13,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using System.Collections.Generic;
     using System.Data;
     using System.Diagnostics;
+    using System.Diagnostics.CodeAnalysis;
     using System.Globalization;
     using System.IO;
     using System.Linq;
@@ -35,6 +36,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     /// <summary>
     /// Initializes an uninitialized Functional Data schema and preserves compatible installed databases.
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public class FunctionalDataInitializer
     {
         /// <summary>
