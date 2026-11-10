@@ -15,7 +15,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.Globalization;
-    using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -29,7 +28,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.Logging;
 
-    using Mycelium.SDK.DTO;
+    using Mycelium.SDK.Dal;
 
     using Npgsql;
 
@@ -40,9 +39,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     public class FunctionalDataInitializer
     {
         /// <summary>
-        /// The <c>Mycelium.SDK</c> manifest-resource name of the packaged schema, also used as the stable DbUp journal identity.
+        /// The name of the initial schema script returned by <see cref="SqlSchemaScripts.GetAll"/>, also used as the stable DbUp journal identity.
         /// </summary>
-        private const string SchemaResourceName = "Mycelium.SDK.Sql.schema.sql";
+        public const string InitialScriptName = "0001_initial.sql";
 
         /// <summary>
         /// The PostgreSQL advisory-lock key shared by Functional Data initializers.
@@ -107,7 +106,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 this.LogStep("loading the packaged schema and model versions");
 
-                var script = await ReadSchemaAsync(token);
+                var script = SelectInitialScript(SqlSchemaScripts.GetAll());
                 var fabricVersion = ReadModelVersion(script, "Fabric");
                 var primitivesVersion = ReadModelVersion(script, "CommonPrimitives");
 
@@ -134,7 +133,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 var schemaExists = await SchemaExistsAsync(manager, token);
                 var upgrader = PostgresqlExtensions.PostgresqlDatabase(manager, "public")
-                    .WithScript(SchemaResourceName, script)
+                    .WithScript(InitialScriptName, script)
                     .WithVariablesDisabled()
                     .LogTo(this.logger)
                     .Build();
@@ -143,7 +142,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 if (schemaExists)
                 {
-                    if (executedScripts.Count != 1 || !string.Equals(executedScripts[0], SchemaResourceName, StringComparison.Ordinal))
+                    if (executedScripts.Count != 1 || !string.Equals(executedScripts[0], InitialScriptName, StringComparison.Ordinal))
                     {
                         throw new InvalidOperationException("The 'fabric' schema exists without a matching initialization journal entry.");
                     }
@@ -235,21 +234,22 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Reads the generator-owned schema packaged in the <c>Mycelium.SDK</c> assembly.
+        /// Selects the generator-owned initial schema from the scripts packaged in <c>Mycelium.SDK.Dal</c>.
         /// </summary>
-        /// <param name="cancellationToken">The token canceling resource loading.</param>
-        /// <returns>The complete, unmodified packaged SQL text.</returns>
-        /// <exception cref="InvalidOperationException">The packaged schema is missing.</exception>
-        /// <exception cref="IOException">The resource cannot be read.</exception>
-        /// <exception cref="OperationCanceledException">Loading is canceled.</exception>
-        private static async Task<string> ReadSchemaAsync(CancellationToken cancellationToken)
+        /// <param name="scripts">The packaged scripts, as returned by <see cref="SqlSchemaScripts.GetAll"/>.</param>
+        /// <returns>The complete, unmodified text of the <see cref="InitialScriptName"/> script.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="scripts"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">The scripts are not exactly one <see cref="InitialScriptName"/> script.</exception>
+        public static string SelectInitialScript(IReadOnlyList<(string Name, string Sql)> scripts)
         {
-            await using var stream = typeof(User).Assembly.GetManifestResourceStream(SchemaResourceName)
-                ?? throw new InvalidOperationException("The packaged Functional Data schema is missing from Mycelium.SDK.");
+            ArgumentNullException.ThrowIfNull(scripts);
 
-            using var reader = new StreamReader(stream);
+            if (scripts.Count != 1 || !string.Equals(scripts[0].Name, InitialScriptName, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Mycelium.SDK.Dal must supply exactly one schema script, '{InitialScriptName}'.");
+            }
 
-            return await reader.ReadToEndAsync(cancellationToken);
+            return scripts[0].Sql;
         }
 
         /// <summary>

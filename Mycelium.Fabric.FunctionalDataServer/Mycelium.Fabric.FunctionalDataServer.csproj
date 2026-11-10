@@ -20,7 +20,7 @@
     <ItemGroup>
         <PackageReference Include="dbup-postgresql" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />
-        <PackageReference Include="Mycelium.SDK" />
+        <PackageReference Include="Mycelium.SDK.Dal" />
         <PackageReference Include="Npgsql" />
     </ItemGroup>
 

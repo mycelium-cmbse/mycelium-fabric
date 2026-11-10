@@ -23,6 +23,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     using Moq;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
+    using Mycelium.SDK.Dal;
 
     using Npgsql;
 
@@ -35,8 +36,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     [NonParallelizable]
     public partial class FunctionalDataInitializerIntegrationTestFixture
     {
-        private const string SchemaResourceName = "Mycelium.SDK.Sql.schema.sql";
-
         private readonly Dictionary<string, Guid> identities = new();
 
         private PostgreSqlContainer database;
@@ -79,10 +78,57 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(await this.ScalarAsync<long>("SELECT count(*) FROM public.schemaversions"), Is.EqualTo(1));
-                Assert.That(await this.ScalarAsync<string>("SELECT scriptname FROM public.schemaversions"), Is.EqualTo(SchemaResourceName));
+                Assert.That(await this.ScalarAsync<string>("SELECT scriptname FROM public.schemaversions"), Is.EqualTo(FunctionalDataInitializer.InitialScriptName));
                 Assert.That(await this.ScalarAsync<string>("SELECT data->>'@type' FROM fabric.thing WHERE id = @admin"), Is.EqualTo("User"));
                 Assert.That(await this.ScalarAsync<string>("SELECT fabric_version FROM fabric.initialization_metadata"), Is.EqualTo("0.3.0"));
                 Assert.That(await this.ScalarAsync<string>("SELECT common_primitives_version FROM fabric.initialization_metadata"), Is.EqualTo("0.4.0"));
+            }
+        }
+
+        [Test]
+        public async Task InitializeAsync_EmptyDatabase_CreatesOnlyExplicitlyNamedGeneratedObjects()
+        {
+            await this.CreateInitializer().InitializeAsync(CancellationToken.None);
+
+            const string namesQuery = """
+                SELECT conname FROM pg_catalog.pg_constraint WHERE connamespace = 'fabric'::regnamespace AND contype NOT IN ('n', 't')
+                UNION ALL
+                SELECT indexname FROM pg_catalog.pg_indexes WHERE schemaname = 'fabric'
+                UNION ALL
+                SELECT tgname FROM pg_catalog.pg_trigger WHERE NOT tgisinternal AND tgrelid::regclass::text LIKE 'fabric.%'
+                """;
+
+            var script = FunctionalDataInitializer.SelectInitialScript(SqlSchemaScripts.GetAll());
+            var declared = SqlIdentifierRegex().Matches(script).Select(match => match.Value).ToHashSet(StringComparer.Ordinal);
+            var names = await this.ListAsync(namesQuery);
+            string[] consumerOwned = ["initialization_metadata_pkey", "initialization_metadata_singleton_check"];
+            var undeclared = names.Except(consumerOwned).Where(name => !declared.Contains(name)).ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(names, Does.Contain("functional_project_branch_rules_target_id_fkey"));
+                Assert.That(names, Does.Contain("thing_class_kind_check"));
+                Assert.That(names, Does.Contain("thing_data_check"));
+                Assert.That(names, Does.Contain("t20_delete_root"));
+                Assert.That(names, Does.Contain("t90_validate_inheritance"));
+                Assert.That(undeclared, Is.Empty);
+            }
+        }
+
+        [Test]
+        public async Task InitializeAsync_FormerScriptIdentity_RejectsWithoutChangingData()
+        {
+            await this.CreateInitializer().InitializeAsync(CancellationToken.None);
+            await this.ExecuteAsync(InsertObject("admin", "User", "model_user"));
+            await this.ExecuteAsync("UPDATE public.schemaversions SET scriptname = 'Mycelium.SDK.Sql.schema.sql';");
+
+            Assert.That(() => this.CreateInitializer().InitializeAsync(CancellationToken.None),
+                Throws.TypeOf<InvalidOperationException>().With.InnerException.Message.Contains("without a matching initialization journal entry"));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(await this.ScalarAsync<string>("SELECT scriptname FROM public.schemaversions"), Is.EqualTo("Mycelium.SDK.Sql.schema.sql"));
+                Assert.That(await this.ScalarAsync<string>("SELECT data->>'@type' FROM fabric.thing WHERE id = @admin"), Is.EqualTo("User"));
             }
         }
 
@@ -234,6 +280,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
         [GeneratedRegex(@"(?<!')@(\w+)")]
         private static partial Regex ParameterNameRegex();
 
+        [GeneratedRegex(@"\b[a-z0-9_]+\b")]
+        private static partial Regex SqlIdentifierRegex();
+
         private static string InsertObject(string identity, string classKind, string classTable)
         {
             return $"""
@@ -285,6 +334,25 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             await using var command = this.CreateCommand(connection, sql);
 
             return (T)await command.ExecuteScalarAsync();
+        }
+
+        private async Task<List<string>> ListAsync(string sql)
+        {
+            await using var connection = new NpgsqlConnection(this.database.GetConnectionString());
+
+            await connection.OpenAsync();
+
+            await using var command = this.CreateCommand(connection, sql);
+            await using var reader = await command.ExecuteReaderAsync();
+
+            var values = new List<string>();
+
+            while (await reader.ReadAsync())
+            {
+                values.Add(reader.GetString(0));
+            }
+
+            return values;
         }
 
         private async Task WaitForLockWaitersAsync(int expected)

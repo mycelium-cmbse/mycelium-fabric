@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     using Moq;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
+    using Mycelium.SDK.Dal;
 
     using NUnit.Framework;
 
@@ -100,6 +101,33 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                     Assert.That(invocation.Arguments[2].ToString(), Does.Not.Contain(secret));
                     Assert.That(invocation.Arguments[3]?.ToString() ?? string.Empty, Does.Not.Contain(secret));
                 }
+            }
+        }
+
+        [Test]
+        public void VerifySelectInitialScript()
+        {
+            const string sql = "CREATE SCHEMA IF NOT EXISTS fabric;\n";
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => FunctionalDataInitializer.SelectInitialScript(null), Throws.ArgumentNullException);
+                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([]), Throws.TypeOf<InvalidOperationException>().With.Message.Contains("0001_initial.sql"));
+                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([("schema.sql", sql)]), Throws.TypeOf<InvalidOperationException>());
+                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([("0001_INITIAL.sql", sql)]), Throws.TypeOf<InvalidOperationException>());
+                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([("0001_initial.sql", sql), ("0002_upgrade.sql", sql)]),
+                    Throws.TypeOf<InvalidOperationException>());
+                Assert.That(FunctionalDataInitializer.SelectInitialScript([("0001_initial.sql", sql)]), Is.SameAs(sql));
+            }
+
+            var packaged = FunctionalDataInitializer.SelectInitialScript(SqlSchemaScripts.GetAll());
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(packaged, Does.Contain("-- Mycelium.Model.Fabric 0.3.0\n"));
+                Assert.That(packaged, Does.Contain("-- Mycelium.Model.CommonPrimitives 0.4.0\n"));
+                Assert.That(packaged, Does.Not.Contain("\r"));
+                Assert.That(packaged, Does.EndWith("\n"));
             }
         }
 
