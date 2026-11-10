@@ -10,7 +10,11 @@
 namespace Mycelium.Fabric.Mcp.Tests.Documents
 {
     using System;
+    using System.IO;
+    using System.Linq;
     using System.Text.RegularExpressions;
+
+    using ModelContextProtocol;
 
     using Mycelium.Fabric.Mcp.Documents;
 
@@ -20,6 +24,58 @@ namespace Mycelium.Fabric.Mcp.Tests.Documents
     [TestFixture]
     public class TextDocumentTestFixture
     {
+        private static readonly string[] PayloadTitles = ["3. Payload requirements", "3.1 Camera", "3.2 Data handling"];
+
+        private static readonly string[] SystemIds = ["REQ-SYS-001", "REQ-SYS-002", "REQ-SYS-003"];
+
+        private static readonly string[] GroundIds = ["REQ-GND-001"];
+
+        private static readonly int[] PreambleSection = [1];
+
+        private static readonly int[] SectionWithoutSubsection = [4];
+
+        private static readonly int[] LastSection = [8];
+
+        private TextDocument requirements;
+
+        [SetUp]
+        public void SetUp()
+        {
+            using var content = File.OpenRead(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "EOSat1-requirements.md"));
+            this.requirements = new TextDocument("EOSat1-requirements.md", new MarkdownDocumentParser().Parse(content));
+        }
+
+        [Test]
+        public void VerifyGetSectionAndSubsections()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.requirements.GetSectionAndSubsections(5).Select(section => section.Title), Is.EqualTo(PayloadTitles));
+                Assert.That(this.requirements.GetSectionAndSubsections(4).Select(section => section.Number), Is.EqualTo(SectionWithoutSubsection));
+                Assert.That(this.requirements.GetSectionAndSubsections(2).Select(section => section.Number), Is.EqualTo(Enumerable.Range(2, 7)));
+                Assert.That(this.requirements.GetSectionAndSubsections(1).Select(section => section.Number), Is.EqualTo(PreambleSection));
+                Assert.That(this.requirements.GetSectionAndSubsections(8).Select(section => section.Number), Is.EqualTo(LastSection));
+                Assert.That(() => this.requirements.GetSectionAndSubsections(0), Throws.TypeOf<ArgumentOutOfRangeException>());
+                Assert.That(() => this.requirements.GetSectionAndSubsections(9), Throws.TypeOf<ArgumentOutOfRangeException>());
+            }
+        }
+
+        [Test]
+        public void VerifyFindIdentifiersMatching()
+        {
+            var identifiers = this.requirements.FindIdentifiersMatching(@"REQ-[A-Z]+-\d{3}");
+            var slowDocument = new TextDocument("Slow.md", [new DocumentSection(1, 1, "Slow line", [new string('a', 5000) + "!"])]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(identifiers, Has.Count.EqualTo(8));
+                Assert.That(identifiers[3], Is.EqualTo(SystemIds));
+                Assert.That(identifiers[7], Is.EqualTo(GroundIds));
+                Assert.That(() => this.requirements.FindIdentifiersMatching("REQ-["), Throws.TypeOf<McpException>().With.Message.Contains("not a valid regular expression"));
+                Assert.That(() => slowDocument.FindIdentifiersMatching("(a+)+$"), Throws.TypeOf<McpException>().With.Message.Contains("takes too long"));
+            }
+        }
+
         [Test]
         public void VerifyFindIdentifiers()
         {

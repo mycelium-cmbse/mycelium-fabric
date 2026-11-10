@@ -29,8 +29,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Resources
                 Assert.That(page, Does.StartWith("<!doctype html>").IgnoreCase);
                 Assert.That(page, Does.Contain("ui/initialize"));
                 Assert.That(page, Does.Contain(".ap-h"));
-                Assert.That(page, Does.Not.Contain("href=\"style.css\""));
-                Assert.That(page, Does.Not.Contain("src=\"script.js\""));
+                Assert.That(page, Does.Not.Contain("href=\"../style.css\""));
+                Assert.That(page, Does.Not.Contain("src=\"review-batch.js\""));
                 Assert.That(page.IndexOf("<script>", StringComparison.Ordinal), Is.GreaterThan(page.IndexOf("id=\"note\"", StringComparison.Ordinal)));
                 Assert.That(BatchReviewResource.GetPage(), Is.SameAs(page));
                 Assert.That(BatchReviewResource.Uri, Does.StartWith("ui://"));

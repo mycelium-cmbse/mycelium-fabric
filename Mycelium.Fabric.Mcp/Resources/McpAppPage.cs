@@ -16,7 +16,7 @@ namespace Mycelium.Fabric.Mcp.Resources
     /// <summary>
     /// Reads the HTML page of an MCP App from the files of the McpApp folder embedded in this assembly, with the style sheets and
     /// scripts it links to written inside the page: a host shows the page alone in a sandboxed frame, where a relative link leads
-    /// nowhere.
+    /// nowhere. The files are embedded under their simple name, whatever their folder, so a name is used only once in McpApp.
     /// </summary>
     public static partial class McpAppPage
     {
@@ -26,9 +26,10 @@ namespace Mycelium.Fabric.Mcp.Resources
         private const string ResourcePrefix = "Mycelium.Fabric.Mcp.McpApp.";
 
         /// <summary>
-        /// Reads an HTML page of the McpApp folder and writes inside it the style sheets and scripts of the same folder it links to.
+        /// Reads an HTML page of the McpApp folder and writes inside it the style sheets and scripts it links to: those of its own
+        /// folder, and the shared ones, one folder up.
         /// </summary>
-        /// <param name="fileName">The name of the HTML file in the McpApp folder, such as <c>review-batch.html</c>.</param>
+        /// <param name="fileName">The simple name of the HTML file, such as <c>review-batch.html</c>.</param>
         /// <returns>The HTML page, in one piece.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the assembly does not contain the page or a file it links to.</exception>
         public static string Read(string fileName)
@@ -42,7 +43,7 @@ namespace Mycelium.Fabric.Mcp.Resources
         /// <summary>
         /// Reads a file of the McpApp folder from the resources of this assembly.
         /// </summary>
-        /// <param name="fileName">The name of the file in the McpApp folder.</param>
+        /// <param name="fileName">The simple name of the file.</param>
         /// <returns>The content of the file.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the assembly does not contain the file.</exception>
         private static string ReadFile(string fileName)
@@ -57,17 +58,17 @@ namespace Mycelium.Fabric.Mcp.Resources
         }
 
         /// <summary>
-        /// Matches the link to a style sheet of the McpApp folder: <c>&lt;link rel="stylesheet" href="style.css"&gt;</c>.
+        /// Matches the link to a style sheet of the McpApp folder: <c>&lt;link rel="stylesheet" href="../style.css"&gt;</c>.
         /// </summary>
         /// <returns>The <see cref="Regex"/> of a link to a style sheet.</returns>
-        [GeneratedRegex("""<link\s+rel="stylesheet"\s+href="(?<file>[^"/:]+)"\s*/?>""", RegexOptions.None, 1000)]
+        [GeneratedRegex("""<link\s+rel="stylesheet"\s+href="(?:\.\./)?(?<file>[^"/:]+)"\s*/?>""", RegexOptions.None, 1000)]
         private static partial Regex StyleSheetLink();
 
         /// <summary>
-        /// Matches the link to a script of the McpApp folder: <c>&lt;script src="script.js"&gt;&lt;/script&gt;</c>.
+        /// Matches the link to a script of the McpApp folder: <c>&lt;script src="../host.js"&gt;&lt;/script&gt;</c>.
         /// </summary>
         /// <returns>The <see cref="Regex"/> of a link to a script.</returns>
-        [GeneratedRegex("""<script\s+src="(?<file>[^"/:]+)"\s*></script>""", RegexOptions.None, 1000)]
+        [GeneratedRegex("""<script\s+src="(?:\.\./)?(?<file>[^"/:]+)"\s*></script>""", RegexOptions.None, 1000)]
         private static partial Regex ScriptLink();
     }
 }

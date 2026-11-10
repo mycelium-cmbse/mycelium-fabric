@@ -24,8 +24,6 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tools;
 
-    using SysML2.NET.Core.POCO.Root.Elements;
-    using SysML2.NET.Core.POCO.Systems.Requirements;
 
     /// <summary>
     /// Suite of tests for the <see cref="DocumentTools"/> class.
@@ -49,19 +47,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 this.document = new TextDocument("EOSat1-requirements.md", new MarkdownDocumentParser().Parse(content));
             }
 
-            // REQ-SYS-001 and REQ-SYS-002 are modelled as requirement usages, REQ-SYS-003 as a requirement definition.
-            IReadOnlyList<IElement> elements =
-            [
-                Mock.Of<IRequirementUsage>(requirement => requirement.ReqId == "REQ-SYS-001"),
-                Mock.Of<IRequirementUsage>(requirement => requirement.ReqId == "REQ-SYS-002"),
-                Mock.Of<IRequirementDefinition>(requirement => requirement.ReqId == "REQ-SYS-003"),
-                Mock.Of<IRequirementUsage>(requirement => requirement.ReqId == "REQ-SYS-006"),
-                Mock.Of<IRequirementUsage>(requirement => requirement.ReqId == null),
-                new Mock<IElement>().Object
-            ];
-
             this.modelProvider = new Mock<IModelProvider>();
-            this.modelProvider.Setup(provider => provider.Elements).Returns(elements);
+            this.modelProvider.Setup(provider => provider.GetRequirementIds()).Returns(new HashSet<string> { "REQ-SYS-001", "REQ-SYS-002", "REQ-SYS-003", "REQ-SYS-006" });
 
             this.documentReader = new Mock<IDocumentReader>();
             this.documentReader.Setup(reader => reader.ReadAsync("EOSat1-requirements.md", It.IsAny<CancellationToken>())).ReturnsAsync(this.document);

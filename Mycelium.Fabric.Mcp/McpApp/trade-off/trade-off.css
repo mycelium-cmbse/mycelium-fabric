@@ -1,8 +1,5 @@
 :root {
-    --border-strong: light-dark(#D1D6DB, #5c5b57);
-    --muted2:        light-dark(#99A3B0, #8f8d87);
-    --primary-50:    light-dark(#E8F7F2, #18332f);
-    --primary-deep:  light-dark(#115E59, #7fd6c8);
+    --muted2: light-dark(#99A3B0, #8f8d87);
     --rank2: #5EBDB1;
     --rank3: #9AD5CD;
 }
@@ -24,16 +21,7 @@
     #chart .tr-svg { flex: 1 1 0; min-height: 0; max-height: 440px; }
 }
 
-/* Inside the cards, our palette whatever the host's colours: only light or dark follows the host. */
 .tr-card {
-    --card:     var(--bloom-card);
-    --muted-bg: var(--bloom-muted-bg);
-    --fg:       var(--bloom-fg);
-    --fg2:      var(--bloom-fg2);
-    --muted:    var(--bloom-muted);
-    --border:   var(--bloom-border);
-    --danger:   var(--bloom-danger);
-    --success:  var(--bloom-success);
     background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 10px; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
 }
 .tr-card h2 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; }

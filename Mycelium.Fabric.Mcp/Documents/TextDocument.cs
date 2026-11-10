@@ -14,6 +14,8 @@ namespace Mycelium.Fabric.Mcp.Documents
     using System.Linq;
     using System.Text.RegularExpressions;
 
+    using ModelContextProtocol;
+
     using Mycelium.Fabric.Mcp.Services;
 
     /// <summary>
@@ -28,6 +30,60 @@ namespace Mycelium.Fabric.Mcp.Documents
         /// of tables, lists, quotes and emphasis, and a numbering such as <c>3.2.1</c> or <c>1)</c>.
         /// </summary>
         private const string DefinitionPrefixCharacters = " \t|*_-+>#[(`~.)0123456789";
+
+        /// <summary>
+        /// The time after which the identifier pattern given by the AI assistant stops matching a line.
+        /// </summary>
+        private static readonly TimeSpan PatternTimeout = TimeSpan.FromSeconds(1);
+
+        /// <summary>
+        /// Gets a section and its subsections: the sections that follow it with a deeper level, up to the next section of the
+        /// same level or higher. The text before the first heading has no subsection.
+        /// </summary>
+        /// <param name="number">The number of the section, from 1, as the outline gives it.</param>
+        /// <returns>The section, then its subsections, in the order of the document.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="number"/> is not the number of a section.</exception>
+        public IReadOnlyList<DocumentSection> GetSectionAndSubsections(int number)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(number, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(number, this.Sections.Count);
+
+            var section = this.Sections[number - 1];
+
+            return [section, .. this.Sections.Skip(number).TakeWhile(next => section.Level > 0 && next.Level > section.Level)];
+        }
+
+        /// <summary>
+        /// Finds the requirement identifiers of each section with the pattern given by the AI assistant, as
+        /// <see cref="FindIdentifiers"/> does, with a time limit for each line.
+        /// </summary>
+        /// <param name="idPattern">The regular expression that matches a requirement identifier.</param>
+        /// <returns>The identifiers of each section, in the order of the sections.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when <paramref name="idPattern"/> is not a valid regular expression, or takes too long to match a line.
+        /// </exception>
+        public IReadOnlyList<IReadOnlyList<string>> FindIdentifiersMatching(string idPattern)
+        {
+            Regex identifierPattern;
+
+            try
+            {
+                identifierPattern = new Regex(idPattern, RegexOptions.CultureInvariant, PatternTimeout);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new McpException($"The idPattern '{idPattern}' is not a valid regular expression: {exception.Message}");
+            }
+
+            try
+            {
+                return this.FindIdentifiers(identifierPattern);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new McpException($"The idPattern '{idPattern}' takes too long to match the document: write a simpler one, such as REQ-[A-Z]+-\\d{{3}}.");
+            }
+        }
 
         /// <summary>
         /// Finds the requirement identifiers of each section: the texts that match the pattern in its title or in its lines.

@@ -7,15 +7,15 @@
 //  </copyright>
 //  ------------------------------------------------------------------------------------------------
 
-// Tests of the view "Trade-off" (McpApp/trade-off.js), run by Node.js: node --test Mycelium.Fabric.Mcp.Tests/McpApp/trade-off.test.js
+// Tests of the view "Trade-off" (McpApp/trade-off/trade-off.js), run by Node.js: node --test Mycelium.Fabric.Mcp.Tests/McpApp/trade-off/trade-off.test.js
 
 const { describe, it, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const { loadPage } = require("./fake-page.js");
+const { loadPage } = require("../fake-page.js");
 
-const APP_FOLDER = path.join(__dirname, "..", "..", "Mycelium.Fabric.Mcp", "McpApp");
+const APP_FOLDER = path.join(__dirname, "..", "..", "..", "Mycelium.Fabric.Mcp", "McpApp");
 const HOST_ORIGIN = "https://host.example";
 const ROOT_ID = "5d06ef4d-4489-500c-e94f-a8cf563d3fc1";
 const CAMERA = { partId: "558a0ae4-8585-66a3-9bc6-52322650941c", qualifiedName: "EOSat1::Architecture::eosat1::payloadSubsystem::camera" };
@@ -305,7 +305,7 @@ describe("trade-off view", () => {
     }
 
     beforeEach(() => {
-        page = loadPage(path.join(APP_FOLDER, "trade-off.html"), path.join(APP_FOLDER, "host.js"), path.join(APP_FOLDER, "trade-off.js"));
+        page = loadPage(path.join(APP_FOLDER, "trade-off", "trade-off.html"), path.join(APP_FOLDER, "host.js"), path.join(APP_FOLDER, "trade-off", "trade-off.js"));
     });
 
     describe("talking with the host", () => {

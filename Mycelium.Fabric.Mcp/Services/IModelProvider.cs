@@ -87,6 +87,12 @@ namespace Mycelium.Fabric.Mcp.Services
         IElement GetRequiredElementById(Guid elementId);
 
         /// <summary>
+        /// Gets the identifiers of the requirements of the loaded model: the <c>reqId</c> of its requirement definitions and usages.
+        /// </summary>
+        /// <returns>The identifiers, compared character by character.</returns>
+        HashSet<string> GetRequirementIds();
+
+        /// <summary>
         /// Applies a batch of changes to the loaded model, all or nothing: the batch is turned into a <c>CommitRequest</c> by
         /// an <see cref="IModelChangeApplier"/>, then committed with <see cref="CreateCommit"/>. When one change is invalid,
         /// the model is left unchanged and the problems are returned.

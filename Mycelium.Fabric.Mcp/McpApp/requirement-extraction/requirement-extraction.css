@@ -1,0 +1,122 @@
+/* The page of the mock-up (screen 6, requirement extraction). */
+.rx {
+    --primary-text:  light-dark(#0F766E, #5fd0bd);
+    --head-bg:       light-dark(#FBFCFE, #2b2b28);
+    --need-bg:       light-dark(#FFFDF6, #2d2818);
+    --mark:          light-dark(#FDE68A, #6b5618);
+    --warning-line:  light-dark(#B2730D, #f5b04c);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 16px 20px 18px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* In full screen the page fills the frame, and only the table and the card scroll. */
+.rx.full { height: 100vh; }
+.rx.full .rx-scroll, .rx.full .rx-detail { overflow: auto; }
+.rx.full .rx-scroll { flex: 1; min-height: 0; }
+.rx.full .g-ext { flex: 1; min-height: 0; }
+
+.pg-h { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 14px; }
+.pg-t { min-width: 0; }
+.back { font-size: 12.5px; color: var(--primary); display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.pg-h h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.pg-h .sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.fchips { margin: 0 0 0 auto; padding: 0; border: 0; display: flex; gap: 6px; flex: none; }
+.fchip { border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; font-size: 12px; background: var(--card); color: var(--fg2); }
+.fchip.on { border-color: var(--primary); color: var(--primary-text); background: var(--primary-50); font-weight: 500; }
+.fchip b { font-weight: 600; margin-left: 3px; }
+
+.rx-banner { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warning-line); background: var(--warning-bg); color: var(--warning); font-size: 12px; overflow-wrap: anywhere; }
+.rx-banner.rx-error { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+
+.g-ext { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; }
+/* Without a card, on a requirement that has no problem, the table takes the whole width. */
+.g-ext.solo { grid-template-columns: minmax(0, 1fr); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; min-height: 0; display: flex; flex-direction: column; }
+.card-h { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px; }
+.card-h .r { margin-left: auto; display: flex; gap: 6px; font-weight: 400; }
+.rx-main { overflow: hidden; }
+
+table.t { width: 100%; border-collapse: collapse; font-size: 12px; }
+.t.ext { table-layout: fixed; }
+.t th { text-align: left; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 8px 10px; background: var(--head-bg); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+.t td { padding: 8px 10px; font-size: 11.5px; line-height: 1.45; border-bottom: 1px solid var(--border); vertical-align: middle; overflow-wrap: anywhere; }
+.t th.rx-tick { width: 34px; }
+.t th.rx-idc { width: 100px; }
+.t th.rx-kind { width: 92px; }
+.t th.rx-cst { width: 220px; }
+.t th.rx-q { width: 132px; }
+.rx-sort { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
+.rx-sort:hover { color: var(--fg); }
+th[aria-sort="ascending"] .rx-sort::after { content: " \25B2"; }
+th[aria-sort="descending"] .rx-sort::after { content: " \25BC"; }
+.t.ext tr.rx-row { cursor: pointer; }
+.t.ext tr.rx-row:not(.sel):hover td { background: var(--muted-bg); }
+.t.ext tr.need td { background: var(--need-bg); }
+.t.ext tr.sel td { background: var(--primary-50); }
+.t.ext tr.need.sel td { background: var(--warning-bg); }
+.rx-id { font: 600 11px var(--mono); white-space: nowrap; overflow-wrap: normal; }
+.cst { font: 10.5px var(--mono); color: var(--primary-deep); background: var(--primary-50); border-radius: 4px; padding: 2px 5px; display: inline-block; max-width: 206px; white-space: normal; overflow-wrap: anywhere; }
+.cst.none { background: var(--muted-bg); color: var(--muted); }
+.qtag { display: inline-flex; gap: 4px; align-items: center; font-size: 10.5px; font-weight: 500; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.qtag.ok { background: var(--success-bg); color: var(--success); }
+.qtag.warn { background: var(--warning-bg); color: var(--warning); }
+
+.cb { appearance: none; margin: 0; width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; flex: none; background: var(--card); padding: 0; cursor: pointer; }
+.cb:checked { background: var(--primary); border-color: var(--primary); }
+.cb:checked::after { content: ""; width: 3px; height: 7px; margin-top: -2px; border: solid #fff; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.cb:indeterminate { border-color: var(--primary); }
+.cb:indeterminate::after { content: ""; width: 7px; height: 2px; background: var(--primary); }
+.cb:disabled { opacity: .4; cursor: default; }
+
+.foot-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 12px; margin-top: auto; }
+.foot-bar .sp { flex: 1; }
+.foot-bar b { font-weight: 600; }
+.foot-bar .done { width: auto; font-size: 12px; }
+.rx-reason { color: var(--warning); }
+.rx-note { display: block; padding: 0 14px 10px; font-size: 11px; color: var(--muted); }
+.rx-note:empty { display: none; }
+.btn.sm { padding: 4px 9px; font-size: 11.5px; }
+
+.excerpt { margin: 12px 14px; border-left: 3px solid var(--warning-line); background: var(--need-bg); padding: 8px 11px; font-size: 12px; line-height: 1.55; color: var(--fg2); border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.excerpt mark { background: var(--mark); color: var(--fg); padding: 0 2px; border-radius: 2px; }
+.why { margin: 0 14px 10px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.why b { color: var(--warning); }
+.sec { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 4px 14px 6px; }
+.opt2 { margin: 0 14px 8px; }
+.oc { display: flex; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; margin-bottom: 5px; cursor: pointer; font-size: 12px; align-items: flex-start; }
+.oc .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--border-strong); flex: none; margin-top: 1px; position: relative; }
+.oc.on { border-color: var(--primary); background: var(--primary-50); }
+.oc.on .r { border-color: var(--primary); }
+.oc.on .r::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--primary); }
+.oc b { font-weight: 600; }
+.oc small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.oc .m { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.oc .m span { font: 10.5px var(--mono); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--fg2); }
+.oc select { font: inherit; font-size: 11.5px; margin-left: 6px; color: var(--fg); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
+.rx-facts { display: none; margin: 10px 14px 0; font-size: 12px; }
+.rx-facts span { color: var(--muted); }
+
+/* Without the room of the mock-up, the card unfolds under its row: the table takes the whole width. */
+@media (max-width: 1179.98px) {
+    .g-ext { grid-template-columns: minmax(0, 1fr); }
+    .t.ext tr.rx-fold td { padding: 0; }
+    .rx-fold .rx-detail { border: 0; border-radius: 0; }
+}
+
+/* A narrow view moves the kind and the constraint of a requirement into its card. */
+@media (max-width: 760px) {
+    .rx { padding: 10px 12px; }
+    .pg-h { flex-wrap: wrap; }
+    .fchips { margin-left: 0; flex-wrap: wrap; }
+    .t .rx-kind, .t .rx-cst { display: none; }
+    .rx-facts { display: block; }
+}
+
+/* A very narrow view moves the quality into the card too. */
+@media (max-width: 480px) {
+    .t .rx-q { display: none; }
+}

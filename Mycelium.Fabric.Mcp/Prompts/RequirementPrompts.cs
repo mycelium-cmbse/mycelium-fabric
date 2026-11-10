@@ -46,16 +46,24 @@ namespace Mycelium.Fabric.Mcp.Prompts
 
             Phase 2, once the user has approved the plan, section by section in the order of the outline:
             5. Read the section with read_document and the idPattern, page by page until nextOffset is null. Its
-               requirements.missing lists the identifiers of the section that the model does not have yet.
-            6. Send one apply_changes batch for the section, or one per page for a long section: its package if it does not
-               exist yet, then one RequirementUsage per missing identifier. Never create a requirement whose identifier is
-               already modelled. If a batch is refused, correct every reported problem and send it again.
-            7. Report the section in one line: the requirements created, the ones with a constraint, and the identifiers to
+               requirements.missing lists the identifiers of the section that the model does not have yet. When its
+               subsections hold few requirements (about 20 in all), read them too: they are proposed with the section.
+            6. Call propose_requirements once for the section: every requirement whose identifier is missing, with a name,
+               the statement, its kind, its constraint if any, and for a requirement to clarify, the reason and, when the
+               document allows it, a rewritten statement with its constraint; for a requirement that only repeats another one
+               of the list, the reason and that requirement in mergeInto; the package (ownerId, newPackage or both) and the
+               idPattern. Never create a requirement whose identifier is already modelled. A subsection proposed with its
+               section is done.
+            7. If the result says that the user reviews the requirements in a view, send nothing else and wait for the user's
+               message, which tells what has been imported. Otherwise, send one apply_changes batch for the section: its
+               package if it does not exist yet, then one RequirementUsage per requirement kept, as the result says. If a
+               batch is refused, correct every reported problem and send it again.
+            8. Report the section in one line: the requirements created, the ones with a constraint, and the identifiers to
                clarify.
-            8. Once the scope is done, read the outline again with the idPattern: every identifier found in the scope must be
+            9. Once the scope is done, read the outline again with the idPattern: every identifier found in the scope must be
                modelled. Model the ones you missed. An identifier that the document only mentions, without a statement (a
                reference to a requirement defined elsewhere or that does not exist), is not modelled: list it.
-            9. Summarise: the identifiers found, modelled and missing, as read_document counts them, never from memory; the
+            10. Summarise: the identifiers found, modelled and missing, as read_document counts them, never from memory; the
                requirements with a constraint; the requirements to clarify, each with its reason; and the choices you made.
 
             Modelling rules:
@@ -68,7 +76,8 @@ namespace Mycelium.Fabric.Mcp.Prompts
               condition of use is not a limit. Never invent a limit: a limit that is TBD or missing gives no constraint.
             - Do not add satisfy links: the parts that satisfy the requirements are chosen later, with the system model.
             - A requirement is to clarify when its statement has a TBD, a vague term without a measurable criterion (responsive,
-              user-friendly, fast...), or several requirements in one. Report it, without changing its text.
+              user-friendly, fast...), or several requirements in one. Report it with its reason, without changing its text:
+              a clearer statement, only when the document allows it, goes in rewrittenText, which the user may choose.
             """;
 
         /// <summary>
@@ -81,7 +90,7 @@ namespace Mycelium.Fabric.Mcp.Prompts
         /// Thrown when <paramref name="fileName"/> is <c>null</c>, empty or only white space.
         /// </exception>
         [McpServerPrompt(Name = "extract_requirements", Title = "Extract the requirements of a document")]
-        [Description("Models the requirements of a long document of the document folder, one section at a time: a plan that the user approves, then apply_changes per section.")]
+        [Description("Models the requirements of a long document of the document folder, one section at a time: a plan that the user approves, then propose_requirements and the import of the requirements per section.")]
         [return: Description("The procedure to follow, the document and the scope, then a reminder of the first phase.")]
         public static string ExtractRequirements(
             [Description("The simple name of the document in the document folder, for example 'EOSat1-requirements.md'.")] string fileName,

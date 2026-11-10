@@ -274,6 +274,13 @@ class FakeElement {
     }
 
     /**
+     * Scrolls the element into view: the element remembers it.
+     */
+    scrollIntoView() {
+        this.scrolledIntoView = true;
+    }
+
+    /**
      * Captures the pointer: the element keeps the pointer id.
      * @param {number} pointerId The id of the pointer.
      */
