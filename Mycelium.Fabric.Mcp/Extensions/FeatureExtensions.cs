@@ -14,11 +14,16 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using System.Globalization;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Expressions;
+
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Multiplicities;
+    using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
+    using SysML2.NET.Core.POCO.Systems.Enumerations;
     using SysML2.NET.Core.POCO.Systems.Parts;
+    using SysML2.NET.Exceptions;
 
     /// <summary>
     /// Extension methods that read, from the <see cref="IFeature"/>s of a SysML v2 model, the information used by the MCP
@@ -76,6 +81,74 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 });
 
                 return string.Join("..", bounds);
+            }
+
+            /// <summary>
+            /// Gets the range of the number of units that the multiplicity of the feature allows: <c>(1, 4)</c> for
+            /// <c>[1..4]</c>, <c>(4, 4)</c> for <c>[4]</c>, and no largest number for <c>[0..*]</c>.
+            /// </summary>
+            /// <returns>The range, or <c>null</c> when the feature has no multiplicity or its bounds are not numbers.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="feature"/> is <c>null</c>.
+            /// </exception>
+            public (int Minimum, int? Maximum)? GetUnitRange()
+            {
+                ArgumentNullException.ThrowIfNull(feature);
+
+                return feature.multiplicity switch
+                {
+                    IMultiplicityRange { lowerBound: null, upperBound: ILiteralInteger upper } => (upper.Value, upper.Value),
+                    IMultiplicityRange { lowerBound: null, upperBound: ILiteralInfinity } => (0, null),
+                    IMultiplicityRange { lowerBound: ILiteralInteger lower, upperBound: ILiteralInteger upper } => (lower.Value, upper.Value),
+                    IMultiplicityRange { lowerBound: ILiteralInteger lower, upperBound: ILiteralInfinity } => (lower.Value, null),
+                    _ => null
+                };
+            }
+
+            /// <summary>
+            /// Gets the variants among which the feature takes one: the variants of the catalogues that type it. A catalogue
+            /// is a variation definition (<c>variation part def BatteryOptions</c>), which only owns its variants; an
+            /// enumeration definition, whose values are variants too, is not a catalogue. A variant is typed by its catalogue
+            /// but takes no variant itself.
+            /// </summary>
+            /// <returns>The variants, empty when no catalogue types the feature or when it is itself a variant.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="feature"/> is <c>null</c>.
+            /// </exception>
+            public IReadOnlyList<IUsage> GetVariants()
+            {
+                ArgumentNullException.ThrowIfNull(feature);
+
+                if (feature.owningMembership is IVariantMembership)
+                {
+                    return [];
+                }
+
+                try
+                {
+                    return [.. (feature.type ?? []).OfType<IDefinition>().Where(definition => definition.IsVariation && definition is not IEnumerationDefinition).SelectMany(definition => definition.variant ?? [])];
+                }
+                catch (IncompleteModelException)
+                {
+                    return [];
+                }
+            }
+
+            /// <summary>
+            /// Gets the variant that the feature takes: the variant of one of its catalogues that its value names
+            /// (<c>part battery : BatteryOptions = BatteryOptions::liIon40</c>).
+            /// </summary>
+            /// <returns>The variant, or <c>null</c> when the feature takes none.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="feature"/> is <c>null</c>.
+            /// </exception>
+            public IUsage GetChosenVariant()
+            {
+                var variants = feature.GetVariants();
+
+                return variants.Count > 0 && TermReader.GetValueExpression(feature) is IFeatureReferenceExpression { referent: IUsage referent }
+                    ? variants.FirstOrDefault(variant => variant.Id == referent.Id)
+                    : null;
             }
 
             /// <summary>

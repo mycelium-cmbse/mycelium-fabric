@@ -42,6 +42,23 @@ namespace Mycelium.Fabric.Mcp.Extensions
             }
 
             /// <summary>
+            /// Gets the operator of the same comparison written with its two sides swapped: <c>&gt;=</c> for <c>&lt;=</c>
+            /// (<c>150 &gt;= mass</c> is <c>mass &lt;= 150</c>), and <c>==</c> for itself.
+            /// </summary>
+            /// <returns>The swapped operator.</returns>
+            public TradeOffOperator ToSwapped()
+            {
+                return comparison switch
+                {
+                    TradeOffOperator.LessThan => TradeOffOperator.GreaterThan,
+                    TradeOffOperator.LessThanOrEqual => TradeOffOperator.GreaterThanOrEqual,
+                    TradeOffOperator.GreaterThan => TradeOffOperator.LessThan,
+                    TradeOffOperator.GreaterThanOrEqual => TradeOffOperator.LessThanOrEqual,
+                    _ => comparison
+                };
+            }
+
+            /// <summary>
             /// Writes the opposite of the operator, the one that holds when the constraint is broken: <c>&gt;=</c> for
             /// <c>&lt;</c>, <c>!=</c> for <c>==</c>.
             /// </summary>

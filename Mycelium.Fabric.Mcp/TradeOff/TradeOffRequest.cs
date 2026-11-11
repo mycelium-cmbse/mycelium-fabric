@@ -30,6 +30,10 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// the view of the trade-off.
     /// </param>
     /// <param name="Title">The short title of the trade-off, shown by its view, or <c>null</c>.</param>
+    /// <param name="IgnoredRequirements">
+    /// The requirements of the model that are not checked, by identifier (<c>REQ-SYS-001</c>), name or <c>Id</c>, or <c>null</c>
+    /// for none: the user turns them off in the view of the trade-off.
+    /// </param>
     public sealed record TradeOffRequest(Guid RootId, IReadOnlyList<TradeOffChoice> Choices, IReadOnlyList<TradeOffObjective> Objectives, IReadOnlyList<TradeOffConstraint> Constraints,
-        IReadOnlyList<TradeOffRule> Rules, int Count, string CompareBy, IReadOnlyList<string> Excluded = null, string Title = null);
+        IReadOnlyList<TradeOffRule> Rules, int Count, string CompareBy, IReadOnlyList<string> Excluded = null, string Title = null, IReadOnlyList<string> IgnoredRequirements = null);
 }

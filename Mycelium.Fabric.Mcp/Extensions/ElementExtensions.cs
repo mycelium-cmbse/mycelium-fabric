@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Attributes;
+    using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Exceptions;
 
@@ -145,27 +146,44 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// not counted. A part without sub-parts and without value misses its value ("to be defined") when it declares
             /// the attribute without any value, or when it has the type of a contributing part. A part that carries the
             /// attribute but whose number of units is not fixed (<c>[1..4]</c>, <c>[0..*]</c>) is not counted and misses its
-            /// value too.
+            /// value too. A part that takes a variant of a catalogue (<c>part battery : BatteryOptions = BatteryOptions::liIon40</c>)
+            /// holds what this variant holds; a part typed by a catalogue that takes no variant yet misses its value; a part
+            /// taken 0 times (<c>[0]</c>), such as an optional tank that is not on board, counts for 0.
             /// </summary>
             /// <param name="attributeName">The declared name of the attribute.</param>
-            /// <returns>The <see cref="CollectedValues"/>: the contributions, and the parts whose value is missing.</returns>
+            /// <param name="openPartIds">
+            /// The <c>Id</c> of the parts left open, or <c>null</c> for none: an open part is not visited, and its place is given
+            /// as a <see cref="PartSlot"/>, so that a trade-off can fill it with each of its variants.
+            /// </param>
+            /// <returns>
+            /// The <see cref="CollectedValues"/>: the contributions, the parts whose value is missing, and the open parts.
+            /// </returns>
             /// <exception cref="ArgumentNullException">
             /// Thrown when <paramref name="element"/> is <c>null</c>.
             /// </exception>
-            public CollectedValues CollectValues(string attributeName)
+            public CollectedValues CollectValues(string attributeName, IReadOnlySet<Guid> openPartIds = null)
+            {
+                return element.CollectValueParts(attributeName, openPartIds).ToCollectedValues();
+            }
+
+            /// <summary>
+            /// Collects the values of an attribute over the element and its sub-parts, as <c>CollectValues</c> does, without
+            /// deciding yet which parts miss their value, so that what the open parts hold can be added first.
+            /// </summary>
+            /// <param name="attributeName">The declared name of the attribute.</param>
+            /// <param name="openPartIds">The <c>Id</c> of the parts left open, or <c>null</c> for none.</param>
+            /// <returns>The <see cref="ValueCollection"/>.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="element"/> is <c>null</c>.
+            /// </exception>
+            internal ValueCollection CollectValueParts(string attributeName, IReadOnlySet<Guid> openPartIds = null)
             {
                 ArgumentNullException.ThrowIfNull(element);
 
-                var collector = new ValueCollector(attributeName);
+                var collector = new ValueCollection(attributeName, openPartIds);
                 CollectPartValues(element, collector, [], 1);
 
-                var missingValues = collector.ValuelessParts
-                    .Where(part => part.DeclaresAttribute || GetTypeIds(part.Part).Any(collector.ContributingTypeIds.Contains))
-                    .Select(part => new MissingValue(part.Part.Id, part.Part.qualifiedName, part.Part.GetTypeNames()))
-                    .Concat(collector.UncountedParts.Select(part => new MissingValue(part.Id, part.qualifiedName, part.GetTypeNames(), part.DescribeMultiplicity())))
-                    .ToList();
-
-                return new CollectedValues(collector.Contributions, missingValues);
+                return collector;
             }
         }
 
@@ -175,11 +193,18 @@ namespace Mycelium.Fabric.Mcp.Extensions
         /// (<c>part def Node { part next : Node; }</c>) ends.
         /// </summary>
         /// <param name="element">The <see cref="IElement"/> to read.</param>
-        /// <param name="collector">The <see cref="ValueCollector"/> that receives the values found.</param>
+        /// <param name="collector">The <see cref="ValueCollection"/> that receives the values found.</param>
         /// <param name="path">The identifiers of the parts between the first element and this one.</param>
         /// <param name="count">The number of units of the element under the first element.</param>
-        private static void CollectPartValues(IElement element, ValueCollector collector, HashSet<Guid> path, int count)
+        private static void CollectPartValues(IElement element, ValueCollection collector, HashSet<Guid> path, int count)
         {
+            if (element is IPartUsage choice && choice.GetVariants() is { Count: > 0 } variants)
+            {
+                CollectVariantValues(choice, variants, collector, path, count);
+
+                return;
+            }
+
             var attribute = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == collector.AttributeName);
             var value = attribute?.GetNumericValue();
 
@@ -188,7 +213,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 var margin = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == collector.AttributeName + MarginSuffix)?.GetNumericValue();
 
                 collector.Contributions.Add(new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit, margin?.Number, count == 1 ? null : count));
-                collector.ContributingTypeIds.UnionWith(GetTypeIds(element));
+                collector.ContributingTypeIds.UnionWith(ValueCollection.GetTypeIds(element));
 
                 return;
             }
@@ -211,6 +236,12 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
             foreach (var part in parts)
             {
+                if (collector.OpenPartIds?.Contains(part.Id) == true)
+                {
+                    collector.Slots.Add(new PartSlot(part, count));
+                    continue;
+                }
+
                 if (part.GetUnitCount() is { } unitCount)
                 {
                     CollectPartValues(part, collector, path, count * unitCount);
@@ -218,7 +249,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 }
 
                 // A part whose number of units is not fixed is not counted, and is reported only when it carries the attribute.
-                var uncountedValues = new ValueCollector(collector.AttributeName);
+                var uncountedValues = new ValueCollection(collector.AttributeName);
                 CollectPartValues(part, uncountedValues, path, 1);
 
                 if (uncountedValues.Contributions.Count > 0 || uncountedValues.UncountedParts.Count > 0 || uncountedValues.ValuelessParts.Exists(valueless => valueless.DeclaresAttribute))
@@ -231,40 +262,31 @@ namespace Mycelium.Fabric.Mcp.Extensions
         }
 
         /// <summary>
-        /// Gets the identifiers of the types of an element.
+        /// Collects the values of a part typed by a catalogue: the values of the variant that it takes, or a missing value
+        /// when it takes none yet and one of the variants carries the attribute.
         /// </summary>
-        /// <param name="element">The element.</param>
-        /// <returns>The <c>Id</c> of each type of the element, empty when it is not a typed <see cref="IFeature"/>.</returns>
-        private static IEnumerable<Guid> GetTypeIds(IElement element)
+        /// <param name="choice">The part typed by a catalogue.</param>
+        /// <param name="variants">The variants of the catalogue.</param>
+        /// <param name="collector">The <see cref="ValueCollection"/> that receives the values found.</param>
+        /// <param name="path">The identifiers of the parts between the first element and this one.</param>
+        /// <param name="count">The number of units of the part under the first element.</param>
+        private static void CollectVariantValues(IPartUsage choice, IReadOnlyList<IUsage> variants, ValueCollection collector, HashSet<Guid> path, int count)
         {
-            return element is IFeature feature ? (feature.type ?? []).Select(type => type.Id) : [];
-        }
+            if (!path.Add(choice.Id))
+            {
+                return;
+            }
 
-        /// <summary>
-        /// What <c>CollectValues</c> finds while it visits the parts.
-        /// </summary>
-        /// <param name="AttributeName">The declared name of the attribute.</param>
-        private sealed record ValueCollector(string AttributeName)
-        {
-            /// <summary>
-            /// Gets the <see cref="Contribution"/> of each part that gives a value.
-            /// </summary>
-            public List<Contribution> Contributions { get; } = [];
+            if (choice.GetChosenVariant() is { } chosenVariant)
+            {
+                CollectPartValues(chosenVariant, collector, path, count);
+            }
+            else
+            {
+                collector.ValuelessParts.Add((choice, variants.Any(variant => variant.CollectContributions(collector.AttributeName).Count > 0)));
+            }
 
-            /// <summary>
-            /// Gets the <c>Id</c> of the types of the parts that give a value.
-            /// </summary>
-            public HashSet<Guid> ContributingTypeIds { get; } = [];
-
-            /// <summary>
-            /// Gets the parts without sub-parts and without value, and whether each one declares the attribute.
-            /// </summary>
-            public List<(IElement Part, bool DeclaresAttribute)> ValuelessParts { get; } = [];
-
-            /// <summary>
-            /// Gets the parts that carry the attribute but whose number of units is not fixed, which are not counted.
-            /// </summary>
-            public List<IPartUsage> UncountedParts { get; } = [];
+            path.Remove(choice.Id);
         }
     }
 }

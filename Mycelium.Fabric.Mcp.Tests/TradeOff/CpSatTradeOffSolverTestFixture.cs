@@ -113,8 +113,52 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(allCombinations.Alternatives[0].Selections.Take(2).Select(selection => selection[0]), Is.EquivalentTo([1, 2]));
                 Assert.That(allCombinations.Alternatives[0].Selections[2], Is.EqualTo([0]));
                 Assert.That(exactPower.Alternatives[0].Selections.Single(), Is.EqualTo([1]));
-                Assert.That(noExactPower.Status, Is.EqualTo(TradeOffStatus.Infeasible));
-                Assert.That(noExactPower.Alternatives.Single().Conflicts, Is.EqualTo(["constraint 1: power == 65"]));
+                Assert.That(noExactPower.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(noExactPower.Alternatives.Single().Selections.Single(), Is.EqualTo([2]));
+                Assert.That(noExactPower.Alternatives.Single().Conflicts, Is.Empty);
+            }
+        }
+
+        [Test]
+        public void VerifySolveWithALimitThatNoCombinationMeets()
+        {
+            var problem = CreatePropulsionProblem(2);
+            var tooLight = problem with { Limits = [.. problem.Limits, Limit("mass", TradeOffOperator.LessThanOrEqual, 90)] };
+            var tooLightSolution = this.solver.Solve(tooLight);
+
+            // Breaking the power balance by 10 W saves more mass than it costs: the fewest broken limits still come first.
+            var twoLimits = problem with { Limits = [Limit("mass", TradeOffOperator.LessThanOrEqual, 90), Limit("powerOutput", TradeOffOperator.GreaterThanOrEqual, 1000)] };
+            var twoLimitsSolution = this.solver.Solve(twoLimits);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tooLightSolution.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(tooLightSolution.Alternatives.Single().Conflicts, Is.Empty);
+                Assert.That(tooLightSolution.Alternatives.Single().Selections.Select(selection => GetMass(problem, selection)), Is.EqualTo([102, 104]));
+                Assert.That(tooLightSolution.Alternatives.Single().Selections.Select(tooLight.CountBroken), Is.EqualTo([1, 1]));
+                Assert.That(twoLimitsSolution.Alternatives.Single().Selections.Select(twoLimits.CountBroken), Is.All.EqualTo(2));
+                Assert.That(twoLimitsSolution.Alternatives.Single().Selections[0][3], Is.EqualTo(5));
+            }
+        }
+
+        [Test]
+        public void VerifySolveWithPenalties()
+        {
+            var problem = CreatePropulsionProblem(1);
+            var electricIsBroken = problem with { Penalties = [new TradeOffPenalty(0, new Dictionary<int, int> { [0] = 1 }, 1)] };
+            var electricWithLargeBatteryIsBroken = problem with { Penalties = [new TradeOffPenalty(0, new Dictionary<int, int> { [0] = 1, [2] = 1 }, 1)] };
+            var everythingIsBroken = electricIsBroken with { Penalties = [.. electricIsBroken.Penalties, new TradeOffPenalty(1, new Dictionary<int, int> { [0] = 0 }, 1), new TradeOffPenalty(2, new Dictionary<int, int>(), 1)] };
+            var tooLightButForgiven = problem with { Limits = [.. problem.Limits, Limit("mass", TradeOffOperator.LessThanOrEqual, 101)], Penalties = [new TradeOffPenalty(0, new Dictionary<int, int> { [0] = 0 }, -1)] };
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(this.solver.Solve(problem).Alternatives.Single().Selections.Single()[0], Is.EqualTo(1));
+                Assert.That(this.solver.Solve(electricIsBroken).Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
+                Assert.That(this.solver.Solve(electricWithLargeBatteryIsBroken).Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
+                Assert.That(this.solver.Solve(everythingIsBroken).Alternatives.Single().Selections.Single()[0], Is.EqualTo(1));
+                Assert.That(electricIsBroken.CountBroken([1, 0, 1, 2, 1]), Is.EqualTo(1));
+                Assert.That(electricIsBroken.CountBroken([0, 1, 0, 1, 0]), Is.Zero);
+                Assert.That(this.solver.Solve(tooLightButForgiven).Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
             }
         }
 
@@ -122,28 +166,6 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         public void VerifySolveWhenInfeasible()
         {
             var problem = CreatePropulsionProblem(1);
-
-            var tooLight = this.solver.Solve(problem with { Limits = [.. problem.Limits, Limit("mass", TradeOffOperator.LessThanOrEqual, 90)] });
-            var slightlyTooLight = this.solver.Solve(problem with { Limits = [.. problem.Limits, Limit("mass", TradeOffOperator.LessThanOrEqual, 101)] });
-
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(tooLight.Status, Is.EqualTo(TradeOffStatus.Infeasible));
-                Assert.That(tooLight.Alternatives.Single().Status, Is.EqualTo(TradeOffStatus.Infeasible));
-                Assert.That(tooLight.Alternatives.Single().Selections, Is.Empty);
-                Assert.That(tooLight.Alternatives.Single().Conflicts, Is.EqualTo(["constraint 3: mass <= 90"]));
-                Assert.That(slightlyTooLight.Status, Is.EqualTo(TradeOffStatus.Infeasible));
-
-                Assert.That(slightlyTooLight.Alternatives.Single().Conflicts, Is.EqualTo(
-                [
-                    "constraint 1: power * 1.1 <= powerOutput",
-                    "constraint 2: powerOutput <= maxPower",
-                    "constraint 3: mass <= 101",
-                    "rule 1: propulsion.thermal requires fuelTank.small or fuelTank.large",
-                    "rule 3: propulsion.electric requires battery.large"
-                ]));
-            }
-
             var requiredTank = problem.Decisions[1] with { Required = true };
             var compared = this.solver.Solve(problem with { Decisions = [problem.Decisions[0], requiredTank, .. problem.Decisions.Skip(2)], CompareDecisionIndex = 0 });
             var comparedTank = this.solver.Solve(problem with { Decisions = [problem.Decisions[0], requiredTank, .. problem.Decisions.Skip(2)], CompareDecisionIndex = 1 });
@@ -172,7 +194,8 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(withoutElectric.Status, Is.EqualTo(TradeOffStatus.Optimal));
                 Assert.That(withoutElectric.Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
                 Assert.That(compared.Alternatives.Select(alternative => alternative.Variant), Is.EqualTo(["thermal"]));
-                Assert.That(namedLimit.Alternatives.Single().Conflicts, Is.EqualTo(["REQ-SYS-001: mass <= 90"]));
+                Assert.That(namedLimit.Alternatives.Single().Conflicts, Is.Empty);
+                Assert.That(namedLimit.Alternatives.Single().Selections.Single(), Is.EqualTo([0, 1, 0, 1, 0]));
             }
         }
 

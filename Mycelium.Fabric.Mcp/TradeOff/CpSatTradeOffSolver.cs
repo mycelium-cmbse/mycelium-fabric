@@ -23,10 +23,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// <remarks>
     /// Each option of each decision is a Boolean variable, and each decision takes exactly one option. A total is the fixed part
     /// plus the sum of the selected options, so that every limit and dependency is a linear constraint on integers, which
-    /// CP-SAT solves exactly. The objectives are optimized one after the other: once the best total of an objective is known,
-    /// it is fixed and the next objective is optimized, then the number of changes. Each limit and dependency is enforced by an
-    /// assumption, so that an impossible problem can be explained by the assumptions that conflict. When a decision is
-    /// compared, the search runs once for each of its variants, with this variant imposed.
+    /// CP-SAT solves exactly. A limit may be broken: the search first minimizes the number of broken limits, with the
+    /// penalties that the checks of the requirements have taught, then how far the broken limits are passed, relative to each
+    /// limit. The objectives are then optimized one after the other: once the best total of an objective is known, it is fixed
+    /// and the next objective is optimized, then the number of changes. Each dependency is enforced by an assumption, so that
+    /// an impossible problem can be explained by the assumptions that conflict. When a decision is compared, the search runs
+    /// once for each of its variants, with this variant imposed.
     /// </remarks>
     public sealed class CpSatTradeOffSolver : ITradeOffSolver
     {
@@ -34,6 +36,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// The time limit of each call to CP-SAT when none is given.
         /// </summary>
         public static readonly TimeSpan DefaultTimeLimit = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// The number of steps in which the excess of a broken limit is counted, relative to the limit: 10000 steps count it
+        /// to 0.01 % of the limit.
+        /// </summary>
+        private const long ExcessSteps = 10000;
 
         /// <summary>
         /// The parameters of each call to CP-SAT: the time limit, and a single worker so that the search, and the choice between
@@ -156,9 +164,20 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             private readonly BoolVar[][] optionLiterals;
 
             /// <summary>
-            /// The assumption that enforces each limit and each dependency, with its description.
+            /// The assumption that enforces each dependency, with its description.
             /// </summary>
             private readonly List<(BoolVar Literal, string Description)> assumptions = [];
+
+            /// <summary>
+            /// What counts as a broken requirement or constraint: the Boolean variable of each limit that may be broken and of
+            /// each penalty, with its weight.
+            /// </summary>
+            private readonly List<(BoolVar Literal, long Weight)> breaches = [];
+
+            /// <summary>
+            /// How far each limit is passed, in steps relative to the limit, 0 when it is respected.
+            /// </summary>
+            private readonly List<IntVar> excesses = [];
 
             /// <summary>
             /// The solver of the first stage of <see cref="Run"/>, which holds the assumptions of an impossible problem.
@@ -206,7 +225,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
                 foreach (var (limit, limitIndex) in problem.Limits.Select((limit, limitIndex) => (limit, limitIndex)))
                 {
-                    this.AddLimit(limit, $"{limit.Name ?? $"constraint {limitIndex + 1}"}: {limit.Description}");
+                    this.AddLimit(limit, limitIndex);
+                }
+
+                foreach (var (penalty, penaltyIndex) in problem.Penalties.Select((penalty, penaltyIndex) => (penalty, penaltyIndex)))
+                {
+                    this.AddPenalty(penalty, penaltyIndex);
                 }
 
                 foreach (var (dependency, dependencyIndex) in problem.Dependencies.Select((dependency, dependencyIndex) => (dependency, dependencyIndex)))
@@ -224,18 +248,28 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             /// <summary>
-            /// Searches the best combination: optimizes each objective in turn and fixes its best total, then minimizes the
-            /// number of changes.
+            /// Searches the best combination: minimizes the number of broken limits, then how far they are passed, optimizes
+            /// each objective in turn and fixes its best total, then minimizes the number of changes.
             /// </summary>
             /// <returns>
             /// The <see cref="TradeOffStatus"/> of the search, and the selection found or <c>null</c> when none was found.
             /// </returns>
             public (TradeOffStatus Status, IReadOnlyList<int> Selection) Run()
             {
-                var stages = this.problem.Objectives
-                    .Select(objective => (Expression: this.GetTotalExpression(objective.Attribute), objective.Direction))
-                    .Append((Expression: this.GetChangeCountExpression(), Direction: TradeOffDirection.Minimize))
-                    .ToList();
+                List<(LinearExpr Expression, TradeOffDirection Direction)> stages = [];
+
+                if (this.breaches.Count > 0)
+                {
+                    stages.Add((LinearExpr.WeightedSum(this.breaches.Select(breach => breach.Literal), this.breaches.Select(breach => breach.Weight)), TradeOffDirection.Minimize));
+                }
+
+                if (this.excesses.Count > 0)
+                {
+                    stages.Add((LinearExpr.Sum(this.excesses), TradeOffDirection.Minimize));
+                }
+
+                stages.AddRange(this.problem.Objectives.Select(objective => (this.GetTotalExpression(objective.Attribute), objective.Direction)));
+                stages.Add((this.GetChangeCountExpression(), TradeOffDirection.Minimize));
 
                 var status = TradeOffStatus.Optimal;
                 IReadOnlyList<int> selection = null;
@@ -305,15 +339,24 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             /// <summary>
-            /// Adds a limit, enforced by a new assumption.
+            /// Adds a limit that a combination may break: a Boolean variable tells that it is broken, and an integer variable
+            /// how far it is passed, in steps relative to the limit, so that limits in different units compare.
             /// </summary>
             /// <param name="limit">The <see cref="TradeOffLimit"/> to add.</param>
-            /// <param name="description">The description of the limit in a conflict.</param>
-            private void AddLimit(TradeOffLimit limit, string description)
+            /// <param name="limitIndex">The position of the limit in the problem.</param>
+            private void AddLimit(TradeOffLimit limit, int limitIndex)
             {
-                var literal = this.model.NewBoolVar(description);
                 var form = limit.GetLinearForm();
+                var (minimum, maximum) = this.problem.GetRange(limit);
+                var largestExcess = form.IsEquation ? Math.Max(Math.Abs(maximum - form.Bound), Math.Abs(minimum - form.Bound)) : Math.Max(0, maximum - form.Bound);
 
+                // A limit that no combination can break needs no variable.
+                if (largestExcess == 0)
+                {
+                    return;
+                }
+
+                var broken = this.model.NewBoolVar($"broken{limitIndex}");
                 var expression = form.TotalCoefficient * this.GetTotalExpression(limit.Attribute);
 
                 if (limit.LimitAttribute != null)
@@ -321,8 +364,47 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     expression += form.LimitCoefficient * this.GetTotalExpression(limit.LimitAttribute);
                 }
 
-                this.model.Add(form.IsEquation ? expression == form.Bound : expression <= form.Bound).OnlyEnforceIf(literal);
-                this.assumptions.Add((literal, description));
+                this.model.Add(form.IsEquation ? expression == form.Bound : expression <= form.Bound).OnlyEnforceIf(broken.Not());
+                this.breaches.Add((broken, 1));
+
+                // The excess is counted in steps of the limit: the smallest number of steps that covers it.
+                var step = Math.Max(1, this.problem.GetReference(limit) / ExcessSteps);
+                var steps = this.model.NewIntVar(0, (largestExcess / step) + 1, $"steps{limitIndex}");
+                this.model.Add(step * steps >= expression - form.Bound);
+
+                if (form.IsEquation)
+                {
+                    this.model.Add(step * steps >= form.Bound - expression);
+                }
+
+                this.excesses.Add(steps);
+            }
+
+            /// <summary>
+            /// Adds a penalty: a Boolean variable that is true exactly when the combination takes all the options of the
+            /// penalty, counted with the weight of the penalty among the broken limits.
+            /// </summary>
+            /// <param name="penalty">The <see cref="TradeOffPenalty"/> to add.</param>
+            /// <param name="penaltyIndex">The position of the penalty in the problem.</param>
+            private void AddPenalty(TradeOffPenalty penalty, int penaltyIndex)
+            {
+                var literals = penalty.Options.Select(option => this.optionLiterals[option.Key][option.Value]).ToList();
+
+                if (literals.Count == 0)
+                {
+                    return;
+                }
+
+                var applies = literals[0];
+
+                if (literals.Count > 1)
+                {
+                    applies = this.model.NewBoolVar($"penalty{penaltyIndex}");
+                    this.model.AddBoolAnd(literals).OnlyEnforceIf(applies);
+                    this.model.AddBoolOr(literals.Select(literal => literal.Not()).Append(applies));
+                }
+
+                this.breaches.Add((applies, penalty.Weight));
             }
 
             /// <summary>

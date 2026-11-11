@@ -125,7 +125,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                         + "for example Package, PartDefinition, PartUsage, AttributeUsage or RequirementUsage. Relationships are not created directly: the server builds them from owner, "
                         + "definition and value.",
                     "changes[0].payload: there is no property 'colour'; the properties are type, owner, name, definition, value, unit, text, reqId, constraint, constraints, multiplicity, "
-                        + "satisfiedRequirement, satisfyingPart, ends, specializes, performed, direction, conjugated, isEnd, trigger, guard, effect, stateAction, item.",
+                        + "isVariation, variant, satisfiedRequirement, satisfyingPart, ends, specializes, performed, direction, conjugated, isEnd, trigger, guard, effect, stateAction, item.",
                     "changes[1].payload.multiplicity: a text is expected, not 4.",
                     "changes[1].payload.value: a number, a Boolean or a text is expected, not [1, 2].",
                     "changes[2].payload.constraint: there is no property 'op'; the properties are kind, attribute, operator, limit, limitAttribute, unit, margin.",

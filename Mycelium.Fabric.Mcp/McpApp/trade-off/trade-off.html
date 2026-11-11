@@ -9,8 +9,9 @@
     <link rel="stylesheet" href="trade-off.css">
 </head>
 <body>
-<div class="mcp tr">
+<div class="mcp tr" id="view">
     <header class="tr-head">
+        <button class="back" id="back" type="button" hidden>← Hypha conversation</button>
         <div class="tr-title" id="title">Waiting for the trade-off…</div>
         <div class="tr-sub"><span id="subtitle"></span> <span id="busy" hidden>· Solving…</span></div>
     </header>
@@ -22,6 +23,7 @@
                 <div id="choices"></div>
                 <div id="objectives"></div>
                 <div id="constraints"></div>
+                <div id="requirements"></div>
             </div>
         </section>
         <section class="tr-card tr-fill bloom-palette">
@@ -32,6 +34,7 @@
         <section class="tr-card tr-fill bloom-palette">
             <h2><svg class="ic" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Best options<small id="today"></small></h2>
             <div class="tr-list">
+                <div class="tr-note" id="closest" hidden>No combination meets everything: these come closest.</div>
                 <div id="options"></div>
                 <div id="excluded"></div>
             </div>

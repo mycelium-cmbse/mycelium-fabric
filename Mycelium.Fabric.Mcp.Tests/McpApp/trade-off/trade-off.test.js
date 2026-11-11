@@ -448,8 +448,8 @@ describe("trade-off view", () => {
 
             await open(study({ status: "Infeasible", best: [], points: rejected, conflicts: ["constraint 1: mass * 1.2 <= 150 kg"] }));
 
-            assert.equal(byId(page, "subtitle").textContent, "EOSat1::Architecture::eosat1 · 6 combinations · no combination meets the constraints");
-            assert.equal(byId(page, "options").textContent, "No combination meets the constraints.");
+            assert.equal(byId(page, "subtitle").textContent, "EOSat1::Architecture::eosat1 · 6 combinations · the rules leave no combination");
+            assert.equal(byId(page, "options").textContent, "The rules leave no combination.");
             assert.deepEqual(byId(page, "excluded").querySelectorAll("h3").map(heading => heading.textContent), ["Excluded (6)", "Why no combination works"]);
             assert.equal(byId(page, "excluded").children.at(-1).textContent, "constraint 1: mass * 1.2 <= 150 kg");
             assert.equal(byId(page, "pick").hidden, true);
@@ -519,8 +519,8 @@ describe("trade-off view", () => {
             assert.equal(chart.querySelector(".tr-limit-label").textContent, "REQ-SYS-001 · 125 kg");
             assert.deepEqual(byId(page, "legend").children.map(item => item.querySelector("i").className + ": " + item.textContent), [
                 "best: Best options",
-                "ok: Meets the constraints",
-                "bad: Breaks a constraint or rule",
+                "ok: Meets everything",
+                "bad: Breaks a requirement, a constraint or a rule",
                 "limit: REQ-SYS-001 limit"
             ]);
         });
@@ -651,7 +651,7 @@ describe("trade-off view", () => {
 
             const call = requests(page, "tools/call").at(-1);
             assert.equal(call.params.name, "explore_trade_off");
-            assert.deepEqual(call.params.arguments, { ...study().request, excluded: ["camera.A"] });
+            assert.deepEqual(call.params.arguments, { ...study().request, excluded: ["camera.A"], ignoredRequirements: [] });
             assert.equal(byId(page, "busy").hidden, false);
 
             await answerStudy(page, study({ best: [study().best[2]] }));
@@ -940,6 +940,199 @@ describe("trade-off view", () => {
             byId(page, "pick").querySelector("button").click();
 
             assert.match(requests(page, "ui/message").at(-1).params.content[0].text, /Settings changed in the view: REQ-SYS-001 turned off\./);
+        });
+    });
+
+    describe("checking the requirements of the model", () => {
+        const MASS = {
+            id: "6b93c533-0395-7e18-1bf6-4475deb47ba5", name: "REQ-SYS-001", text: "The satellite shall weigh at most 150 kg.", constraint: "subj.mass * 1.2 <= 150 [kg]",
+            satisfiedBy: "EOSat1::Architecture::eosat1", status: "NotSatisfied", explanation: "150.96 [kg] > 150 [kg]", dependsOnChoices: true, ignored: false, searched: true,
+            attribute: "mass", operator: "<=", threshold: 125
+        };
+        const BAND = {
+            id: "d17c3498-3404-4a62-9728-c58e59a4954f", name: "REQ-COM-001", text: null, constraint: "subj.xBandTransmitter.band == \"X\"",
+            satisfiedBy: "EOSat1::Architecture::eosat1::communicationSubsystem", status: "Satisfied", explanation: "\"X\" == \"X\"", dependsOnChoices: true, ignored: false,
+            searched: false, attribute: null, operator: null, threshold: null
+        };
+        const STIFFNESS = {
+            id: "24253a34-a8ba-fc0a-0dba-e5e83d42bd5f", name: "REQ-STR-001", text: null, constraint: "subj.stiffness >= 30", satisfiedBy: "EOSat1::Architecture::eosat1::structure",
+            status: "NotEvaluated", explanation: "The value of 'stiffness' is missing.", dependsOnChoices: false, ignored: false, searched: false, attribute: null, operator: null,
+            threshold: null
+        };
+
+        /**
+         * Builds a study whose model holds the requirements, instead of a constraint of the request.
+         * @param {object} [values] The values that replace those of the study.
+         * @returns {object} The study.
+         */
+        function modelStudy(values) {
+            const first = study({ constraints: [], requirements: [MASS, BAND, STIFFNESS], otherRequirementCount: 4, ...values });
+            first.request.constraints = [];
+            first.request.ignoredRequirements = values?.ignoredRequirements ?? [];
+            return first;
+        }
+
+        /**
+         * Builds what a combination does to a requirement.
+         * @param {object} requirement The requirement.
+         * @param {string} status The status on the combination.
+         * @param {string} explanation The values compared.
+         * @returns {object} The outcome.
+         */
+        function outcome(requirement, status, explanation) {
+            return { name: requirement.name, satisfiedBy: requirement.satisfiedBy, status, explanation, changed: status !== requirement.status };
+        }
+
+        it("shows the requirements that an option breaks or that cannot be checked, with the reason, and counts those met", async () => {
+            const closest = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            closest.constraints = [];
+            closest.requirements = [
+                outcome(BAND, "NotSatisfied", "\"S\" != \"X\""),
+                outcome(STIFFNESS, "NotEvaluated", "The value of 'stiffness' is missing."),
+                outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]")
+            ];
+
+            await open(modelStudy({ best: [closest] }));
+
+            const tags = byId(page, "options").querySelectorAll(".tr-checks span");
+            assert.deepEqual(tags.map(tag => tag.className + ": " + tag.textContent), [
+                "tagv bad: ✗ REQ-COM-001 · \"S\" != \"X\"",
+                "tagv warn: ? REQ-STR-001 · The value of 'stiffness' is missing.",
+                "tagv ok: ✓ 1 requirement"
+            ]);
+            assert.equal(tags.at(-1).title, "REQ-SYS-001: 140.88 [kg] <= 150 [kg]");
+            assert.equal(byId(page, "closest").hidden, false);
+        });
+
+        it("does not say that the options come closest when the best one meets everything", async () => {
+            const best = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            best.requirements = [outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]"), outcome(BAND, "Satisfied", "\"X\" == \"X\"")];
+
+            await open(modelStudy({ best: [best] }));
+
+            assert.equal(byId(page, "closest").hidden, true);
+            assert.equal(byId(page, "options").querySelectorAll(".tr-checks span").at(-1).textContent, "✓ 2 requirements");
+        });
+
+        it("lists the requirements of the model with their state today, and a switch for those that a choice can change", async () => {
+            await open(modelStudy());
+
+            const target = byId(page, "requirements");
+            assert.equal(target.querySelector("h3").textContent, "Requirements of the model");
+            assert.deepEqual(target.querySelectorAll(".tr-constraint").map(line => line.textContent), [
+                "REQ-SYS-001broken todaysubj.mass * 1.2 <= 150 [kg]",
+                "REQ-COM-001met todaysubj.xBandTransmitter.band == \"X\" · checked on each combination",
+                "REQ-STR-001not checkedsubj.stiffness >= 30 · no choice changes it"
+            ]);
+            assert.deepEqual(target.querySelectorAll("input").map(input => input.dataset.key + ": " + input.checked), ["REQ-SYS-001: true", "REQ-COM-001: true"]);
+            assert.equal(target.querySelector("label").title, "The satellite shall weigh at most 150 kg.");
+            assert.equal(target.children.at(-1).textContent, "4 more hold today and do not depend on these choices.");
+        });
+
+        it("names the variant of a catalogue that the model takes, and marks it as current", async () => {
+            const first = modelStudy();
+            first.choices[0].variants[0] = { name: "wide", isCurrent: true, excluded: false, values: { mass: 18 } };
+
+            await open(first);
+
+            const labels = byId(page, "choices").querySelectorAll(".tr-variant").map(label => label.children[1].textContent);
+            assert.deepEqual(labels, ["wide (current)", "A", "B", "Current", "XT-low"]);
+        });
+
+        it("shows no requirement when the model has none to check", async () => {
+            await open(study());
+
+            assert.equal(byId(page, "requirements").children.length, 0);
+        });
+
+        it("runs the trade-off again without a requirement turned off, then with it again", async () => {
+            await open(modelStudy());
+
+            change(field(page, "requirement", "REQ-SYS-001"), { checked: false });
+            const without = lastArguments(page).ignoredRequirements;
+            change(field(page, "requirement", "REQ-SYS-001"), { checked: true });
+
+            assert.deepEqual(without, ["REQ-SYS-001"]);
+            assert.deepEqual(lastArguments(page).ignoredRequirements, []);
+            assert.equal(requests(page, "tools/call").every(call => call.params.name === "explore_trade_off"), true);
+        });
+
+        it("shows as turned off a requirement that the request ignores", async () => {
+            await open(modelStudy({ requirements: [{ ...MASS, ignored: true }, BAND], ignoredRequirements: ["REQ-SYS-001"] }));
+
+            assert.equal(field(page, "requirement", "REQ-SYS-001").checked, false);
+            assert.equal(field(page, "requirement", "REQ-COM-001").checked, true);
+        });
+
+        it("does not list among the excluded combinations one that is shown with the best", async () => {
+            const closest = combination(1, "current", "XT-low", [125.4, 220, -0.4, -7], 150.48);
+            closest.requirements = [outcome(MASS, "NotSatisfied", "150.48 [kg] > 150 [kg]")];
+
+            await open(modelStudy({ best: [closest] }));
+
+            assert.deepEqual(byId(page, "excluded").querySelectorAll("h3").map(heading => heading.textContent), ["Excluded (1)"]);
+        });
+
+        it("draws the limit of a requirement on the chart, unless it is turned off", async () => {
+            await open(modelStudy());
+            const drawn = byId(page, "legend").children.at(-1).textContent;
+
+            await open(modelStudy({ requirements: [{ ...MASS, ignored: true }] }));
+
+            assert.equal(drawn, "REQ-SYS-001 limit");
+            assert.equal(byId(page, "legend").children.length, 3);
+        });
+
+        it("tells the assistant the requirements that the option does not meet, the number of units and the requirements turned off", async () => {
+            const closest = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            closest.choices = chosen("A", "XT-low", 2);
+            closest.requirements = [outcome(BAND, "NotSatisfied", "\"S\" != \"X\""), outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]")];
+            await open(modelStudy({ best: [closest] }));
+            change(field(page, "requirement", "REQ-COM-001"), { checked: false });
+            await answerStudy(page, modelStudy({ best: [closest] }));
+
+            byId(page, "pick").querySelector("button").click();
+
+            const text = requests(page, "ui/message").at(-1).params.content[0].text;
+            assert.match(text, /variant XT-low × 2 \(mass 1\.2 kg, power 28\)/);
+            assert.match(text, /Requirements not met: REQ-COM-001 \("S" != "X"\)\./);
+            assert.match(text, /Settings changed in the view: REQ-COM-001 turned off\./);
+        });
+    });
+
+    describe("display", () => {
+        it("asks for the full screen when the host offers it, and offers the way back", async () => {
+            await answer(page, messages(page)[0], { hostContext: { theme: "light", displayMode: "inline", availableDisplayModes: ["inline", "fullscreen"] } });
+
+            const [ask] = requests(page, "ui/request-display-mode");
+            assert.equal(ask.params.mode, "fullscreen");
+            assert.equal(byId(page, "back").hidden, true);
+            await answer(page, ask, { mode: "fullscreen" });
+            assert.equal(byId(page, "view").classList.contains("full"), true);
+            assert.equal(byId(page, "back").hidden, false);
+
+            byId(page, "back").dispatch("click");
+            const back = requests(page, "ui/request-display-mode").at(-1);
+            assert.equal(back.params.mode, "inline");
+            await answer(page, back, { mode: "inline" });
+            assert.equal(byId(page, "view").classList.contains("full"), false);
+            assert.equal(byId(page, "back").hidden, true);
+
+            page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { displayMode: "fullscreen" } });
+            assert.equal(byId(page, "view").classList.contains("full"), true);
+        });
+
+        it("stays in the conversation when the host offers no full screen, and tells when the host refuses it", async () => {
+            await answer(page, messages(page)[0], { hostContext: { theme: "light", displayMode: "inline", availableDisplayModes: ["inline"] } });
+            const asked = requests(page, "ui/request-display-mode").length;
+
+            page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { availableDisplayModes: ["inline", "fullscreen"] } });
+            byId(page, "back").dispatch("click");
+            await answer(page, requests(page, "ui/request-display-mode").at(-1), undefined, { code: -32000, message: "Not now" });
+
+            assert.equal(asked, 0);
+            assert.equal(byId(page, "view").classList.contains("full"), false);
+            assert.equal(byId(page, "error").textContent, "Not now");
         });
     });
 });

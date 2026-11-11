@@ -26,5 +26,12 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// For the problem, or for each compared alternative, that has no combination: the constraints and rules that cannot be
     /// respected together, each written after its alternative when a choice is compared.
     /// </param>
-    public sealed record TradeOffResult(TradeOffStatus Status, TradeOffCombination Current, IReadOnlyList<TradeOffCombination> Combinations, IReadOnlyList<string> Conflicts);
+    public sealed record TradeOffResult(TradeOffStatus Status, TradeOffCombination Current, IReadOnlyList<TradeOffCombination> Combinations, IReadOnlyList<string> Conflicts)
+    {
+        /// <summary>
+        /// Gets the requirements of the model that the server checks on every combination, as they are in the current state:
+        /// those that the choices can change, those that do not hold today, and those that the user turned off.
+        /// </summary>
+        public IReadOnlyList<TradeOffStudyRequirement> Requirements { get; init; } = [];
+    }
 }

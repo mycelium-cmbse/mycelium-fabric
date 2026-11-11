@@ -28,7 +28,8 @@ namespace Mycelium.Fabric.Mcp.Expressions
     /// Gives the values of the model to the evaluation of the constraints of a requirement: the subject of the requirement
     /// stands for the part that satisfies it, and the value of an attribute of a part is its own value, or else the sum of
     /// the values of its sub-parts, as <c>sum_attribute</c> computes it. It records these sums, so that the checker knows
-    /// which values a constraint depends on.
+    /// which values a constraint depends on. A part that takes a variant of a catalogue stands for this variant. With an
+    /// <see cref="IPartSelection"/>, the values are those of one combination of a trade-off instead of those of the model.
     /// </summary>
     public sealed class ModelEvaluationContext : IEvaluationContext
     {
@@ -48,6 +49,16 @@ namespace Mycelium.Fabric.Mcp.Expressions
         private readonly ValueOverride valueOverride;
 
         /// <summary>
+        /// What some parts hold in the combination that is evaluated, or <c>null</c> to evaluate the model as it is.
+        /// </summary>
+        private readonly IPartSelection selection;
+
+        /// <summary>
+        /// The <c>Id</c>s of the parts whose content the combination decides and that the evaluation has read.
+        /// </summary>
+        private readonly HashSet<Guid> readPartIds = [];
+
+        /// <summary>
         /// The sums computed by the evaluation.
         /// </summary>
         private readonly List<RollUp> rollUps = [];
@@ -63,17 +74,27 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <param name="subject">The subject of the requirement, or <c>null</c>.</param>
         /// <param name="satisfyingFeature">The part that satisfies the requirement, or <c>null</c>.</param>
         /// <param name="valueOverride">The simulated value of an attribute for one part, or <c>null</c>.</param>
-        public ModelEvaluationContext(IFeature subject, IFeature satisfyingFeature, ValueOverride valueOverride = null)
+        /// <param name="selection">
+        /// What some parts hold in the combination to evaluate, or <c>null</c> to evaluate the model as it is.
+        /// </param>
+        public ModelEvaluationContext(IFeature subject, IFeature satisfyingFeature, ValueOverride valueOverride = null, IPartSelection selection = null)
         {
             this.subject = subject;
             this.satisfyingFeature = satisfyingFeature;
             this.valueOverride = valueOverride;
+            this.selection = selection;
         }
 
         /// <summary>
         /// Gets the sums computed by the evaluation, in order.
         /// </summary>
         public IReadOnlyList<RollUp> RollUps => this.rollUps;
+
+        /// <summary>
+        /// Gets the <c>Id</c>s of the parts whose content the combination decides and that the evaluation has read: its
+        /// result only depends on what these parts hold.
+        /// </summary>
+        public IReadOnlySet<Guid> ReadPartIds => this.readPartIds;
 
         /// <summary>
         /// Gets the value of a referenced feature: the satisfying part for the subject, an enumeration value, the value of an
@@ -95,6 +116,12 @@ namespace Mycelium.Fabric.Mcp.Expressions
             if (IsEnumerationValue(feature))
             {
                 return new EnumValue(feature.DeclaredName, feature.qualifiedName);
+            }
+
+            // A part that takes a variant of a catalogue stays the part: its features are read through the variant.
+            if (feature is not IAttributeUsage && feature.GetVariants().Count > 0)
+            {
+                return new PartValue(feature);
             }
 
             if (TermReader.GetValueExpression(feature) is { } valueExpression)
@@ -132,7 +159,19 @@ namespace Mycelium.Fabric.Mcp.Expressions
         {
             ArgumentNullException.ThrowIfNull(part);
 
-            var candidates = (part.Feature.feature ?? []).Where(candidate => candidate.DeclaredName == featureName).ToList();
+            if (this.selection?.GetGivenValue(part.Feature, featureName, this.readPartIds) is { } givenValue)
+            {
+                return givenValue;
+            }
+
+            var holder = this.Resolve(part.Feature);
+
+            if (holder.IsError)
+            {
+                return holder.Errors;
+            }
+
+            var candidates = (holder.Value.feature ?? []).Where(candidate => candidate.DeclaredName == featureName).ToList();
 
             var members = candidates
                 .Where(candidate => !candidates.Exists(other => (other.ownedRedefinition ?? []).Any(redefinition => redefinition.RedefinedFeature?.Id == candidate.Id)))
@@ -200,7 +239,14 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <returns>The value, or an error when a value is missing or when no part under the part has a numeric value for it.</returns>
         private ErrorOr<ModelValue> RollUp(IFeature part, string attributeName)
         {
-            var values = part.CollectValues(attributeName);
+            var collectedValues = this.selection == null ? part.CollectValues(attributeName) : this.selection.CollectValues(part, attributeName, this.readPartIds);
+
+            if (collectedValues.IsError)
+            {
+                return collectedValues.Errors;
+            }
+
+            var values = collectedValues.Value;
 
             var missingValues = values.MissingValues.Where(missingValue => missingValue.Multiplicity == null).ToList();
             var uncountedParts = values.MissingValues.Where(missingValue => missingValue.Multiplicity != null).ToList();
@@ -242,6 +288,19 @@ namespace Mycelium.Fabric.Mcp.Expressions
             this.rollUps.Add(new RollUp(part, attributeName, total.Value, contributions, totalWithoutMargins));
 
             return total.Value;
+        }
+
+        /// <summary>
+        /// Gets the feature whose features stand for those of a part: the variant of a catalogue that the part takes, in the
+        /// combination or in the model, or the part itself.
+        /// </summary>
+        /// <param name="part">The part.</param>
+        /// <returns>The feature to navigate, or an error when the part is not in the combination.</returns>
+        private ErrorOr<IFeature> Resolve(IFeature part)
+        {
+            return this.selection == null
+                ? ErrorOrFactory.From<IFeature>(part.GetChosenVariant() ?? part)
+                : this.selection.Resolve(part, this.readPartIds);
         }
     }
 }

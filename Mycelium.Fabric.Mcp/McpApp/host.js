@@ -115,5 +115,37 @@ function initializeView(name) {
     });
 }
 
+/**
+ * Follows the display mode of a view that prefers the full screen: keeps what the host says about the display, asks for the
+ * full screen when the host offers it, and tells the view each mode that the host gives.
+ * @param {function(string): void} onMode Called with the display mode, fullscreen or inline, each time the host gives one.
+ * @param {function(object): void} onError Called with the error when the host refuses to change the display.
+ * @returns {{onHostContext: function(object): void, ask: function(string): void, askFullscreen: function(): void}} What takes
+ * the context of the host, asks for a mode, and asks for the full screen when the host offers it and the view is not in it.
+ */
+function followDisplayMode(onMode, onError) {
+    let mode = "inline";
+    let modes = [];
+    const show = given => {
+        mode = given;
+        onMode(given);
+    };
+    const ask = wanted => {
+        request("ui/request-display-mode", { mode: wanted })
+            .then(result => show(result?.mode ?? mode))
+            .catch(onError);
+    };
+    return {
+        onHostContext(context) {
+            if (context?.availableDisplayModes) modes = context.availableDisplayModes;
+            if (context?.displayMode) show(context.displayMode);
+        },
+        ask,
+        askFullscreen() {
+            if (modes.includes("fullscreen") && mode !== "fullscreen") ask("fullscreen");
+        }
+    };
+}
+
 // In the tests, Node loads the scripts as modules: the functions become global, as a classic script makes them in the page.
-if (typeof module !== "undefined") Object.assign(globalThis, { send, notify, request, listenToHost, applyTheme, sendSize, initializeView });
+if (typeof module !== "undefined") Object.assign(globalThis, { send, notify, request, listenToHost, applyTheme, sendSize, initializeView, followDisplayMode });

@@ -13,12 +13,29 @@ let study = null;
 let state = null;
 
 /**
- * Starts the talk with the host (host.js). Shows why when the host refuses. Not async: the page is a classic script, where a
- * call at the top level cannot be awaited.
+ * Starts the talk with the host (host.js), then asks for the full screen when the host offers it. Shows why when the host
+ * refuses. Not async: the page is a classic script, where a call at the top level cannot be awaited.
  */
 function start() {
-    initializeView("trade-off").catch(error => showError(error?.message ?? "The host did not start the view."));
+    initializeView("trade-off")
+        .then(context => {
+            display.onHostContext(context);
+            display.askFullscreen();
+        })
+        .catch(error => showError(error?.message ?? "The host did not start the view."));
 }
+
+/**
+ * Lays the view out for a display mode: in full screen it fills the frame, and the link goes back to the conversation.
+ * @param {string} mode The display mode given by the host.
+ */
+function showDisplayMode(mode) {
+    $("view").classList.toggle("full", mode === "fullscreen");
+    $("back").hidden = mode !== "fullscreen";
+}
+
+// The display mode of the view, which asks for the full screen when the host offers it (host.js).
+const display = followDisplayMode(showDisplayMode, error => showError(error?.message ?? "The host did not change the display."));
 
 /**
  * Creates an element.
@@ -139,7 +156,7 @@ function titleOf(study) {
 const STATUS_TEXT = {
     Optimal: "best options found",
     Feasible: "good options found, maybe not the best",
-    Infeasible: "no combination meets the constraints",
+    Infeasible: "the rules leave no combination",
     Unknown: "the solver stopped before finding an answer"
 };
 
@@ -161,6 +178,9 @@ function onFirstStudy(result) {
         excluded: new Set(first.request.excluded ?? []),
         objectives: first.request.objectives.map(objective => ({ ...objective })),
         constraints: first.request.constraints.map(constraint => ({ ...constraint, enabled: true })),
+        requirements: first.requirements ?? [],
+        otherRequirementCount: first.otherRequirementCount ?? 0,
+        ignored: new Set(first.request.ignoredRequirements ?? []),
         selected: 1,
         lastCall: 0
     };
@@ -207,18 +227,40 @@ function drawHeader(study) {
 function drawOptions(study) {
     const target = $("options");
     target.replaceChildren();
-    $("today").textContent = "vs today: " + study.current.totals.map(total => withUnit(total.total, total.attribute)).join(" · ");
+    $("today").textContent = "vs today: " + study.current.totals.map(total => labelOf(total, study.current.totals) + withUnit(total.total, total.attribute)).join(" · ");
+    $("closest").hidden = study.best.length === 0 || countUnmet(study.best[0]) === 0;
 
     study.best.forEach((option, index) => {
         const number = index + 1;
         const card = el("div", number === state.selected ? "tr-option on" : "tr-option");
         card.dataset.option = number;
         const body = el("div");
-        body.append(el("div", "tr-name", describe(option.choices)), drawTotals(option.totals), drawChecks(option.constraints));
+        body.append(el("div", "tr-name", describe(option.choices)), drawTotals(option.totals), drawChecks(option.constraints, option.requirements ?? []));
         card.append(el("span", "tr-rank n" + option.rank, number), body);
         target.append(card);
     });
-    if (study.best.length === 0) target.append(el("div", "tr-empty", "No combination meets the constraints."));
+    if (study.best.length === 0) target.append(el("div", "tr-empty", "The rules leave no combination."));
+}
+
+/**
+ * Counts what a combination does not meet: the constraints that it breaks and the requirements of the model that do not
+ * hold on it, or that the server cannot check.
+ * @param {object} option The combination.
+ * @returns {number} The number of constraints and requirements not met.
+ */
+function countUnmet(option) {
+    return option.constraints.filter(check => !check.satisfied).length + (option.requirements ?? []).filter(requirement => requirement.status !== "Satisfied").length;
+}
+
+/**
+ * Writes the name of a total before its value when the totals are more than two: two totals read in the order of the
+ * objectives, more do not.
+ * @param {object} total The total.
+ * @param {object[]} totals The totals shown together.
+ * @returns {string} The name followed by a space, or nothing.
+ */
+function labelOf(total, totals) {
+    return totals.length > 2 ? total.attribute + " " : "";
 }
 
 /**
@@ -230,7 +272,7 @@ function drawTotals(totals) {
     const line = el("div", "tr-totals");
     totals.forEach((total, index) => {
         if (index > 0) line.append(" · ");
-        line.append(withUnit(total.total, total.attribute) + " ", drawDifference(total));
+        line.append(labelOf(total, totals) + withUnit(total.total, total.attribute) + " ", drawDifference(total));
     });
     return line;
 }
@@ -248,16 +290,28 @@ function drawDifference(total) {
 }
 
 /**
- * Draws the constraints of a combination, met or not, with the compared value and the limit.
+ * Draws the constraints of a combination, met or not, with the compared value and the limit, then the requirements of the
+ * model: each one that the combination breaks or that the server cannot check, with the reason, and the number of those met.
  * @param {object[]} constraints The checks of the constraints.
+ * @param {object[]} requirements What the combination does to the requirements of the model.
  * @returns {HTMLElement} The line of checks.
  */
-function drawChecks(constraints) {
+function drawChecks(constraints, requirements) {
     const line = el("div", "tr-checks");
     for (const check of constraints) {
         let text = (check.satisfied ? "✓ " : "✗ ") + (check.name ?? check.constraint);
         if (check.value != null) text += " · " + formatNumber(check.value) + " / " + formatNumber(check.limit);
         line.append(el("span", check.satisfied ? "tagv ok" : "tagv bad", text));
+    }
+    for (const requirement of requirements.filter(outcome => outcome.status !== "Satisfied")) {
+        const broken = requirement.status === "NotSatisfied";
+        line.append(el("span", broken ? "tagv bad" : "tagv warn", (broken ? "✗ " : "? ") + requirement.name + " · " + requirement.explanation));
+    }
+    const met = requirements.filter(outcome => outcome.status === "Satisfied");
+    if (met.length > 0) {
+        const tag = el("span", "tagv ok", "✓ " + met.length + (met.length === 1 ? " requirement" : " requirements"));
+        tag.title = met.map(outcome => outcome.name + ": " + outcome.explanation).join("\n");
+        line.append(tag);
     }
     return line;
 }
@@ -269,7 +323,8 @@ function drawChecks(constraints) {
 function drawExcluded(study) {
     const target = $("excluded");
     target.replaceChildren();
-    const rejected = study.points.filter(point => !point.feasible);
+    const shown = new Set(study.best.map(option => keyOf(option.choices)));
+    const rejected = study.points.filter(point => !point.feasible && !shown.has(keyOf(point.choices)));
     if (rejected.length > 0) {
         target.append(el("h3", null, "Excluded (" + rejected.length + ")"));
         const list = el("div", "tr-scroll");
@@ -395,7 +450,8 @@ function drawChart(study) {
     const today = totalsByName(study.current.totals);
     const xs = [today[xName], ...study.points.map(point => point.totals[xName])];
     const ys = [today[yName], ...study.points.map(point => point.totals[yName])];
-    const limits = study.constraints.filter(c => c.threshold != null && (c.attribute === xName || c.attribute === yName));
+    const limits = [...study.constraints, ...(study.requirements ?? []).filter(requirement => !requirement.ignored)]
+        .filter(limit => limit.threshold != null && (limit.attribute === xName || limit.attribute === yName));
     for (const limit of limits) (limit.attribute === xName ? xs : ys).push(limit.threshold);
     const x = makeScale(xs, BOX.left, BOX.right);
     const y = makeScale(ys, BOX.bottom, BOX.top);
@@ -443,7 +499,7 @@ function drawLegend(limits) {
         span.append(el("i", className), text);
         return span;
     };
-    $("legend").replaceChildren(item("best", "Best options"), item("ok", "Meets the constraints"), item("bad", "Breaks a constraint or rule"));
+    $("legend").replaceChildren(item("best", "Best options"), item("ok", "Meets everything"), item("bad", "Breaks a requirement, a constraint or a rule"));
     for (const limit of limits) $("legend").append(item("limit", (limit.name ?? limit.attribute) + " limit"));
 }
 
@@ -509,6 +565,51 @@ function drawSetup(state) {
     drawChoices(state);
     drawObjectives(state);
     drawConstraints(state);
+    drawRequirements(state);
+}
+
+// How the state of a requirement today is shown: the class of its tag and its text.
+const REQUIREMENT_STATES = {
+    Satisfied: ["tagv ok", "met today"],
+    NotSatisfied: ["tagv bad", "broken today"]
+};
+
+/**
+ * Draws the requirements of the model that the server checks on every combination: each one with its state today and its
+ * constraint, and a switch that turns it off when a choice can change it.
+ * @param {object} state The settings of the view.
+ */
+function drawRequirements(state) {
+    const target = $("requirements");
+    target.replaceChildren();
+    if (state.requirements.length === 0 && state.otherRequirementCount === 0) return;
+    target.append(el("h3", null, "Requirements of the model"));
+    for (const requirement of state.requirements) {
+        const label = el("label");
+        if (requirement.dependsOnChoices || requirement.ignored) {
+            const toggle = el("input", "tr-switch");
+            toggle.type = "checkbox";
+            toggle.role = "switch";
+            toggle.checked = !state.ignored.has(requirement.name);
+            toggle.dataset.kind = "requirement";
+            toggle.dataset.key = requirement.name;
+            label.append(toggle);
+        }
+        const [className, text] = REQUIREMENT_STATES[requirement.status] ?? ["tagv warn", "not checked"];
+        label.append(el("span", null, requirement.name), el("span", className, text));
+        label.title = requirement.text ?? "";
+
+        let detail = requirement.constraint ?? "";
+        if (!requirement.dependsOnChoices) detail += " · no choice changes it";
+        else if (!requirement.searched) detail += " · checked on each combination";
+
+        const line = el("div", "tr-constraint");
+        line.append(label, el("div", "tr-limits", detail));
+        target.append(line);
+    }
+    if (state.otherRequirementCount > 0) {
+        target.append(el("div", "tr-note", state.otherRequirementCount + " more hold today and do not depend on these choices."));
+    }
 }
 
 /**
@@ -531,10 +632,20 @@ function drawChoices(state) {
             box.dataset.kind = "variant";
             box.dataset.key = key;
             const label = el("label", "tr-variant");
-            label.append(box, el("span", null, variant.isCurrent ? "Current" : variant.name), el("span", "tr-values", valuesText(variant.values)));
+            label.append(box, el("span", null, variantLabel(variant)), el("span", "tr-values", valuesText(variant.values)));
             target.append(label);
         }
     }
+}
+
+/**
+ * Names a variant in the set-up: the variant of a catalogue that the model takes keeps its name, marked as current.
+ * @param {object} variant The variant.
+ * @returns {string} The name shown.
+ */
+function variantLabel(variant) {
+    if (!variant.isCurrent) return variant.name;
+    return variant.name === "current" ? "Current" : variant.name + " (current)";
 }
 
 /**
@@ -623,6 +734,9 @@ function onSetupChange(event) {
     if (kind === "variant") {
         if (input.checked) state.excluded.delete(input.dataset.key);
         else state.excluded.add(input.dataset.key);
+    } else if (kind === "requirement") {
+        if (input.checked) state.ignored.delete(input.dataset.key);
+        else state.ignored.add(input.dataset.key);
     } else if (kind === "enabled") {
         state.constraints[Number(input.dataset.key)].enabled = input.checked;
     } else if (kind === "limit" || kind === "margin") {
@@ -732,7 +846,8 @@ function buildArguments(state) {
         ...state.request,
         objectives: state.objectives,
         constraints: state.constraints.filter(c => c.enabled).map(({ enabled, ...constraint }) => constraint),
-        excluded: [...state.excluded]
+        excluded: [...state.excluded],
+        ignoredRequirements: [...state.ignored]
     };
 }
 
@@ -824,10 +939,13 @@ function buildMessage(option) {
     for (const choice of option.choices.filter(c => c.changed)) {
         const variant = state.choices.find(c => c.name === choice.choice).variants.find(v => v.name === choice.variant);
         const values = Object.entries(variant.values).map(([attribute, value]) => attribute + " " + withUnit(value, attribute));
-        lines.push("- " + choice.choice + " (part " + choice.partId + "): variant " + choice.variant + " (" + values.join(", ") + ")");
+        const units = choice.quantity === 1 ? "" : " × " + choice.quantity;
+        lines.push("- " + choice.choice + " (part " + choice.partId + "): variant " + choice.variant + units + " (" + values.join(", ") + ")");
     }
     const totals = option.totals.map(t => t.attribute + " " + withUnit(t.total, t.attribute) + " (" + signed(t.difference) + ")");
     lines.push("Totals: " + totals.join(", ") + ".");
+    const unmet = (option.requirements ?? []).filter(outcome => outcome.status !== "Satisfied").map(outcome => outcome.name + " (" + outcome.explanation + ")");
+    if (unmet.length > 0) lines.push("Requirements not met: " + unmet.join("; ") + ".");
     const changes = describeSettings(state);
     if (changes.length > 0) lines.push("Settings changed in the view: " + changes.join("; ") + ".");
     lines.push("Prepare the batch with apply_changes.");
@@ -840,7 +958,7 @@ function buildMessage(option) {
  * @returns {string[]} The changes, for example "camera.A turned off".
  */
 function describeSettings(state) {
-    const changes = [...state.excluded].map(key => key + " turned off");
+    const changes = [...state.excluded, ...state.ignored].map(key => key + " turned off");
     const order = state.objectives.map(o => o.attribute).join(", ");
     if (order !== state.request.objectives.map(o => o.attribute).join(", ")) changes.push("objectives in order: " + order);
     state.constraints.forEach((constraint, index) => {
@@ -886,6 +1004,7 @@ async function sendChoice(option, button, note) {
 // The events of the view: settings changed, objectives dragged or moved with the keys, options clicked in the list or on
 // the chart, and the size of the page.
 $("setup").addEventListener("change", onSetupChange);
+$("back").addEventListener("click", () => display.ask("inline"));
 $("objectives").addEventListener("pointerdown", onObjectiveGrab);
 $("objectives").addEventListener("pointermove", onObjectiveDrag);
 $("objectives").addEventListener("pointerup", onObjectiveDrop);
@@ -893,6 +1012,6 @@ $("objectives").addEventListener("pointercancel", onObjectiveDrop);
 $("objectives").addEventListener("keydown", onObjectiveKey);
 $("options").addEventListener("click", onOptionClick);
 $("chart").addEventListener("click", onOptionClick);
-listenToHost(onFirstStudy);
+listenToHost(onFirstStudy, display.onHostContext);
 new ResizeObserver(sendSize).observe(document.body);
 start();

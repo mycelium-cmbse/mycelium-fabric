@@ -5,6 +5,8 @@
 }
 
 .tr { padding: 14px 16px; }
+.tr.full { min-height: 100vh; display: flex; flex-direction: column; }
+.tr.full .tr-grid { flex: 1; }
 .tr-title { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
 .tr-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .tr-error { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--danger-bg); color: var(--danger); font-size: 12px; }

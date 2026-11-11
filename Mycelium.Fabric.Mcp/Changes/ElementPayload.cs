@@ -95,6 +95,22 @@ namespace Mycelium.Fabric.Mcp.Changes
         public string Multiplicity { get; init; }
 
         /// <summary>
+        /// Gets a value indicating whether the created part definition is a catalogue of variants (a variation definition).
+        /// </summary>
+        [Description("Create, for a PartDefinition: true makes it a catalogue of variants (variation part def BatteryOptions :> Battery). A catalogue only owns its variants: "
+            + "create each variant as a PartUsage whose owner is the catalogue, with its own attribute values. "
+            + "The multiplicity of a variant is the number of units that a trade-off may take of it ('1..4', or '0..1' for optional equipment); without multiplicity, the number of units does not change.")]
+        public bool? IsVariation { get; init; }
+
+        /// <summary>
+        /// Gets the variant that the part takes among the variants of the catalogue that types it.
+        /// </summary>
+        [Description("Create or update, for a part whose definition is a catalogue (a PartDefinition with isVariation): the variant that it takes (part battery : BatteryOptions = BatteryOptions::liIon40), "
+            + "by its name in the catalogue, its identifier (Id) or its temporary name. sum_attribute, check_requirements and solve_trade_off then count the values of this variant, "
+            + "times the multiplicity of the part. An update replaces the variant taken.")]
+        public string Variant { get; init; }
+
+        /// <summary>
         /// Gets the requirement that the created <c>SatisfyRequirementUsage</c> satisfies.
         /// </summary>
         [Description("Create, for a SatisfyRequirementUsage: the satisfied requirement, as an identifier (Id) or a temporary name. Without owner, the satisfy link is created next to the requirement.")]

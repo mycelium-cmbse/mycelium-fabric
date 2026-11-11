@@ -45,5 +45,18 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(() => ((TradeOffOperator)99).ToOppositeSymbol(), Throws.TypeOf<ArgumentOutOfRangeException>());
             }
         }
+
+        [Test]
+        public void VerifyToSwapped()
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(TradeOffOperator.LessThan.ToSwapped(), Is.EqualTo(TradeOffOperator.GreaterThan));
+                Assert.That(TradeOffOperator.LessThanOrEqual.ToSwapped(), Is.EqualTo(TradeOffOperator.GreaterThanOrEqual));
+                Assert.That(TradeOffOperator.GreaterThan.ToSwapped(), Is.EqualTo(TradeOffOperator.LessThan));
+                Assert.That(TradeOffOperator.GreaterThanOrEqual.ToSwapped(), Is.EqualTo(TradeOffOperator.LessThanOrEqual));
+                Assert.That(TradeOffOperator.Equal.ToSwapped(), Is.EqualTo(TradeOffOperator.Equal));
+            }
+        }
     }
 }

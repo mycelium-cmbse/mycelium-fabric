@@ -12,6 +12,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using System;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
@@ -94,6 +95,53 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             }
 
             return part;
+        }
+
+        [Test]
+        public void VerifyGetVariantsAndGetChosenVariant()
+        {
+            var parts = OrbiterChangesHelper.CreateModel().Elements.OfType<IPartUsage>().ToList();
+            var engine = parts.Single(part => part.qualifiedName == "Orbiter::orbiter::propulsion::engine");
+            var structure = parts.Single(part => part.DeclaredName == "structure");
+            var thermal = parts.Single(part => part.qualifiedName == "Orbiter::Catalogues::EngineOptions::thermal");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IFeature)null).GetVariants(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(engine.GetVariants().Select(variant => variant.DeclaredName), Is.EqualTo(["thermal", "electric"]));
+                Assert.That(engine.GetChosenVariant(), Is.SameAs(thermal));
+                Assert.That(structure.GetVariants(), Is.Empty);
+                Assert.That(structure.GetChosenVariant(), Is.Null);
+                Assert.That(thermal.GetTypeNames(), Is.EqualTo(["EngineOptions"]));
+                Assert.That(thermal.GetVariants(), Is.Empty);
+                Assert.That(thermal.GetChosenVariant(), Is.Null);
+            }
+        }
+
+        [Test]
+        public void VerifyGetUnitRange()
+        {
+            var modelProvider = OrbiterChangesHelper.CreateModel();
+
+            var result = modelProvider.ApplyChanges(
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = OrbiterChangesHelper.OrbiterName, Name = "spares", Multiplicity = "0..*" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = OrbiterChangesHelper.OrbiterName, Name = "antennas", Multiplicity = "*" } }
+            ]);
+
+            var parts = modelProvider.Elements.OfType<IPartUsage>().ToDictionary(part => part.qualifiedName);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True, string.Join(" ", result.Problems));
+                Assert.That(() => ((IFeature)null).GetUnitRange(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(parts["Orbiter::Catalogues::BatteryOptions::liIon150"].GetUnitRange(), Is.EqualTo((1, (int?)4)));
+                Assert.That(parts["Orbiter::Catalogues::TankOptions::small"].GetUnitRange(), Is.EqualTo((0, (int?)1)));
+                Assert.That(parts["Orbiter::orbiter::powerSystem::solarPanel"].GetUnitRange(), Is.EqualTo((2, (int?)2)));
+                Assert.That(parts["Orbiter::orbiter::spares"].GetUnitRange(), Is.EqualTo((0, (int?)null)));
+                Assert.That(parts["Orbiter::orbiter::antennas"].GetUnitRange(), Is.EqualTo((0, (int?)null)));
+                Assert.That(parts["Orbiter::Catalogues::EngineOptions::thermal"].GetUnitRange(), Is.Null);
+            }
         }
     }
 }

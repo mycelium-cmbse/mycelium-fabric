@@ -90,6 +90,8 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="count">The number of combinations to return, from the best, for each alternative.</param>
         /// <param name="title">The short title of the trade-off, shown by its view, or <c>null</c>.</param>
         /// <param name="server">The <see cref="McpServer"/> of the request, which tells what the host can show.</param>
+        /// <param name="excluded">The variants that no combination takes, written <c>choice.variant</c>, or <c>null</c> for none.</param>
+        /// <param name="ignoredRequirements">The requirements of the model that are not checked, or <c>null</c> for none.</param>
         /// <returns>
         /// The <see cref="CallToolResult"/>: for the AI assistant, the <see cref="TradeOffResult"/> in JSON; for the view, when the
         /// host shows MCP Apps, the <see cref="TradeOffStudy"/> as structured content, with the best combinations overall (without
@@ -101,8 +103,12 @@ namespace Mycelium.Fabric.Mcp.Tools
         [McpServerTool(Name = "solve_trade_off", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
         [McpAppUi(ResourceUri = TradeOffResource.Uri)]
         [Description("Finds, with a constraint solver, the best combinations of equipment for what matters to the user (the lightest, the least power hungry...), "
-            + "with or without budgets. Use it to compare options (which engine, which camera, how many solar panels) instead of searching yourself. "
-            + "First read the current parts and values (sum_attribute, get_attribute_values) and ask the user for the candidate variants and their values. "
+            + "and checks each one against the requirements of the model. Use it to compare options (which engine, which camera, how many solar panels) instead of searching yourself. "
+            + "The server reads from the model what it holds: every part under the root that is typed by a catalogue of variants is a choice "
+            + "(its variants, and the number of units that the multiplicity of a variant allows), and every requirement with a value to check is checked on every combination, "
+            + "so that all the consequences of a choice are followed (an electric engine needs more battery and more solar panels, a thermal one a tank). "
+            + "Often rootId and compareBy are enough. Give choices only for what the model does not hold: "
+            + "read the current parts and values (sum_attribute, get_attribute_values) and ask the user for the candidate variants and their values. "
             + "A choice is an existing part (partId; its sub-parts follow it) or equipment to add (name), and takes exactly one variant: "
             + "'current' (an existing part as it is) or 'none' (equipment not added) is added by the server, 'none' on an existing part removes it, "
             + "and a variant may be taken several times (minQuantity, maxQuantity). "
@@ -111,27 +117,38 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "in the unit of the first part that has one; a value or a limit may be given in another unit of the same dimension (units, unit: 500 g, 2 kg), the server converts it. "
             + "Objectives are optimized in their order of priority, then the fewest changes. To compare alternatives (thermal against electric), "
             + "give compareBy: each variant of this choice then gets its own best combination, with all its consequences. "
+            + "When no combination meets every requirement and constraint, the closest ones are returned: those that break the fewest, then those that pass the limits the least. "
+            + "Each combination lists the requirements that the choices can change, with their status (NotSatisfied, or NotEvaluated when the server cannot tell, "
+            + "which never counts as met): always tell the user which ones a combination does not meet. "
             + "The host may also show the result in a view, where the user changes the settings and may send you the combination they choose. "
-            + "Nothing is modified: present the combinations, let the user choose, then use apply_changes.")]
+            + "Nothing is modified: present the combinations, let the user choose, then use apply_changes (for a part of a catalogue: its variant and its multiplicity).")]
         [return: Description("The status, the current state and the best combinations (the compared alternative, the variant of each choice, the totals with their "
-            + "difference from the current state, and each constraint with its compared value, its limit and whether it is met), "
-            + "and the constraints and rules that conflict when no combination exists.")]
+            + "difference from the current state, each constraint with its compared value, its limit and whether it is met, and each requirement of the model "
+            + "that the choices can change, with its status and the values compared), the requirements of the model as they are today, "
+            + "and the rules that conflict when they leave no combination.")]
         public CallToolResult SolveTradeOff(
             [Description("The identifier (Id, a GUID) of the element under which the totals are computed, for example the satellite.")] Guid rootId,
-            [Description("The choices to make: existing parts or equipment to add, each with its variants.")] IReadOnlyList<TradeOffChoice> choices,
+            [Description("Optional: the choices that the model does not hold, existing parts or equipment to add, each with its variants. "
+                + "A part typed by a catalogue of the model is a choice without being given: give it only to add variants to those of the catalogue.")] IReadOnlyList<TradeOffChoice> choices = null,
             [Description("Optional: what matters to the user, by order of priority, for example the lowest mass, then the lowest power. "
-                + "Without objective: the combination closest to the current state that meets the constraints.")] IReadOnlyList<TradeOffObjective> objectives = null,
-            [Description("Optional: the budgets that every combination meets, for example mass <= 150 with a margin of 20 %, or power <= powerOutput.")] IReadOnlyList<TradeOffConstraint> constraints = null,
+                + "Without objective: the combination closest to the current state that meets the requirements and the constraints.")] IReadOnlyList<TradeOffObjective> objectives = null,
+            [Description("Optional: budgets that the model does not hold as requirements, for example mass <= 150 with a margin of 20 %, or power <= powerOutput. "
+                + "Do not repeat the requirements of the model: the server already checks them.")] IReadOnlyList<TradeOffConstraint> constraints = null,
             [Description("Optional: the dependencies between variants of different choices, for example propulsion.thermal requires fuelTank.small or fuelTank.large.")] IReadOnlyList<TradeOffRule> rules = null,
             [Description("Optional: the name of a choice whose variants are compared, for example 'propulsion': each variant gets its own best combinations, "
                 + "or the conflicts that make it impossible.")] string compareBy = null,
             [Description("Optional, 1 by default: the number of combinations to return, from 1 to 5, for each compared variant.")] int count = 1,
             [Description("Optional: a short title for the view of the trade-off, for example 'Camera and X-band transmitter'.")] string title = null,
-            [Description("Bound by the SDK to the server that receives the call, not part of the tool schema.")] McpServer server = null)
+            [Description("Bound by the SDK to the server that receives the call, not part of the tool schema.")] McpServer server = null,
+            [Description("Optional: the variants that no combination takes, written choice.variant, for example ['engine.thermal'], "
+                + "to keep a choice of the model as it is or to leave a variant out.")] IReadOnlyList<string> excluded = null,
+            [Description("Optional: the requirements of the model that the user wants to leave out of this trade-off, by identifier, for example ['REQ-SYS-001']. "
+                + "Only on the user's request: by default every requirement is checked.")] IReadOnlyList<string> ignoredRequirements = null)
         {
-            var request = new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, null, title);
+            var request = new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, excluded, title, ignoredRequirements);
             var study = this.CreateStudy(request);
-            var resultText = JsonSerializer.Serialize(new TradeOffResult(study.Status, study.Current, study.Best, study.Conflicts), McpJsonUtilities.DefaultOptions);
+            var result = new TradeOffResult(study.Status, study.Current, study.Best, study.Conflicts) { Requirements = study.Requirements };
+            var resultText = JsonSerializer.Serialize(result, McpJsonUtilities.DefaultOptions);
             var toolResult = new CallToolResult { Content = [new TextContentBlock { Text = resultText }] };
 
             if (this.appHostDetector.ShowsApps(server?.ClientCapabilities))
@@ -157,6 +174,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="count">The number of combinations to return, from the best, for each alternative.</param>
         /// <param name="excluded">The variants turned off by the user, written <c>choice.variant</c>, or <c>null</c> for none.</param>
         /// <param name="title">The short title of the trade-off, or <c>null</c>.</param>
+        /// <param name="ignoredRequirements">The requirements of the model turned off by the user, or <c>null</c> for none.</param>
         /// <returns>The <see cref="TradeOffStudy"/> with these settings.</returns>
         /// <exception cref="McpException">
         /// Thrown when the settings are invalid, with a message that the view shows to the user.
@@ -168,16 +186,17 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "and a point for every combination.")]
         public TradeOffStudy ExploreTradeOff(
             [Description("The identifier (Id, a GUID) of the element under which the totals are computed.")] Guid rootId,
-            [Description("The choices to make, as in solve_trade_off.")] IReadOnlyList<TradeOffChoice> choices,
+            [Description("Optional: the choices that the model does not hold, as in solve_trade_off.")] IReadOnlyList<TradeOffChoice> choices = null,
             [Description("Optional: the objectives, by order of priority.")] IReadOnlyList<TradeOffObjective> objectives = null,
             [Description("Optional: the constraints that are turned on.")] IReadOnlyList<TradeOffConstraint> constraints = null,
             [Description("Optional: the rules.")] IReadOnlyList<TradeOffRule> rules = null,
             [Description("Optional: the name of the compared choice.")] string compareBy = null,
             [Description("Optional, 1 by default: the number of combinations to return, from 1 to 5, for each compared variant.")] int count = 1,
             [Description("Optional: the variants turned off, written choice.variant, for example ['camera.A', 'camera.current'].")] IReadOnlyList<string> excluded = null,
-            [Description("Optional: the short title of the trade-off.")] string title = null)
+            [Description("Optional: the short title of the trade-off.")] string title = null,
+            [Description("Optional: the requirements of the model turned off, by name, for example ['REQ-SYS-001'].")] IReadOnlyList<string> ignoredRequirements = null)
         {
-            return this.CreateStudy(new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, excluded, title));
+            return this.CreateStudy(new TradeOffRequest(rootId, choices, objectives, constraints, rules, count, compareBy, excluded, title, ignoredRequirements));
         }
 
         /// <summary>
@@ -190,11 +209,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// </exception>
         private TradeOffStudy CreateStudy(TradeOffRequest request)
         {
-            var problem = TradeOffProblemBuilder.Build(this.modelProvider, request);
-            var solution = this.solver.Solve(problem);
+            var verifier = new TradeOffVerifier(TradeOffProblemBuilder.Build(this.modelProvider, request));
+            var (problem, solution) = TradeOffSearch.Solve(this.solver, verifier.Problem, verifier);
             var root = this.modelProvider.GetRequiredElementById(request.RootId);
 
-            return TradeOffStudyBuilder.Build(request, new TradeOffRoot(root.Id, root.qualifiedName), problem, solution);
+            return TradeOffStudyBuilder.Build(request, new TradeOffRoot(root.Id, root.qualifiedName), problem, solution, verifier);
         }
     }
 }
