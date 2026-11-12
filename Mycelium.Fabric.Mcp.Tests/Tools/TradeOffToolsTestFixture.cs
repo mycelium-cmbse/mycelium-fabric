@@ -487,8 +487,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             var ignoring = ReadResult(tools.SolveTradeOff(orbiterId, ignoredRequirements: ["REQ-PRP-002"]));
             var withoutElectric = tools.ExploreTradeOff(orbiterId, excluded: ["engine.electric"], count: 2);
 
+            // The chart of the view: the objective, then the total that changes the most; without objective, the two that do.
+            var lightestStudy = tools.ExploreTradeOff(orbiterId, objectives: [new TradeOffObjective { Attribute = "mass" }], count: 3);
+            var study = tools.ExploreTradeOff(orbiterId, count: 3);
+
             using (Assert.EnterMultipleScope())
             {
+                Assert.That(lightestStudy.Axes, Is.EqualTo(["mass", "orbiter.fuelCapacity"]));
+                Assert.That(study.Axes, Is.EqualTo(["orbiter.fuelNeed", "orbiter.energyNeed"]));
+
+                // With an objective, the totals that the requirements compare are given too: every consequence is seen.
+                Assert.That(lightest.Combinations.Single().Totals.Select(total => total.Attribute), Has.Member("orbiter.power").And.Member("orbiter.fuelNeed"));
                 Assert.That(lightest.Combinations.Single().Choices.Select(choice => (choice.Variant, choice.Quantity)), Is.EqualTo([("wide", 1), ("liIon150", 3), ("highEfficiency", 3), ("electric", 1), ("none", 0)]));
                 Assert.That(lightest.Combinations.Single().Totals[0], Is.EqualTo(new AttributeTotal("mass", 89, -3, lightest.Combinations.Single().Totals[0].Unit)));
                 Assert.That(lightest.Combinations.Single().Requirements.Select(requirement => requirement.Status), Is.All.EqualTo(RequirementStatus.Satisfied));

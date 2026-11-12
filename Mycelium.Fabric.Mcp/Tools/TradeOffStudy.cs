@@ -50,5 +50,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// Gets the number of requirements of the model that hold today and that no choice changes: they are not listed.
         /// </summary>
         public int OtherRequirementCount { get; init; }
+
+        /// <summary>
+        /// Gets the totals that the chart of the view draws, chosen by <see cref="TradeOffAxes"/>: two for a chart of points,
+        /// one for a chart of bars, none when the study has no total.
+        /// </summary>
+        public IReadOnlyList<string> Axes { get; init; } = [];
     }
 }

@@ -293,7 +293,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
         /// <summary>
         /// Gets the names of the attributes of the problem, without duplicates: those of the objectives, then those of the
-        /// limits, then the limit attributes.
+        /// limits, then the limit attributes, then the totals that the requirements of the model compare.
         /// </summary>
         /// <returns>The names of the attributes.</returns>
         public IReadOnlyList<string> GetAttributes()
@@ -301,10 +301,10 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             var givenLimits = this.Limits.Where(limit => !limit.IsFromModel).ToList();
             var modelLimits = this.Limits.Where(limit => limit.IsFromModel).ToList();
 
-            // When the request names no attribute, the totals that the requirements of the model compare are shown instead,
+            // The totals that the requirements of the model compare are shown too, so that every consequence of a choice is seen,
             // unless there are too many of them.
             var modelTotals = modelLimits.Select(limit => limit.Attribute).Concat(modelLimits.Select(limit => limit.LimitAttribute)).Where(total => total != null).Distinct().ToList();
-            var showsModelTotals = this.Objectives.Count == 0 && givenLimits.Count == 0 && modelTotals.Count <= MaximumModelTotals;
+            var showsModelTotals = modelTotals.Count <= MaximumModelTotals;
 
             return
             [

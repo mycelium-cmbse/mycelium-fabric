@@ -120,7 +120,8 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "When no combination meets every requirement and constraint, the closest ones are returned: those that break the fewest, then those that pass the limits the least. "
             + "Each combination lists the requirements that the choices can change, with their status (NotSatisfied, or NotEvaluated when the server cannot tell, "
             + "which never counts as met): always tell the user which ones a combination does not meet. "
-            + "The host may also show the result in a view, where the user changes the settings and may send you the combination they choose. "
+            + "The host may also show the result in a view, where the user turns variants and requirements off, orders the objectives, changes the constraints and may send you the combination they choose: "
+            + "call this tool once for a question, and call it again only for what the view cannot change. "
             + "Nothing is modified: present the combinations, let the user choose, then use apply_changes (for a part of a catalogue: its variant and its multiplicity).")]
         [return: Description("The status, the current state and the best combinations (the compared alternative, the variant of each choice, the totals with their "
             + "difference from the current state, each constraint with its compared value, its limit and whether it is met, and each requirement of the model "

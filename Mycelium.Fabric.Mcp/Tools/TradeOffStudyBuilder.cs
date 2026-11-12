@@ -79,6 +79,8 @@ namespace Mycelium.Fabric.Mcp.Tools
             var dependencies = problem.Dependencies.Select(dependency => dependency.Description).ToList();
             var current = CreateCombination(problem, verifier, currentSelection, currentSelection, null, 0);
             var points = CreatePoints(problem, verifier, pointSelections, currentSelection);
+            var compared = best.Prepend(current).Select(IReadOnlyDictionary<string, double> (combination) => combination.Totals.ToDictionary(total => total.Attribute, total => total.Total)).ToList();
+            var axes = TradeOffAxes.Choose([.. attributes.Select(attribute => attribute.Name)], [.. problem.Objectives.Select(objective => objective.Attribute)], compared, [.. points.Select(point => point.Totals)]);
             var requirementChecks = verifier.Verify(currentSelection, true);
             var requirements = requirementChecks
                 .Where(check => check.DependsOnChoices || !check.IsMet || check.Requirement.IsIgnored)
@@ -89,7 +91,8 @@ namespace Mycelium.Fabric.Mcp.Tools
                 points, pointsComplete, conflicts)
             {
                 Requirements = requirements,
-                OtherRequirementCount = requirementChecks.Count - requirements.Count
+                OtherRequirementCount = requirementChecks.Count - requirements.Count,
+                Axes = axes
             };
         }
 

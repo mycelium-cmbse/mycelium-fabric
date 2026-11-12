@@ -106,6 +106,7 @@ function study(values) {
             title: "Camera and X-band transmitter"
         },
         attributes: [{ name: "mass", unit: "kg" }, { name: "power", unit: null }],
+        axes: ["mass", "power"],
         choices: [
             {
                 name: "camera",
@@ -240,6 +241,36 @@ function points(page) {
     return byId(page, "chart").querySelectorAll("g").map(group => {
         const number = group.children.find(child => child.tagName === "TEXT")?.textContent ?? "-";
         return group.className + " | " + number + " | " + group.querySelector("title").textContent;
+    });
+}
+
+/**
+ * Gets the texts of the table of the totals, line by line.
+ * @param {object} page The page.
+ * @returns {string[][]} The text of each cell.
+ */
+function tableCells(page) {
+    return byId(page, "chart").querySelectorAll("tr").map(line => line.children.map(cell => cell.textContent));
+}
+
+/**
+ * Gets the classes of the cells of the table of the totals, line by line.
+ * @param {object} page The page.
+ * @returns {string[][]} The classes of each cell.
+ */
+function tableClasses(page) {
+    return byId(page, "chart").querySelectorAll("tr").map(line => line.children.map(cell => cell.className));
+}
+
+/**
+ * Gets the items of the legend: the class of the mark and the meaning, or the text alone for an item without mark.
+ * @param {object} page The page.
+ * @returns {string[]} The items.
+ */
+function legend(page) {
+    return byId(page, "legend").children.map(item => {
+        const mark = item.querySelector("i");
+        return mark ? mark.className + ": " + item.textContent : item.textContent;
     });
 }
 
@@ -405,7 +436,8 @@ describe("trade-off view", () => {
         it("lists the best options from 1, with their totals against today and their checks, the first one selected", async () => {
             await open(study());
 
-            assert.equal(byId(page, "today").textContent, "vs today: 125.8 kg · 227");
+            assert.equal(byId(page, "today").textContent, "Today: 1 not met");
+            assert.equal(byId(page, "today").title, "Today: mass 125.8 kg · power 227");
             assert.deepEqual(options(page), [
                 "1* (tr-rank n1) | camera: A · xBandTransmitter: XT-low | 117.4 kg (−8.4) · 235 (+8) | ✓ REQ-SYS-001 · 140.88 / 150",
                 "2 (tr-rank n2) | camera: A · xBandTransmitter: current | 117.8 kg (−8) · 242 (+15) | ✓ REQ-SYS-001 · 141.36 / 150",
@@ -415,7 +447,7 @@ describe("trade-off view", () => {
             assert.deepEqual(differences, ["tr-better", "tr-worse", "tr-better", "tr-worse", "tr-better", "tr-better"]);
         });
 
-        it("colours a difference by the way of its objective, shows an unchanged total, a quantity, and a check without value", async () => {
+        it("colours a difference by the way of its objective, leaves out an unchanged total, shows a quantity and a check without value", async () => {
             const option = combination(1, "A", "XT-low", [117.4, 227, -8.4, 0], 140.88);
             option.choices = chosen("A", "XT-low", 2);
             option.constraints.push({ constraint: "power <= powerOutput", satisfied: false, name: null, value: null, limit: null });
@@ -423,9 +455,9 @@ describe("trade-off view", () => {
             await open(study({ objectives: [{ attribute: "mass", direction: "Maximize" }], best: [option] }));
 
             assert.deepEqual(options(page), [
-                "1* (tr-rank n1) | camera: A · xBandTransmitter: XT-low × 2 | 117.4 kg (−8.4) · 227 (=) | ✓ REQ-SYS-001 · 140.88 / 150✗ power <= powerOutput"
+                "1* (tr-rank n1) | camera: A · xBandTransmitter: XT-low × 2 | mass 117.4 kg (−8.4) | ✓ REQ-SYS-001 · 140.88 / 150✗ power <= powerOutput"
             ]);
-            assert.deepEqual(byId(page, "options").querySelectorAll(".tr-totals span").map(span => span.className), ["tr-worse", ""]);
+            assert.deepEqual(byId(page, "options").querySelectorAll(".tr-totals span").map(span => span.className), ["tr-worse"]);
             assert.deepEqual(byId(page, "options").querySelectorAll(".tr-checks span").map(span => span.className), ["tagv ok", "tagv bad"]);
         });
 
@@ -553,18 +585,95 @@ describe("trade-off view", () => {
             assert.equal(chart.querySelector(".tr-limit-label").textContent, "REQ-MASS · 120 kg");
         });
 
-        it("draws no chart for a single attribute", async () => {
-            await open(study({ attributes: [{ name: "mass", unit: "kg" }], objectives: [{ attribute: "mass", direction: "Minimize" }] }));
+        it("draws a single total as bars, today then each best option, with the limit across them and its legend", async () => {
+            await open(study({ attributes: [{ name: "mass", unit: "kg" }], axes: ["mass"], objectives: [{ attribute: "mass", direction: "Minimize" }] }));
 
-            assert.equal(byId(page, "chart").textContent, "One attribute only: see the list of best options.");
+            const bars = byId(page, "chart").querySelectorAll("g");
+            assert.deepEqual(bars.map(bar => bar.className + " | " + bar.querySelector("title").textContent), [
+                "tr-bar tr-bar-today tr-bar-bad | Today · 125.8 kg",
+                "tr-bar tr-bar-best pt-rank1 on | Option 1 · camera: A · xBandTransmitter: XT-low · 117.4 kg",
+                "tr-bar tr-bar-best pt-rank2 | Option 2 · camera: A · xBandTransmitter: current · 117.8 kg",
+                "tr-bar tr-bar-best pt-rank3 | Option 3 · camera: B · xBandTransmitter: XT-low · 121.4 kg"
+            ]);
+            assert.deepEqual(bars.map(bar => bar.dataset.option), [undefined, 1, 2, 3]);
+            const line = byId(page, "chart").querySelector(".tr-limit");
+            assert.equal(line.getAttribute("y1"), line.getAttribute("y2"));
+            assert.equal(byId(page, "chart").querySelector(".tr-limit-label").textContent, "REQ-SYS-001 · 125 kg");
+            assert.deepEqual(byId(page, "legend").children.map(item => item.querySelector("i").className), ["today", "best", "bad", "limit"]);
+        });
+
+        it("selects an option clicked on its bar", async () => {
+            await open(study({ attributes: [{ name: "mass", unit: "kg" }], axes: ["mass"] }));
+
+            byId(page, "chart").querySelectorAll("g").find(group => group.dataset.option === 3).querySelector("rect").dispatch("click");
+
+            assert.equal(options(page)[2].startsWith("3*"), true);
+            assert.equal(byId(page, "chart").querySelectorAll("g.on").map(bar => bar.dataset.option).join(), "3");
+        });
+
+        it("tells when there is no total to draw", async () => {
+            const first = study({ attributes: [], axes: [] });
+            first.current.totals = [];
+
+            await open(first);
+
+            assert.equal(byId(page, "chart").textContent, "No total to draw: see the list of best options.");
             assert.equal(byId(page, "legend").children.length, 0);
         });
 
-        it("draws today alone when there is no combination to show", async () => {
+        it("shows today alone in the table when there is no combination to show, and the totals that never change", async () => {
             await open(study({ best: [], points: [], constraints: [] }));
 
+            assert.deepEqual(tableCells(page), [["", "Today"], ["requirements", "✗ REQ-SYS-001"]]);
+            assert.deepEqual(legend(page), ["Same everywhere: mass, power"]);
+        });
+
+        it("shows the totals in a table, today against each best option, when the server could not give every combination", async () => {
+            await open(study({ pointsComplete: false }));
+
+            assert.equal(byId(page, "chart-title").textContent, "Best options against today");
+            assert.equal(byId(page, "chart-hint").textContent, "Click a column to select it");
+            assert.deepEqual(tableCells(page), [
+                ["", "Today", "Option 1camera: A · xBandTransmitter: XT-low", "Option 2camera: A", "Option 3camera: B · xBandTransmitter: XT-low"],
+                ["mass", "125.8 kg", "117.4 kg−8.4", "117.8 kg−8", "121.4 kg−4.4"],
+                ["power", "227", "235+8", "242+15", "215−12"],
+                ["requirements", "✗ REQ-SYS-001", "✓ 1 met", "✓ 1 met", "✓ 1 met"]
+            ]);
+            assert.deepEqual(tableClasses(page)[1], ["tr-row-name", "tr-cell tr-cell-breach", "tr-cell tr-cell-better on", "tr-cell tr-cell-better", "tr-cell tr-cell-better"]);
+            assert.deepEqual(tableClasses(page)[2], ["tr-row-name", "tr-cell tr-cell-same", "tr-cell tr-cell-worse on", "tr-cell tr-cell-worse", "tr-cell tr-cell-better"]);
+            assert.equal(byId(page, "chart").querySelectorAll("td")[1].title, "Breaks REQ-SYS-001");
+            assert.deepEqual(legend(page), ["better: Better for an objective", "worse: Worse for an objective", "breach: Breaks a limit"]);
+            assert.equal(byId(page, "options").querySelectorAll(".tr-totals").length, 0);
+        });
+
+        it("shows the table when the combinations pile up on the two totals", async () => {
+            await open(study({ points: study().points.map(p => ({ ...p, totals: { mass: 120, power: 220 } })) }));
+
             assert.equal(byId(page, "chart").querySelectorAll("g").length, 0);
-            assert.equal(byId(page, "chart").querySelectorAll(".tr-today-dot").length, 1);
+            assert.equal(tableCells(page).length, 4);
+        });
+
+        it("darkens a cell as its total changes more when the total has no objective, and shows a total of the root once", async () => {
+            const first = study({ objectives: [], pointsComplete: false });
+            for (const option of [first.current, ...first.best]) option.totals.push({ ...option.totals[0], attribute: "eosat1.mass" }, { attribute: "volume", total: 2, difference: 0, unit: null });
+            first.best[0].totals[1] = { attribute: "power", total: 500, difference: 273, unit: null };
+            first.best[1].totals[1] = { attribute: "power", total: 300, difference: 73, unit: null };
+
+            await open(first);
+
+            assert.deepEqual(tableCells(page).map(row => row[0]), ["", "mass", "power", "requirements"]);
+            assert.deepEqual(tableClasses(page)[1].slice(2), ["tr-cell tr-cell-change1 on", "tr-cell tr-cell-change1", "tr-cell tr-cell-change1"]);
+            assert.deepEqual(tableClasses(page)[2].slice(2), ["tr-cell tr-cell-change3 on", "tr-cell tr-cell-change2", "tr-cell tr-cell-change1"]);
+            assert.deepEqual(legend(page), ["change: The darker, the bigger the change", "breach: Breaks a limit", "Same everywhere: volume"]);
+        });
+
+        it("selects an option clicked in its column of the table", async () => {
+            await open(study({ pointsComplete: false }));
+
+            byId(page, "chart").querySelectorAll("td").find(cell => cell.dataset.option === 3).dispatch("click");
+
+            assert.deepEqual(byId(page, "options").querySelectorAll(".tr-option.on").map(card => card.dataset.option), [3]);
+            assert.deepEqual(byId(page, "chart").querySelectorAll("th.on").map(cell => cell.dataset.option), [3]);
         });
     });
 
@@ -580,12 +689,31 @@ describe("trade-off view", () => {
                 const [box, name, values] = label.children;
                 return `${box.dataset.key} ${box.checked ? "on" : "off"}: ${name.textContent} (${values.textContent})`;
             }), [
-                "camera.current on: Current (38 kg · 55)",
-                "camera.A on: A (30 kg · 70)",
-                "camera.B off: B (34 kg · 50)",
-                "xBandTransmitter.current on: Current (1.6 kg · 35)",
-                "xBandTransmitter.XT-low on: XT-low (1.2 kg · 28)"
+                "camera.current on: Current (38 kg)",
+                "camera.A on: A (30 kg)",
+                "camera.B off: B (34 kg)",
+                "xBandTransmitter.current on: Current (1.6 kg)",
+                "xBandTransmitter.XT-low on: XT-low (1.2 kg)"
             ]);
+        });
+
+        it("shows the mass of the root next to a variant, and all its values but zeros on hover", async () => {
+            const first = study({ attributes: [{ name: "eosat1.power", unit: "W" }, { name: "eosat1.mass", unit: "kg" }, { name: "eosat1.fuelNeed", unit: "kg" }] });
+            first.choices = [{ name: "engine", variants: [{ name: "thermal", isCurrent: true, excluded: false, values: { "eosat1.power": 15, "eosat1.mass": 12, "eosat1.fuelNeed": 40 } }] }];
+            first.choices[0].variants.push({ name: "electric", isCurrent: false, excluded: false, values: { "eosat1.power": 180, "eosat1.mass": 8, "eosat1.fuelNeed": 0 } });
+
+            await open(first);
+
+            assert.deepEqual(byId(page, "choices").querySelectorAll("label").map(label => label.children[2].textContent + " | " + label.title), [
+                "12 kg | eosat1.power 15 W · eosat1.mass 12 kg · eosat1.fuelNeed 40 kg",
+                "8 kg | eosat1.power 180 W · eosat1.mass 8 kg"
+            ]);
+        });
+
+        it("shows the first total of the chart next to a variant when the study has no mass", async () => {
+            await open(study({ attributes: [{ name: "power", unit: "W" }], axes: ["power"] }));
+
+            assert.equal(byId(page, "choices").querySelectorAll("label")[0].children[2].textContent, "55 W");
         });
 
         it("shows no owner for equipment to add", async () => {
@@ -1004,6 +1132,20 @@ describe("trade-off view", () => {
             assert.equal(byId(page, "closest").hidden, false);
         });
 
+        it("marks in the table the total whose value breaks a requirement turned on", async () => {
+            const broken = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            broken.constraints = [];
+            broken.requirements = [outcome(MASS, "NotSatisfied", "140.88 [kg] > 130 [kg]")];
+
+            await open(modelStudy({ pointsComplete: false, best: [broken] }));
+            const marked = byId(page, "chart").querySelectorAll("td")[2];
+            await open(modelStudy({ pointsComplete: false, best: [broken], requirements: [{ ...MASS, ignored: true }, BAND, STIFFNESS] }));
+
+            assert.equal(marked.className, "tr-cell tr-cell-breach on");
+            assert.equal(marked.title, "Breaks REQ-SYS-001");
+            assert.equal(byId(page, "chart").querySelectorAll("td")[2].className, "tr-cell tr-cell-better on");
+        });
+
         it("does not say that the options come closest when the best one meets everything", async () => {
             const best = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
             best.requirements = [outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]"), outcome(BAND, "Satisfied", "\"X\" == \"X\"")];
@@ -1110,6 +1252,7 @@ describe("trade-off view", () => {
             await answer(page, ask, { mode: "fullscreen" });
             assert.equal(byId(page, "view").classList.contains("full"), true);
             assert.equal(byId(page, "back").hidden, false);
+            assert.equal(byId(page, "fullscreen").hidden, true);
 
             byId(page, "back").dispatch("click");
             const back = requests(page, "ui/request-display-mode").at(-1);
@@ -1117,22 +1260,46 @@ describe("trade-off view", () => {
             await answer(page, back, { mode: "inline" });
             assert.equal(byId(page, "view").classList.contains("full"), false);
             assert.equal(byId(page, "back").hidden, true);
+            assert.equal(byId(page, "fullscreen").hidden, false);
+            assert.equal(byId(page, "display-note").hidden, true);
 
             page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { displayMode: "fullscreen" } });
             assert.equal(byId(page, "view").classList.contains("full"), true);
+            assert.equal(requests(page, "ui/request-display-mode").length, 2);
         });
 
-        it("stays in the conversation when the host offers no full screen, and tells when the host refuses it", async () => {
+        it("asks for the full screen once, when the host offers it only after the start", async () => {
             await answer(page, messages(page)[0], { hostContext: { theme: "light", displayMode: "inline", availableDisplayModes: ["inline"] } });
             const asked = requests(page, "ui/request-display-mode").length;
+            const button = byId(page, "fullscreen").hidden;
 
             page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { availableDisplayModes: ["inline", "fullscreen"] } });
-            byId(page, "back").dispatch("click");
-            await answer(page, requests(page, "ui/request-display-mode").at(-1), undefined, { code: -32000, message: "Not now" });
+            page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { availableDisplayModes: ["inline", "fullscreen"] } });
 
             assert.equal(asked, 0);
+            assert.equal(button, true);
+            assert.deepEqual(requests(page, "ui/request-display-mode").map(request => request.params.mode), ["fullscreen"]);
+            assert.equal(byId(page, "fullscreen").hidden, false);
+        });
+
+        it("asks for the full screen with its button, and tells when the host refuses it or keeps the view in the conversation", async () => {
+            await open(study());
+            const asked = requests(page, "ui/request-display-mode").length;
+
+            byId(page, "fullscreen").dispatch("click");
+            await answer(page, requests(page, "ui/request-display-mode").at(-1), undefined, { code: -32000, message: "Not now" });
+            const refused = byId(page, "display-note").textContent;
+            byId(page, "fullscreen").dispatch("click");
+            const hiddenWhileAsking = byId(page, "display-note").hidden;
+            await answer(page, requests(page, "ui/request-display-mode").at(-1), { mode: "inline" });
+
+            assert.equal(asked, 0);
+            assert.equal(refused, "The host did not change the display: Not now");
+            assert.equal(hiddenWhileAsking, true);
+            assert.equal(byId(page, "display-note").textContent, "The host kept the view in the conversation.");
+            assert.equal(byId(page, "display-note").hidden, false);
             assert.equal(byId(page, "view").classList.contains("full"), false);
-            assert.equal(byId(page, "error").textContent, "Not now");
+            assert.equal(byId(page, "error").hidden, true);
         });
     });
 });

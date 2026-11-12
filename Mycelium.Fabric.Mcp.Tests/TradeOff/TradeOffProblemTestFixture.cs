@@ -242,9 +242,9 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(problem.CountBroken([1]), Is.EqualTo(2));
                 Assert.That((problem with { Penalties = [] }).CountBroken([1]), Is.EqualTo(1));
 
-                // The totals that the requirements of the model compare are shown when the request names no attribute, unless
-                // they are too many.
-                Assert.That(problem.GetAttributes(), Is.EqualTo(["mass"]));
+                // The totals that the requirements of the model compare are shown after those of the request, unless they are
+                // too many.
+                Assert.That(problem.GetAttributes(), Is.EqualTo(["mass", "satellite.mass"]));
                 Assert.That((problem with { Limits = [fromModel] }).GetAttributes(), Is.EqualTo(["satellite.mass"]));
                 Assert.That((problem with { Limits = [.. manyModelLimits] }).GetAttributes(), Is.Empty);
             }
