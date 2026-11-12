@@ -121,9 +121,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             name = $"{name} ({part.Owners[0].DeclaredName})";
 
-            for (var number = 2; names.Contains(name); number++)
+            var number = 2;
+
+            while (names.Contains(name))
             {
                 name = $"{part.Part.DeclaredName} ({part.Owners[0].DeclaredName} {number})";
+                number++;
             }
 
             return name;
@@ -210,10 +213,14 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             var unknown = ignoredTexts.Find(text => !requirements.Exists(requirement => Designates(text, requirement.Source, requirement.Name)));
 
-            return unknown == null
-                ? requirements
-                : throw new McpException($"ignoredRequirements names '{unknown}', which is not a requirement with a value to check. "
-                    + $"The requirements are: {(names.Count == 0 ? "none" : string.Join(", ", names))}.");
+            if (unknown != null)
+            {
+                var requirementNames = names.Count == 0 ? "none" : string.Join(", ", names);
+
+                throw new McpException($"ignoredRequirements names '{unknown}', which is not a requirement with a value to check. The requirements are: {requirementNames}.");
+            }
+
+            return requirements;
         }
 
         /// <summary>
@@ -312,9 +319,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (right.Scope == null)
             {
-                var constant = right.Constant.Unit == null || left.Unit == null ? right.Constant.Number
-                    : right.Constant.Unit.IsCompatibleWith(left.Unit) && right.Constant.Unit.Offset == 0 ? right.Constant.Unit.ConvertTo(right.Constant.Number, left.Unit)
-                    : double.NaN;
+                var constant = right.Constant.Number;
+
+                if (right.Constant.Unit != null && left.Unit != null)
+                {
+                    constant = right.Constant.Unit.IsCompatibleWith(left.Unit) && right.Constant.Unit.Offset == 0 ? right.Constant.Unit.ConvertTo(constant, left.Unit) : double.NaN;
+                }
 
                 var limit = constant * right.Factor / left.Factor;
 

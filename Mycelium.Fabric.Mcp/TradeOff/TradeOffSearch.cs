@@ -49,29 +49,29 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             List<TradeOffPenalty> penalties = [.. problem.Penalties];
             var knownKeys = penalties.Select(penalty => penalty.Key).ToHashSet();
 
-            for (var round = 1; ; round++)
-            {
-                var current = problem with { Penalties = [.. penalties] };
-                var solution = solver.Solve(current);
+            TradeOffProblem current;
+            TradeOffSolution solution;
+            List<TradeOffPenalty> newPenalties = [];
+            var round = 0;
 
-                var newPenalties = solution.Alternatives
+            do
+            {
+                penalties.AddRange(newPenalties);
+                current = problem with { Penalties = [.. penalties] };
+                solution = solver.Solve(current);
+
+                newPenalties = solution.Alternatives
                     .SelectMany(alternative => alternative.Selections)
                     .SelectMany(verifier.FindPenalties)
                     .Where(penalty => knownKeys.Add(penalty.Key))
                     .ToList();
 
-                if (newPenalties.Count == 0)
-                {
-                    return (current, solution);
-                }
-
-                if (round == MaximumRounds)
-                {
-                    return (current, solution.Status == TradeOffStatus.Optimal ? solution with { Status = TradeOffStatus.Feasible } : solution);
-                }
-
-                penalties.AddRange(newPenalties);
+                round++;
             }
+            while (newPenalties.Count > 0 && round < MaximumRounds);
+
+            // The checks still taught something after the last round: a better combination may exist.
+            return (current, newPenalties.Count > 0 && solution.Status == TradeOffStatus.Optimal ? solution with { Status = TradeOffStatus.Feasible } : solution);
         }
     }
 }

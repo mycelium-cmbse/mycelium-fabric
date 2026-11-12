@@ -492,7 +492,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var definition = this.CheckUpdate(element, payload);
             var general = payload.Specializes == null ? null : this.ResolveGeneral(element, payload.Specializes);
-            var variant = payload.Variant == null ? null : this.ResolveVariant(element, payload.Definition == null ? null : definition, payload.Variant);
+            var variantDefinition = payload.Definition == null ? null : definition;
+            var variant = payload.Variant == null ? null : this.ResolveVariant(element, variantDefinition, payload.Variant);
 
             if (general != null)
             {

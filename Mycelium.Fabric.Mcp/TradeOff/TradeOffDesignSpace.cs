@@ -159,9 +159,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         {
             var openPart = this.openParts[index].Part;
 
-            return openPart == null
-                ? (part.Id == this.rootId ? 1 : 0)
-                : collection.Slots.Where(slot => slot.Part.Id == openPart.Id).Sum(slot => slot.Count);
+            if (openPart == null)
+            {
+                return part.Id == this.rootId ? 1 : 0;
+            }
+
+            return collection.Slots.Where(slot => slot.Part.Id == openPart.Id).Sum(slot => slot.Count);
         }
 
         /// <summary>
@@ -190,7 +193,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="attributeName">The declared name of the attribute.</param>
         /// <param name="count">The number of times that the unit counts.</param>
         /// <returns>The contributions, empty when the unit does not count.</returns>
-        private IReadOnlyList<Contribution> CountUnit(int index, TradeOffPartContent content, string attributeName, int count)
+        private List<Contribution> CountUnit(int index, TradeOffPartContent content, string attributeName, int count)
         {
             if (count <= 0 || content.Quantity == 0 || content.IsRemoved)
             {

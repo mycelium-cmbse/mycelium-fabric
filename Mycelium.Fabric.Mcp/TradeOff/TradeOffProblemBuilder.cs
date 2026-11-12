@@ -516,9 +516,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             // The part counts once for each unit of itself and of its owners under the root (wheels[4] in bogies[2] counts 8 times).
-            foreach (var countedPart in owners.SkipLast(1).Prepend(part).Cast<IPartUsage>().Where(countedPart => countedPart.GetUnitCount() == null))
+            var uncountedPart = owners.SkipLast(1).Prepend(part).Cast<IPartUsage>().FirstOrDefault(countedPart => countedPart.GetUnitCount() == null);
+
+            if (uncountedPart != null)
             {
-                throw new McpException($"The number of units of '{countedPart.DeclaredName}' is not fixed ({countedPart.DescribeMultiplicity()}), so '{part.DeclaredName}' cannot be counted: "
+                throw new McpException($"The number of units of '{uncountedPart.DeclaredName}' is not fixed ({uncountedPart.DescribeMultiplicity()}), so '{part.DeclaredName}' cannot be counted: "
                     + "give it a single number as multiplicity first.");
             }
 
@@ -634,7 +636,8 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 }
             }
 
-            var required = part == null && choice.Required;
+            // Equipment to add always comes from a choice of the request: only an existing part has no choice.
+            var required = part == null && choice?.Required == true;
             List<OptionDraft> options;
 
             if (part == null)
@@ -672,7 +675,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 options.Add(new OptionDraft(TradeOffVariant.NoneName, 0, false, new TradeOffPartContent(null, null, 0)));
             }
 
-            if (part == null && choice.Required && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
+            if (part == null && choice?.Required == true && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
             {
                 throw new McpException($"The equipment '{name}' is required, so it cannot take the variant '{TradeOffVariant.NoneName}'.");
             }
