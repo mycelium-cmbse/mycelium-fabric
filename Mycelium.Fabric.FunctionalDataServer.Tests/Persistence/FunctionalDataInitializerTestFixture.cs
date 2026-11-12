@@ -11,7 +11,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -88,13 +87,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             logger.VerifyLogged(LogLevel.Debug, "opening the Functional Data database", Times.Once());
 
-            foreach (var invocation in logger.Invocations.Where(invocation => invocation.Method.Name == nameof(ILogger.Log)))
+            foreach (var level in Enum.GetValues<LogLevel>())
             {
-                using (Assert.EnterMultipleScope())
-                {
-                    Assert.That(invocation.Arguments[2].ToString(), Does.Not.Contain(secret));
-                    Assert.That(invocation.Arguments[3]?.ToString() ?? string.Empty, Does.Not.Contain(secret));
-                }
+                logger.VerifyLogged(level, secret, Times.Never());
             }
         }
 
