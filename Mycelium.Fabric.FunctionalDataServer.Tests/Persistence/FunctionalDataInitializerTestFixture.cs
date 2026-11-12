@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -20,7 +21,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     using Moq;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
-    using Mycelium.SDK.Dal;
+    using Mycelium.Fabric.FunctionalDataServer.Tests.TestHelpers;
 
     using NUnit.Framework;
 
@@ -30,17 +31,16 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
         [Test]
         public void VerifyConstructor()
         {
-            var configuration = new Mock<IConfiguration>();
+            var configuration = CreateConfiguration(null);
             var logger = new Mock<ILogger<FunctionalDataInitializer>>();
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(() => new FunctionalDataInitializer(null, logger.Object), Throws.ArgumentNullException);
-                Assert.That(() => new FunctionalDataInitializer(configuration.Object, null), Throws.ArgumentNullException);
-                Assert.That(() => new FunctionalDataInitializer(configuration.Object, logger.Object), Throws.Nothing);
+                Assert.That(() => new FunctionalDataInitializer(configuration, null), Throws.ArgumentNullException);
+                Assert.That(() => new FunctionalDataInitializer(configuration, logger.Object), Throws.Nothing);
             }
 
-            configuration.VerifyNoOtherCalls();
             logger.VerifyNoOtherCalls();
         }
 
@@ -51,29 +51,26 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             logger.Setup(log => log.IsEnabled(LogLevel.Debug)).Returns(true);
 
-            var configuration = CreateConfiguration(null);
-            var initializer = new FunctionalDataInitializer(configuration.Object, logger.Object);
+            var initializer = new FunctionalDataInitializer(CreateConfiguration(null), logger.Object);
 
             Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
                 Throws.TypeOf<InvalidOperationException>().With.InnerException.TypeOf<InvalidOperationException>()
                     .And.InnerException.Message.Contains("'functionaldata' connection string"));
 
-            Assert.That(CountDebugLogs(logger, "reading the connection configuration"), Is.EqualTo(1));
-
-            logger.Verify(log => log.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<InvalidOperationException>(),
-                It.IsAny<Func<It.IsAnyType, Exception, string>>()), Times.Once);
+            logger.VerifyLogged(LogLevel.Debug, "reading the connection configuration", Times.Once());
+            logger.VerifyLogged(LogLevel.Error, "Functional Data initialization failed.", Times.Once());
 
             string[] invalidTimeouts = ["0", "-1", "invalid", "4294967295"];
 
             foreach (var timeout in invalidTimeouts)
             {
-                configuration.Setup(config => config["FunctionalData:InitializationTimeoutSeconds"]).Returns(timeout);
+                initializer = new FunctionalDataInitializer(CreateConfiguration(null, timeout), logger.Object);
 
                 Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
                     Throws.TypeOf<InvalidOperationException>().With.Message.Contains("InitializationTimeoutSeconds"));
             }
 
-            configuration.Setup(config => config["FunctionalData:InitializationTimeoutSeconds"]).Returns("60");
+            initializer = new FunctionalDataInitializer(CreateConfiguration(null, "60"), logger.Object);
 
             using var cancellation = new CancellationTokenSource();
 
@@ -83,14 +80,13 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             const string secret = "sensitive-test-value";
 
-            configuration = CreateConfiguration($"Password={secret};UnknownOption=value");
-            initializer = new FunctionalDataInitializer(configuration.Object, logger.Object);
+            initializer = new FunctionalDataInitializer(CreateConfiguration($"Password={secret};UnknownOption=value"), logger.Object);
 
             Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
                 Throws.TypeOf<InvalidOperationException>().With.Message.Not.Contains(secret)
                     .And.InnerException.Not.Null.And.InnerException.Message.Not.Contains(secret));
 
-            Assert.That(CountDebugLogs(logger, "opening the Functional Data database"), Is.EqualTo(1));
+            logger.VerifyLogged(LogLevel.Debug, "opening the Functional Data database", Times.Once());
 
             foreach (var invocation in logger.Invocations.Where(invocation => invocation.Method.Name == nameof(ILogger.Log)))
             {
@@ -102,52 +98,15 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             }
         }
 
-        [Test]
-        public void VerifySelectInitialScript()
+        private static IConfiguration CreateConfiguration(string connectionString, string timeout = null)
         {
-            const string sql = "CREATE SCHEMA IF NOT EXISTS fabric;\n";
-
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(() => FunctionalDataInitializer.SelectInitialScript(null), Throws.ArgumentNullException);
-                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([]), Throws.TypeOf<InvalidOperationException>().With.Message.Contains("0001_initial.sql"));
-                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([("schema.sql", sql)]), Throws.TypeOf<InvalidOperationException>());
-                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([("0001_INITIAL.sql", sql)]), Throws.TypeOf<InvalidOperationException>());
-                Assert.That(() => FunctionalDataInitializer.SelectInitialScript([("0001_initial.sql", sql), ("0002_upgrade.sql", sql)]),
-                    Throws.TypeOf<InvalidOperationException>());
-                Assert.That(FunctionalDataInitializer.SelectInitialScript([("0001_initial.sql", sql)]), Is.SameAs(sql));
-            }
-
-            var packaged = FunctionalDataInitializer.SelectInitialScript(SqlSchemaScripts.GetAll());
-
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(packaged, Does.Contain("-- Mycelium.Model.Fabric 0.3.0\n"));
-                Assert.That(packaged, Does.Contain("-- Mycelium.Model.CommonPrimitives 0.4.0\n"));
-                Assert.That(packaged, Does.Not.Contain("\r"));
-                Assert.That(packaged, Does.EndWith("\n"));
-            }
-        }
-
-        private static int CountDebugLogs(Mock<ILogger<FunctionalDataInitializer>> logger, string message)
-        {
-            return logger.Invocations.Count(invocation => invocation.Method.Name == nameof(ILogger.Log)
-                                                          && invocation.Arguments[0] is LogLevel.Debug
-                                                          && invocation.Arguments[2].ToString().Contains(message, StringComparison.Ordinal)
-                                                          && invocation.Arguments[3] is null);
-        }
-
-        private static Mock<IConfiguration> CreateConfiguration(string connectionString)
-        {
-            var section = new Mock<IConfigurationSection>();
-
-            section.Setup(connection => connection["functionaldata"]).Returns(connectionString);
-
-            var configuration = new Mock<IConfiguration>();
-
-            configuration.Setup(config => config.GetSection("ConnectionStrings")).Returns(section.Object);
-
-            return configuration;
+            return new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string>
+                {
+                    ["ConnectionStrings:functionaldata"] = connectionString,
+                    ["FunctionalData:InitializationTimeoutSeconds"] = timeout
+                })
+                .Build();
         }
     }
 }

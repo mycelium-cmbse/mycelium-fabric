@@ -12,18 +12,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using System;
     using System.Collections.Generic;
     using System.Data;
-    using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.Globalization;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
-
-    using DbUp;
-    using DbUp.Engine;
-    using DbUp.Engine.Output;
-    using DbUp.Engine.Transactions;
-    using DbUp.Postgresql;
 
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.Logging;
@@ -33,20 +26,38 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using Npgsql;
 
     /// <summary>
-    /// Initializes an uninitialized Functional Data schema and preserves compatible installed databases.
+    /// Applies the <see cref="SqlSchemaScripts"/> packaged in <c>Mycelium.SDK.Dal</c> to the Functional Data database, tracking the applied ones in
+    /// <c>public.schema_migration</c>.
     /// </summary>
     [ExcludeFromCodeCoverage]
-    public class FunctionalDataInitializer
+    public class FunctionalDataInitializer : IFunctionalDataInitializer
     {
         /// <summary>
-        /// The name of the initial schema script returned by <see cref="SqlSchemaScripts.GetAll"/>, also used as the stable DbUp journal identity.
+        /// The name of the connection string to the Functional Data database.
         /// </summary>
-        public const string InitialScriptName = "0001_initial.sql";
+        private const string ConnectionStringName = "functionaldata";
 
         /// <summary>
-        /// The PostgreSQL advisory-lock key shared by Functional Data initializers.
+        /// Serializes concurrent initializers on a transaction-scoped advisory lock, then ensures the applied-script history exists.
         /// </summary>
-        private const long InitializationLockKey = 33420001;
+        private const string PrepareHistorySql = """
+            SELECT pg_advisory_xact_lock(33420001);
+            CREATE TABLE IF NOT EXISTS public.schema_migration
+            (
+                script_name text PRIMARY KEY,
+                applied_at timestamptz NOT NULL DEFAULT now()
+            );
+            """;
+
+        /// <summary>
+        /// Reads the names of the scripts already applied.
+        /// </summary>
+        private const string ReadHistorySql = "SELECT script_name FROM public.schema_migration";
+
+        /// <summary>
+        /// Records one script as applied.
+        /// </summary>
+        private const string RecordScriptSql = "INSERT INTO public.schema_migration (script_name) VALUES ($1)";
 
         /// <summary>
         /// The configuration supplying the connection and initialization deadline.
@@ -74,13 +85,13 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Initializes the database atomically, or verifies that the installed model versions match the packaged artifact.
+        /// Applies, in name order and within one locked transaction, every packaged script the database has not recorded as applied.
         /// </summary>
         /// <param name="cancellationToken">The token canceling initialization.</param>
         /// <returns>A task that completes after the initialization transaction commits.</returns>
-        /// <exception cref="InvalidOperationException">Configuration, artifact loading, database state or initialization is invalid.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is invalid, or a script or its history cannot be applied.</exception>
         /// <exception cref="OperationCanceledException">Initialization is canceled or exceeds its configured deadline.</exception>
-        public virtual async Task InitializeAsync(CancellationToken cancellationToken)
+        public async Task InitializeAsync(CancellationToken cancellationToken)
         {
             var timeout = this.ReadInitializationTimeout();
 
@@ -88,8 +99,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
             deadline.CancelAfter(timeout);
 
-            var elapsed = Stopwatch.StartNew();
             var token = deadline.Token;
+            var commandTimeout = (int)timeout.TotalSeconds;
 
             try
             {
@@ -97,18 +108,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 this.LogStep("reading the connection configuration");
 
-                var connectionString = this.configuration.GetConnectionString("functionaldata");
+                var connectionString = this.configuration.GetConnectionString(ConnectionStringName);
 
                 if (string.IsNullOrWhiteSpace(connectionString))
                 {
-                    throw new InvalidOperationException("The 'functionaldata' connection string is not configured.");
+                    throw new InvalidOperationException($"The '{ConnectionStringName}' connection string is not configured.");
                 }
-
-                this.LogStep("loading the packaged schema and model versions");
-
-                var script = SelectInitialScript(SqlSchemaScripts.GetAll());
-                var fabricVersion = ReadModelVersion(script, "Fabric");
-                var primitivesVersion = ReadModelVersion(script, "CommonPrimitives");
 
                 this.LogStep("opening the Functional Data database");
 
@@ -118,71 +123,35 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token);
 
-                var manager = new InitializationConnectionManager(connection, transaction, timeout, elapsed, token);
+                this.LogStep("acquiring the initialization lock and preparing the script history");
 
-                this.LogStep("acquiring the initialization lock");
-
-                await using (var command = manager.CreateCommand("SELECT pg_advisory_xact_lock(@key)"))
+                await using (var prepare = new NpgsqlCommand(PrepareHistorySql, connection, transaction) { CommandTimeout = commandTimeout })
                 {
-                    command.Parameters.AddWithValue("key", InitializationLockKey);
-
-                    await command.ExecuteNonQueryAsync(token);
+                    await prepare.ExecuteNonQueryAsync(token);
                 }
 
-                this.LogStep("checking the initialization state");
+                this.LogStep("reading the applied scripts");
 
-                var schemaExists = await SchemaExistsAsync(manager, token);
-                var upgrader = PostgresqlExtensions.PostgresqlDatabase(manager, "public")
-                    .WithScript(InitialScriptName, script)
-                    .WithVariablesDisabled()
-                    .LogTo(this.logger)
-                    .Build();
+                var appliedScripts = await ReadAppliedScriptsAsync(connection, transaction, commandTimeout, token);
+                var pendingScripts = SqlSchemaScripts.GetAll().Where(script => !appliedScripts.Contains(script.Name)).ToList();
 
-                var executedScripts = await Task.Run(upgrader.GetExecutedScripts, token);
-
-                if (schemaExists)
+                foreach (var (name, sql) in pendingScripts)
                 {
-                    if (executedScripts.Count != 1 || !string.Equals(executedScripts[0], InitialScriptName, StringComparison.Ordinal))
+                    if (this.logger.IsEnabled(LogLevel.Information))
                     {
-                        throw new InvalidOperationException("The 'fabric' schema exists without a matching initialization journal entry.");
+                        this.logger.LogInformation("Applying Functional Data schema script {ScriptName}.", name);
                     }
 
-                    this.LogStep("checking the installed model versions");
-
-                    await VerifyVersionsAsync(manager, fabricVersion, primitivesVersion, token);
-                }
-                else
-                {
-                    if (executedScripts.Count != 0)
-                    {
-                        throw new InvalidOperationException("The initialization journal records executed scripts, but the 'fabric' schema does not exist.");
-                    }
-
-                    this.LogStep("executing the initial schema");
-
-                    var result = await Task.Run(upgrader.PerformUpgrade, token);
-
-                    token.ThrowIfCancellationRequested();
-
-                    if (!result.Successful)
-                    {
-                        throw result.Error ?? new InvalidOperationException("DbUp reported an unsuccessful schema execution.");
-                    }
-
-                    this.LogStep("recording the installed model versions");
-
-                    await StoreVersionsAsync(manager, fabricVersion, primitivesVersion, token);
+                    await ApplyScriptAsync(connection, transaction, name, sql, commandTimeout, token);
                 }
 
                 this.LogStep("committing the initialization");
-
-                token.ThrowIfCancellationRequested();
 
                 await transaction.CommitAsync(token);
 
                 if (this.logger.IsEnabled(LogLevel.Information))
                 {
-                    this.logger.LogInformation("Functional Data initialization completed. Created schema: {CreatedSchema}.", !schemaExists);
+                    this.logger.LogInformation("Functional Data initialization completed. Applied scripts: {AppliedScriptCount}.", pendingScripts.Count);
                 }
             }
             catch (Exception exception) when (token.IsCancellationRequested)
@@ -197,6 +166,59 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 throw new InvalidOperationException("Functional Data initialization failed.", exception);
             }
+        }
+
+        /// <summary>
+        /// Runs one script and records it as applied, in the initialization transaction.
+        /// </summary>
+        /// <param name="connection">The open connection.</param>
+        /// <param name="transaction">The locked initialization transaction.</param>
+        /// <param name="name">The script name.</param>
+        /// <param name="sql">The unchanged script text.</param>
+        /// <param name="commandTimeout">The command timeout in seconds, bounded by the initialization deadline.</param>
+        /// <param name="cancellationToken">The token canceling the script.</param>
+        /// <returns>A task that completes once the script is applied and recorded.</returns>
+        /// <exception cref="NpgsqlException">The script or its history row fails.</exception>
+        /// <exception cref="OperationCanceledException">The script is canceled.</exception>
+        private static async Task ApplyScriptAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string name, string sql, int commandTimeout,
+            CancellationToken cancellationToken)
+        {
+            await using (var script = new NpgsqlCommand(sql, connection, transaction) { CommandTimeout = commandTimeout })
+            {
+                await script.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await using var record = new NpgsqlCommand(RecordScriptSql, connection, transaction) { CommandTimeout = commandTimeout };
+
+            record.Parameters.Add(new NpgsqlParameter { Value = name });
+
+            await record.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads the names of the scripts already recorded as applied, after the initialization lock has been acquired.
+        /// </summary>
+        /// <param name="connection">The open connection.</param>
+        /// <param name="transaction">The locked initialization transaction.</param>
+        /// <param name="commandTimeout">The command timeout in seconds, bounded by the initialization deadline.</param>
+        /// <param name="cancellationToken">The token canceling the query.</param>
+        /// <returns>The applied script names.</returns>
+        /// <exception cref="NpgsqlException">The history query fails.</exception>
+        /// <exception cref="OperationCanceledException">The query is canceled.</exception>
+        private static async Task<HashSet<string>> ReadAppliedScriptsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int commandTimeout,
+            CancellationToken cancellationToken)
+        {
+            await using var command = new NpgsqlCommand(ReadHistorySql, connection, transaction) { CommandTimeout = commandTimeout };
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            var appliedScripts = new HashSet<string>(StringComparer.Ordinal);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                appliedScripts.Add(reader.GetString(0));
+            }
+
+            return appliedScripts;
         }
 
         /// <summary>
@@ -231,305 +253,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             }
 
             return TimeSpan.FromSeconds(seconds);
-        }
-
-        /// <summary>
-        /// Selects the generator-owned initial schema from the scripts packaged in <c>Mycelium.SDK.Dal</c>.
-        /// </summary>
-        /// <param name="scripts">The packaged scripts, as returned by <see cref="SqlSchemaScripts.GetAll"/>.</param>
-        /// <returns>The complete, unmodified text of the <see cref="InitialScriptName"/> script.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="scripts"/> is null.</exception>
-        /// <exception cref="InvalidOperationException">The scripts are not exactly one <see cref="InitialScriptName"/> script.</exception>
-        public static string SelectInitialScript(IReadOnlyList<(string Name, string Sql)> scripts)
-        {
-            ArgumentNullException.ThrowIfNull(scripts);
-
-            if (scripts.Count != 1 || !string.Equals(scripts[0].Name, InitialScriptName, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException($"Mycelium.SDK.Dal must supply exactly one schema script, '{InitialScriptName}'.");
-            }
-
-            return scripts[0].Sql;
-        }
-
-        /// <summary>
-        /// Reads one model-package version from the schema's deterministic header comments.
-        /// </summary>
-        /// <param name="script">The complete packaged schema.</param>
-        /// <param name="modelName">The model-package suffix.</param>
-        /// <returns>The version recorded by the producer.</returns>
-        /// <exception cref="InvalidOperationException">A version comment is missing, duplicated or malformed.</exception>
-        private static string ReadModelVersion(string script, string modelName)
-        {
-            var prefix = $"-- Mycelium.Model.{modelName} ";
-            var versions = script.Split('\n').Where(line => line.StartsWith(prefix, StringComparison.Ordinal)).Select(line => line[prefix.Length..]).ToArray();
-
-            if (versions.Length != 1 || !Version.TryParse(versions[0], out _))
-            {
-                throw new InvalidOperationException("The packaged schema's model-version comments are invalid.");
-            }
-
-            return versions[0];
-        }
-
-        /// <summary>
-        /// Checks for the application schema after the initialization lock has been acquired.
-        /// </summary>
-        /// <param name="manager">The locked transaction's command factory.</param>
-        /// <param name="cancellationToken">The token canceling the query.</param>
-        /// <returns>Whether the <c>fabric</c> schema exists.</returns>
-        /// <exception cref="NpgsqlException">The state query fails.</exception>
-        /// <exception cref="OperationCanceledException">The query is canceled.</exception>
-        private static async Task<bool> SchemaExistsAsync(InitializationConnectionManager manager, CancellationToken cancellationToken)
-        {
-            await using var command = manager.CreateCommand("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'fabric')");
-
-            return (bool)await command.ExecuteScalarAsync(cancellationToken);
-        }
-
-        /// <summary>
-        /// Requires exactly one installed metadata record with matching model-package versions.
-        /// </summary>
-        /// <param name="manager">The locked transaction's command factory.</param>
-        /// <param name="fabricVersion">The packaged Fabric model version.</param>
-        /// <param name="primitivesVersion">The packaged CommonPrimitives model version.</param>
-        /// <param name="cancellationToken">The token canceling the query.</param>
-        /// <returns>A task that completes when installed versions match.</returns>
-        /// <exception cref="InvalidOperationException">The installed versions are missing, duplicated or incompatible.</exception>
-        /// <exception cref="NpgsqlException">The metadata query fails.</exception>
-        /// <exception cref="OperationCanceledException">The query is canceled.</exception>
-        private static async Task VerifyVersionsAsync(InitializationConnectionManager manager, string fabricVersion, string primitivesVersion, CancellationToken cancellationToken)
-        {
-            await using var command = manager.CreateCommand("SELECT fabric_version, common_primitives_version FROM fabric.initialization_metadata");
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            if (!await reader.ReadAsync(cancellationToken)
-                || !string.Equals(reader.GetString(0), fabricVersion, StringComparison.Ordinal)
-                || !string.Equals(reader.GetString(1), primitivesVersion, StringComparison.Ordinal)
-                || await reader.ReadAsync(cancellationToken))
-            {
-                throw new InvalidOperationException("The installed Functional Data model versions are incompatible.");
-            }
-        }
-
-        /// <summary>
-        /// Records model-package versions in consumer-owned metadata in the schema-creation transaction.
-        /// </summary>
-        /// <param name="manager">The locked transaction's command factory.</param>
-        /// <param name="fabricVersion">The packaged Fabric model version.</param>
-        /// <param name="primitivesVersion">The packaged CommonPrimitives model version.</param>
-        /// <param name="cancellationToken">The token canceling metadata creation.</param>
-        /// <returns>A task that completes after inserting the single metadata row.</returns>
-        /// <exception cref="NpgsqlException">Metadata creation fails.</exception>
-        /// <exception cref="OperationCanceledException">Metadata creation is canceled.</exception>
-        private static async Task StoreVersionsAsync(InitializationConnectionManager manager, string fabricVersion, string primitivesVersion, CancellationToken cancellationToken)
-        {
-            const string sql = """
-                CREATE TABLE fabric.initialization_metadata (
-                    singleton boolean NOT NULL DEFAULT TRUE,
-                    fabric_version text NOT NULL,
-                    common_primitives_version text NOT NULL,
-                    CONSTRAINT initialization_metadata_singleton_check CHECK (singleton),
-                    CONSTRAINT initialization_metadata_pkey PRIMARY KEY (singleton)
-                );
-                INSERT INTO fabric.initialization_metadata (fabric_version, common_primitives_version)
-                VALUES (@fabricVersion, @primitivesVersion);
-                """;
-
-            await using var command = manager.CreateCommand(sql);
-
-            command.Parameters.AddWithValue("fabricVersion", fabricVersion);
-            command.Parameters.AddWithValue("primitivesVersion", primitivesVersion);
-
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        /// <summary>
-        /// Binds DbUp commands to the caller-owned connection, transaction and initialization deadline.
-        /// </summary>
-        private sealed class InitializationConnectionManager : IConnectionManager, IDisposable
-        {
-            /// <summary>
-            /// The existing application connection.
-            /// </summary>
-            private readonly NpgsqlConnection connection;
-
-            /// <summary>
-            /// The caller-owned transaction holding the advisory lock.
-            /// </summary>
-            private readonly NpgsqlTransaction transaction;
-
-            /// <summary>
-            /// The maximum initialization duration.
-            /// </summary>
-            private readonly TimeSpan timeout;
-
-            /// <summary>
-            /// The clock measuring elapsed initialization time.
-            /// </summary>
-            private readonly Stopwatch elapsed;
-
-            /// <summary>
-            /// The combined shutdown and deadline cancellation token.
-            /// </summary>
-            private readonly CancellationToken cancellationToken;
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="InitializationConnectionManager"/> class.
-            /// </summary>
-            /// <param name="connection">The open application connection.</param>
-            /// <param name="transaction">The active initialization transaction.</param>
-            /// <param name="timeout">The total initialization duration.</param>
-            /// <param name="elapsed">The elapsed-time clock.</param>
-            /// <param name="cancellationToken">The combined cancellation token.</param>
-            public InitializationConnectionManager(NpgsqlConnection connection, NpgsqlTransaction transaction, TimeSpan timeout, Stopwatch elapsed,
-                CancellationToken cancellationToken)
-            {
-                this.connection = connection;
-                this.transaction = transaction;
-                this.timeout = timeout;
-                this.elapsed = elapsed;
-                this.cancellationToken = cancellationToken;
-            }
-
-            /// <summary>
-            /// Gets or sets DbUp's transaction preference; the actual transaction is owned by the initializer.
-            /// </summary>
-            public TransactionMode TransactionMode { get; set; }
-
-            /// <summary>
-            /// Gets or sets whether DbUp requests script-result logging.
-            /// </summary>
-            public bool IsScriptOutputLogged { get; set; }
-
-            /// <summary>
-            /// Gets or sets an additional per-command timeout, bounded by the initialization deadline.
-            /// </summary>
-            public int? ExecutionTimeoutSeconds { get; set; }
-
-            /// <summary>
-            /// Starts a DbUp operation without opening a connection or creating another transaction.
-            /// </summary>
-            /// <param name="upgradeLog">The DbUp operation logger.</param>
-            /// <param name="executedScripts">The scripts executed by this operation.</param>
-            /// <returns>This non-owning operation scope.</returns>
-            /// <exception cref="OperationCanceledException">Initialization has been canceled.</exception>
-            public IDisposable OperationStarting(IUpgradeLog upgradeLog, List<SqlScript> executedScripts)
-            {
-                this.cancellationToken.ThrowIfCancellationRequested();
-
-                return this;
-            }
-
-            /// <summary>
-            /// Leaves connection and transaction lifetime management to the initializer.
-            /// </summary>
-            public void Dispose()
-            {
-            }
-
-            /// <summary>
-            /// Creates a command in the locked transaction with a bounded execution timeout.
-            /// </summary>
-            /// <param name="sql">The SQL command text.</param>
-            /// <returns>A command that the caller must dispose.</returns>
-            /// <exception cref="OperationCanceledException">The initialization deadline has expired.</exception>
-            public NpgsqlCommand CreateCommand(string sql)
-            {
-                this.cancellationToken.ThrowIfCancellationRequested();
-
-                var remaining = this.timeout - this.elapsed.Elapsed;
-
-                if (remaining <= TimeSpan.Zero)
-                {
-                    throw new OperationCanceledException("The Functional Data initialization deadline expired.", this.cancellationToken);
-                }
-
-                var commandTimeout = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
-
-                if (this.ExecutionTimeoutSeconds is > 0)
-                {
-                    commandTimeout = Math.Min(commandTimeout, this.ExecutionTimeoutSeconds.Value);
-                }
-
-                return new NpgsqlCommand(sql, this.connection, this.transaction) { CommandTimeout = commandTimeout };
-            }
-
-            /// <summary>
-            /// Executes DbUp commands on the existing transaction with cancellation enabled.
-            /// </summary>
-            /// <param name="action">The operation receiving a command factory.</param>
-            /// <exception cref="OperationCanceledException">Initialization is canceled.</exception>
-            public void ExecuteCommandsWithManagedConnection(Action<Func<IDbCommand>> action)
-            {
-                this.ExecuteCommandsWithManagedConnection(commandFactory =>
-                {
-                    action(commandFactory);
-
-                    return true;
-                });
-            }
-
-            /// <summary>
-            /// Executes a DbUp query on the existing transaction with cancellation enabled.
-            /// </summary>
-            /// <typeparam name="T">The operation's result type.</typeparam>
-            /// <param name="actionWithResult">The operation receiving a command factory.</param>
-            /// <returns>The operation's result.</returns>
-            /// <exception cref="OperationCanceledException">Initialization is canceled.</exception>
-            public T ExecuteCommandsWithManagedConnection<T>(Func<Func<IDbCommand>, T> actionWithResult)
-            {
-                var registrations = new List<CancellationTokenRegistration>();
-
-                try
-                {
-                    var result = actionWithResult(() =>
-                    {
-                        var command = this.CreateCommand(string.Empty);
-
-                        registrations.Add(this.cancellationToken.Register(command.Cancel));
-
-                        return command;
-                    });
-
-                    this.cancellationToken.ThrowIfCancellationRequested();
-
-                    return result;
-                }
-                finally
-                {
-                    foreach (var registration in registrations)
-                    {
-                        registration.Dispose();
-                    }
-                }
-            }
-
-            /// <summary>
-            /// Uses DbUp's PostgreSQL parser to preserve dollar-quoted function bodies when splitting statements.
-            /// </summary>
-            /// <param name="scriptContents">The complete generated SQL.</param>
-            /// <returns>The provider-parsed SQL statements.</returns>
-            public IEnumerable<string> SplitScriptIntoCommands(string scriptContents)
-            {
-                return new PostgresqlConnectionManager(string.Empty).SplitScriptIntoCommands(scriptContents);
-            }
-
-            /// <summary>
-            /// Reports whether the caller-owned connection remains open without creating another connection.
-            /// </summary>
-            /// <param name="upgradeLog">The DbUp operation logger.</param>
-            /// <param name="errorMessage">A secret-free diagnostic when the connection is closed.</param>
-            /// <returns>Whether the existing connection is open.</returns>
-            public bool TryConnect(IUpgradeLog upgradeLog, out string errorMessage)
-            {
-                var connected = this.connection.State == ConnectionState.Open;
-
-                errorMessage = connected ? string.Empty : "The Functional Data connection is not open.";
-
-                return connected;
-            }
         }
     }
 }

@@ -38,7 +38,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
 
             var builder = Host.CreateApplicationBuilder(args);
 
-            builder.Services.AddSingleton<FunctionalDataInitializer>();
+            builder.Services.AddSingleton<IFunctionalDataInitializer, FunctionalDataInitializer>();
             builder.Services.AddHostedService<FunctionalDataInitializationService>();
 
             using var host = builder.Build();

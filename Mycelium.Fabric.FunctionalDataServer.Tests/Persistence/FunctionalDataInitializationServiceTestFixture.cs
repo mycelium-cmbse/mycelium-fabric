@@ -13,9 +13,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     using System.Threading;
     using System.Threading.Tasks;
 
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Logging;
-
     using Moq;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
@@ -87,9 +84,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             initializer.VerifyNoOtherCalls();
         }
 
-        private static Mock<FunctionalDataInitializer> CreateInitializer()
+        private static Mock<IFunctionalDataInitializer> CreateInitializer()
         {
-            return new Mock<FunctionalDataInitializer>(Mock.Of<IConfiguration>(), Mock.Of<ILogger<FunctionalDataInitializer>>());
+            return new Mock<IFunctionalDataInitializer>();
         }
     }
 }

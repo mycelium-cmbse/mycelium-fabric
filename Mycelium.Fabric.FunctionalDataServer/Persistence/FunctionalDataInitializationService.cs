@@ -23,14 +23,14 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <summary>
         /// The initializer awaited during startup.
         /// </summary>
-        private readonly FunctionalDataInitializer initializer;
+        private readonly IFunctionalDataInitializer initializer;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FunctionalDataInitializationService"/> class.
         /// </summary>
         /// <param name="initializer">The Functional Data database initializer.</param>
         /// <exception cref="ArgumentNullException"><paramref name="initializer"/> is null.</exception>
-        public FunctionalDataInitializationService(FunctionalDataInitializer initializer)
+        public FunctionalDataInitializationService(IFunctionalDataInitializer initializer)
         {
             ArgumentNullException.ThrowIfNull(initializer);
 

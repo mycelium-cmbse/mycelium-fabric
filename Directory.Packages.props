@@ -12,7 +12,6 @@
         <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.4" />
         <PackageVersion Include="Carter" Version="10.0.0" />
         <PackageVersion Include="CsvHelper" Version="33.1.0" />
-        <PackageVersion Include="dbup-postgresql" Version="7.0.1" />
         <PackageVersion Include="ErrorOr" Version="2.1.1" />
         <PackageVersion Include="Google.OrTools" Version="9.15.6755" />
         <PackageVersion Include="MessagePack" Version="3.1.12" />
