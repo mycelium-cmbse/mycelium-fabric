@@ -728,7 +728,9 @@ function drawChecksCell(combination, index) {
 function breachesOf(combination) {
     const breaches = {};
     const add = (attribute, name) => {
-        if (attribute) (breaches[attribute] ??= []).push(name);
+        if (!attribute) return;
+        breaches[attribute] ??= [];
+        breaches[attribute].push(name);
     };
     combination.constraints.forEach((check, index) => {
         if (!check.satisfied) add(study.constraints[index]?.attribute, check.name ?? check.constraint);

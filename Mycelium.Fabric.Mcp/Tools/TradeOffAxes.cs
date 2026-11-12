@@ -51,7 +51,8 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .Where(attribute => !axes.Contains(attribute))
                 .Select(attribute => (Attribute: attribute, Spread: GetSpread(rows, attribute)))
                 .Where(candidate => candidate.Spread > 0)
-                .OrderByDescending(candidate => candidate.Spread);
+                .OrderByDescending(candidate => candidate.Spread)
+                .Select(candidate => candidate.Attribute);
 
             foreach (var candidate in candidates)
             {
@@ -60,9 +61,9 @@ namespace Mycelium.Fabric.Mcp.Tools
                     break;
                 }
 
-                if (!axes.Exists(axis => AreEqual(rows, axis, candidate.Attribute)))
+                if (!axes.Exists(axis => AreEqual(rows, axis, candidate)))
                 {
-                    axes.Add(candidate.Attribute);
+                    axes.Add(candidate);
                 }
             }
 
