@@ -4,7 +4,7 @@
  * @returns {HTMLElement} The element, or null when the page has none with this id.
  */
 const $ = id => document.getElementById(id);
-
+//
 // The study shown, as solve_trade_off or explore_trade_off gives it.
 let study = null;
 
