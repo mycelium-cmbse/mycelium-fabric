@@ -14,7 +14,7 @@ assignees: []
 ### Prerequisites
 
 - [ ] I have written a descriptive issue title
-- [ ] I have verified that I am running the latest version of the SysML2.NET
+- [ ] I have verified that I am running the latest version of the Mycelium Fabric
 - [ ] I have searched [open](https://github.com/mycelium-cmbse/mycelium-fabric/issues) and [closed](https://github.com/mycelium-cmbse/mycelium-fabric/issues?q=is%3Aissue+is%3Aclosed) issues to ensure it has not already been reported
 
 ### Description
