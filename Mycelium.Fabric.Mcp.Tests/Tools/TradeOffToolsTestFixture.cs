@@ -21,10 +21,13 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Requirements;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.TradeOff;
 
+    using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Serializer.Json;
 
     /// <summary>
@@ -291,8 +294,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(withoutElectric.Status, Is.EqualTo(TradeOffStatus.Optimal));
-                Assert.That(withoutElectric.Combinations.Single().Alternative, Is.EqualTo("propulsionSubsystem.current"));
-                Assert.That(withoutElectric.Conflicts, Is.EqualTo(["propulsionSubsystem.electric: constraint 1: power <= powerOutput", "propulsionSubsystem.electric: constraint 3: mass <= 139"]));
+                Assert.That(withoutElectric.Combinations.Select(combination => combination.Alternative), Is.EqualTo(["propulsionSubsystem.current", "propulsionSubsystem.electric"]));
+                Assert.That(withoutElectric.Combinations[0].Constraints.Select(constraint => constraint.Satisfied), Is.All.True);
+                Assert.That(withoutElectric.Combinations[1].Constraints.Select(constraint => constraint.Satisfied), Is.EqualTo([true, true, false]));
+                Assert.That(withoutElectric.Conflicts, Is.Empty);
             }
         }
 
@@ -387,10 +392,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(withoutCurrentCamera.Best.SelectMany(combination => combination.Choices).Any(choice => choice.Choice == "camera" && choice.Variant == "current"), Is.False);
                 Assert.That(withRule.Rules, Is.EqualTo(["camera.A requires xBandTransmitter.XT-low"]));
                 Assert.That(withRule.Points.Single(point => point.Choices[0].Variant == "A" && point.Choices[1].Variant == "current").Broken, Is.EqualTo(["rule 1: camera.A requires xBandTransmitter.XT-low"]));
-                Assert.That(tooTight.Status, Is.EqualTo(TradeOffStatus.Infeasible));
-                Assert.That(tooTight.Best, Is.Empty);
+                Assert.That(tooTight.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(tooTight.Best.Select(combination => string.Join("+", combination.Choices.Select(choice => choice.Variant))), Is.EqualTo(["A+XT-low", "A+current", "B+XT-low"]));
+                Assert.That(tooTight.Best.SelectMany(combination => combination.Constraints).Select(constraint => constraint.Satisfied), Is.All.False);
                 Assert.That(tooTight.Points.Any(point => point.Feasible), Is.False);
-                Assert.That(tooTight.Conflicts, Is.EqualTo(["REQ-SYS-001: mass * 1.3 <= 150"]));
+                Assert.That(tooTight.Conflicts, Is.Empty);
             }
         }
 
@@ -428,6 +434,108 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         private static string ReadText(CallToolResult toolResult)
         {
             return ((TextContentBlock)toolResult.Content.Single()).Text;
+        }
+
+        [Test]
+        public void VerifySolveTradeOffFromTheModel()
+        {
+            var orbiterProvider = OrbiterChangesHelper.CreateModel();
+            var orbiterId = orbiterProvider.Elements.OfType<IPartUsage>().Single(part => part.DeclaredName == OrbiterChangesHelper.OrbiterName).Id;
+            var elementCount = orbiterProvider.Elements.Count;
+            var tools = new TradeOffTools(orbiterProvider, new CpSatTradeOffSolver(), this.appHostDetector.Object);
+
+            // "Thermal or electric?": the request only names the root and the choice to compare, the model gives the rest.
+            var result = ReadResult(tools.SolveTradeOff(orbiterId, compareBy: "engine"));
+            var thermal = result.Combinations[0];
+            var electric = result.Combinations[1];
+            var propellant = result.Requirements.Single(requirement => requirement.Name == "REQ-PRP-002");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(result.Conflicts, Is.Empty);
+                Assert.That(result.Combinations.Select(combination => combination.Alternative), Is.EqualTo(["engine.thermal", "engine.electric"]));
+
+                // The thermal engine keeps the orbiter as it is, and breaks the requirement on the propellant, which is told.
+                Assert.That(thermal.ChangeCount, Is.Zero);
+                Assert.That(thermal.Requirements[0], Is.EqualTo(new RequirementOutcome("REQ-PRP-002", "Orbiter::orbiter::propulsion", RequirementStatus.NotSatisfied, "\"hydrazine\" == \"hydrazine\"", false)));
+                Assert.That(thermal.Requirements.Skip(1).Select(requirement => requirement.Status), Is.All.EqualTo(RequirementStatus.Satisfied));
+
+                // The electric engine needs more power and more energy: the server takes three batteries and three better panels.
+                Assert.That(electric.Choices.Select(choice => (choice.Choice, choice.Variant, choice.Quantity)),
+                    Is.EqualTo([("camera", "wide", 1), ("battery", "liIon150", 3), ("solarPanel", "highEfficiency", 3), ("engine", "electric", 1), ("tank", "large", 1)]));
+
+                Assert.That(electric.Requirements.Select(requirement => requirement.Status), Is.All.EqualTo(RequirementStatus.Satisfied));
+                Assert.That(electric.Requirements.Single(requirement => requirement.Changed).Name, Is.EqualTo("REQ-PRP-002"));
+                Assert.That(electric.Requirements.Single(requirement => requirement.Name == "REQ-PWR-001").Explanation, Is.EqualTo("258.5 [W] <= 270 [W]"));
+                Assert.That(electric.Totals.Single(total => total.Attribute == "orbiter.mass").Total, Is.EqualTo(98));
+                Assert.That(result.Current.Totals.Single(total => total.Attribute == "orbiter.mass").Total, Is.EqualTo(92));
+
+                Assert.That(result.Requirements.Select(requirement => requirement.Name), Is.EqualTo(["REQ-PL-001", "REQ-PRP-001", "REQ-PRP-002", "REQ-PWR-001", "REQ-PWR-002", "REQ-SYS-001"]));
+                Assert.That(propellant.Status, Is.EqualTo(RequirementStatus.NotSatisfied));
+                Assert.That(propellant.Searched, Is.False);
+                Assert.That(propellant.DependsOnChoices, Is.True);
+                Assert.That(propellant.Constraint, Is.EqualTo("subj.engine.propellant != \"hydrazine\""));
+                Assert.That(result.Requirements.Single(requirement => requirement.Name == "REQ-PL-001"), Has.Property(nameof(TradeOffStudyRequirement.Attribute)).EqualTo("payload.mass")
+                    .And.Property(nameof(TradeOffStudyRequirement.Operator)).EqualTo("<=").And.Property(nameof(TradeOffStudyRequirement.Threshold)).EqualTo(25));
+            }
+
+            // With the lowest mass as objective, the tank goes too: the electric engine needs no fuel.
+            var lightest = ReadResult(tools.SolveTradeOff(orbiterId, objectives: [new TradeOffObjective { Attribute = "mass" }]));
+
+            // The user leaves the requirement on the propellant out, or the electric engine.
+            var ignoring = ReadResult(tools.SolveTradeOff(orbiterId, ignoredRequirements: ["REQ-PRP-002"]));
+            var withoutElectric = tools.ExploreTradeOff(orbiterId, excluded: ["engine.electric"], count: 2);
+
+            // The chart of the view: the objective, then the total that changes the most; without objective, the two that do.
+            var lightestStudy = tools.ExploreTradeOff(orbiterId, objectives: [new TradeOffObjective { Attribute = "mass" }], count: 3);
+            var study = tools.ExploreTradeOff(orbiterId, count: 3);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(lightestStudy.Axes, Is.EqualTo(["mass", "orbiter.fuelCapacity"]));
+                Assert.That(study.Axes, Is.EqualTo(["orbiter.fuelNeed", "orbiter.energyNeed"]));
+
+                // With an objective, the totals that the requirements compare are given too: every consequence is seen.
+                Assert.That(lightest.Combinations.Single().Totals.Select(total => total.Attribute), Has.Member("orbiter.power").And.Member("orbiter.fuelNeed"));
+                Assert.That(lightest.Combinations.Single().Choices.Select(choice => (choice.Variant, choice.Quantity)), Is.EqualTo([("wide", 1), ("liIon150", 3), ("highEfficiency", 3), ("electric", 1), ("none", 0)]));
+                Assert.That(lightest.Combinations.Single().Totals[0], Is.EqualTo(new AttributeTotal("mass", 89, -3, lightest.Combinations.Single().Totals[0].Unit)));
+                Assert.That(lightest.Combinations.Single().Requirements.Select(requirement => requirement.Status), Is.All.EqualTo(RequirementStatus.Satisfied));
+
+                Assert.That(ignoring.Combinations.Single().ChangeCount, Is.Zero);
+                Assert.That(ignoring.Combinations.Single().Requirements.Select(requirement => requirement.Name), Has.No.Member("REQ-PRP-002"));
+                Assert.That(ignoring.Requirements.Single(requirement => requirement.Ignored).Name, Is.EqualTo("REQ-PRP-002"));
+
+                // No combination meets everything: the closest ones are given, with the requirement that they break.
+                Assert.That(withoutElectric.Status, Is.EqualTo(TradeOffStatus.Optimal));
+                Assert.That(withoutElectric.Best, Has.Count.EqualTo(2));
+                Assert.That(withoutElectric.Best.Select(combination => combination.Requirements[0].Name), Is.All.EqualTo("REQ-PRP-002"));
+                Assert.That(withoutElectric.Best.Select(combination => combination.Requirements[0].Status), Is.All.EqualTo(RequirementStatus.NotSatisfied));
+                Assert.That(withoutElectric.Points.Any(point => point.Feasible), Is.False);
+                Assert.That(withoutElectric.Points.Select(point => point.Broken), Has.All.Member("REQ-PRP-002: \"hydrazine\" == \"hydrazine\""));
+                Assert.That(withoutElectric.Constraints, Is.Empty);
+                Assert.That(withoutElectric.Request.Choices, Is.Empty);
+                Assert.That(withoutElectric.Request.IgnoredRequirements, Is.Empty);
+                Assert.That(withoutElectric.OtherRequirementCount, Is.Zero);
+                Assert.That(orbiterProvider.Elements, Has.Count.EqualTo(elementCount));
+            }
+
+            // With every catalogue, the combinations are too many to list: the view gets the best ones and those that are one
+            // choice away from today and from the best, with what a single change breaks.
+            var tooMany = tools.ExploreTradeOff(orbiterId, count: 1);
+
+            (string, int)[] onlyTheEngine = [("wide", 1), ("liIon150", 1), ("regular", 2), ("electric", 1), ("large", 1)];
+            var engineChanged = tooMany.Points.Single(point => point.Choices.Select(choice => (choice.Variant, choice.Quantity)).SequenceEqual(onlyTheEngine));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tooMany.PointsComplete, Is.False);
+                Assert.That(tooMany.Points, Has.Count.InRange(20, TradeOffStudyBuilder.MaximumPoints));
+                Assert.That(tooMany.Points.Count(point => point.IsCurrent), Is.EqualTo(1));
+                Assert.That(tooMany.Points.Select(point => string.Join(",", point.Choices.Select(choice => $"{choice.Variant}{choice.Quantity}"))), Is.Unique);
+                Assert.That(engineChanged.Feasible, Is.False);
+                Assert.That(engineChanged.Broken, Is.EqualTo(["REQ-PWR-001: 258.5 [W] > 120 [W]", "REQ-PWR-002: 150 [Wh] < 450 [Wh]"]));
+            }
         }
     }
 }

@@ -19,10 +19,9 @@ const AS_GOAL = "AsGoal";
 const MERGE_INTO = "MergeInto";
 const LEAVE_OUT = "LeaveOut";
 
-// The tool that imports, the tool that saves, and the method that changes the display mode.
+// The tool that imports and the tool that saves.
 const IMPORT_TOOL = "import_requirements";
 const SAVE_TOOL = "save_requirement_list";
-const DISPLAY_MODE_METHOD = "ui/request-display-mode";
 
 // The findings of the server, as the column "Quality" names them.
 const FINDING_LABELS = {
@@ -70,8 +69,6 @@ const state = {
     selected: null,
     narrow: window.innerWidth < WIDE_VIEW,
     columns: visibleColumns(),
-    displayMode: "inline",
-    displayModes: [],
     busy: false,
     importedText: null
 };
@@ -91,29 +88,10 @@ function visibleColumns() {
 function start() {
     initializeView("requirement-extraction")
         .then(context => {
-            onHostContext(context);
-            if (state.displayModes.includes("fullscreen") && state.displayMode !== "fullscreen") askDisplayMode("fullscreen");
+            display.onHostContext(context);
+            display.askFullscreen();
         })
         .catch(error => showError("The host did not start the view: " + error.message));
-}
-
-/**
- * Takes what the host says about the display.
- * @param {object} context The context of the host, or the part of it that has changed, or nothing.
- */
-function onHostContext(context) {
-    if (context?.availableDisplayModes) state.displayModes = context.availableDisplayModes;
-    if (context?.displayMode) showDisplayMode(context.displayMode);
-}
-
-/**
- * Asks the host for a display mode.
- * @param {string} mode The mode: fullscreen or inline.
- */
-function askDisplayMode(mode) {
-    request(DISPLAY_MODE_METHOD, { mode })
-        .then(result => showDisplayMode(result?.mode ?? state.displayMode))
-        .catch(error => showError("The host did not change the display: " + error.message));
 }
 
 /**
@@ -121,10 +99,12 @@ function askDisplayMode(mode) {
  * @param {string} mode The display mode given by the host.
  */
 function showDisplayMode(mode) {
-    state.displayMode = mode;
     $("view").classList.toggle("full", mode === "fullscreen");
     $("back").hidden = mode !== "fullscreen";
 }
+
+// The display mode of the view, which asks for the full screen when the host offers it (host.js).
+const display = followDisplayMode(showDisplayMode, error => showError("The host did not change the display: " + error.message));
 
 /**
  * Shows the proposal sent by propose_requirements: the ready requirements are ticked, the others wait for a choice of the user, and
@@ -995,8 +975,8 @@ $("import").addEventListener("click", () => {
     void importChosen();
 });
 $("back").replaceChildren(icon("previous", 13), "Hypha conversation");
-$("back").addEventListener("click", () => askDisplayMode("inline"));
+$("back").addEventListener("click", () => display.ask("inline"));
 $("import").replaceChildren(icon("check", 14), "Import as 1 batch");
-listenToHost(onToolResult, onHostContext);
+listenToHost(onToolResult, display.onHostContext);
 new ResizeObserver(onResize).observe(document.body);
 start();

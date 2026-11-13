@@ -107,7 +107,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             {
                 Assert.That(GetObjectSchemas(strictSchema).Select(objectSchema => objectSchema.GetProperty("required").GetArrayLength()),
                     Is.EqualTo(GetObjectSchemas(strictSchema).Select(objectSchema => objectSchema.GetProperty("properties").EnumerateObject().Count())));
-                Assert.That(optionalProperties, Has.Count.EqualTo(44));
+                Assert.That(optionalProperties, Has.Count.EqualTo(46));
                 Assert.That(optionalProperties.Where(property => !AcceptsNull(property)), Is.Empty);
             }
 

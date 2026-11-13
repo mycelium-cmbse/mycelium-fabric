@@ -22,15 +22,19 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.Values;
 
+    using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Root.Elements;
+    using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Parts;
 
     /// <summary>
     /// Checks a <see cref="TradeOffRequest"/> against the model and turns it into a <see cref="TradeOffProblem"/>: reads the
     /// current values of the chosen parts as <c>sum_attribute</c> does, computes the part of each total that no choice changes,
-    /// and expands each variant into one option per number of units.
+    /// and expands each variant into one option per number of units. It also reads from the model what the request does not
+    /// say: the parts typed by a catalogue of variants, which are choices too, and the requirements with a value to check,
+    /// which every combination is checked against.
     /// </summary>
-    public static class TradeOffProblemBuilder
+    public static partial class TradeOffProblemBuilder
     {
         /// <summary>
         /// The largest number of combinations that a request may ask for.
@@ -64,16 +68,33 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             ArgumentNullException.ThrowIfNull(modelProvider);
             ArgumentNullException.ThrowIfNull(request);
 
-            var choices = request.Choices ?? [];
+            var givenChoices = request.Choices ?? [];
+            var choices = givenChoices.ToList();
             var objectives = (request.Objectives ?? []).Select(ReadObjective).ToList();
             var limits = (request.Constraints ?? []).Select(ReadLimit).ToList();
 
-            if (choices.Count == 0)
+            var root = modelProvider.GetRequiredElementById(request.RootId);
+            var parts = choices.Select(choice => ReadPart(modelProvider, root, choice)).ToList();
+            var names = choices.Select((choice, index) => ReadName(choice, parts[index]?.Part)).ToList();
+
+            CheckDistinct(parts, names);
+
+            // The parts typed by a catalogue of variants are choices too, without the request saying so.
+            foreach (var cataloguePart in FindCatalogueParts(modelProvider, root, parts))
+            {
+                choices.Add(null);
+                parts.Add(cataloguePart);
+                names.Add(GetFreeName(cataloguePart, names));
+            }
+
+            if (parts.Count == 0)
             {
                 throw new McpException("Give at least one choice: an existing part (partId) or equipment to add (name), with its variants.");
             }
 
-            if (objectives.Count == 0 && limits.Count == 0)
+            var requirements = ReadRequirements(modelProvider, request.IgnoredRequirements ?? []);
+
+            if (objectives.Count == 0 && limits.Count == 0 && requirements.TrueForAll(requirement => requirement.IsIgnored))
             {
                 throw new McpException("Give at least one objective (for example the lowest mass) or one constraint (for example mass <= 150).");
             }
@@ -83,12 +104,6 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 throw new McpException($"The number of combinations must be between 1 and {MaximumCount}.");
             }
 
-            var root = modelProvider.GetRequiredElementById(request.RootId);
-            var parts = choices.Select(choice => ReadPart(modelProvider, root, choice)).ToList();
-            var names = choices.Select((choice, index) => ReadName(choice, parts[index]?.Part)).ToList();
-
-            CheckDistinct(parts, names);
-
             var attributes = objectives.Select(objective => objective.Attribute)
                 .Concat(limits.Select(limit => limit.Attribute))
                 .Concat(limits.Select(limit => limit.LimitAttribute))
@@ -96,7 +111,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 .Distinct()
                 .ToList();
 
-            var unknownAttribute = attributes.Find(attribute => !IsKnown(root, attribute, choices));
+            var unknownAttribute = attributes.Find(attribute => !IsKnown(root, attribute, choices, parts));
 
             if (unknownAttribute != null)
             {
@@ -104,14 +119,27 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             var libraryUnits = LibraryUnits.Read(modelProvider.Elements);
-            var units = ReadUnits(root, attributes, choices, request.Constraints ?? [], limits, libraryUnits);
-
+            var units = ReadUnits(root, attributes, givenChoices, request.Constraints ?? [], limits, libraryUnits);
             limits = limits.Select((limit, index) => ConvertLimit(limit, request.Constraints[index], index, units, libraryUnits)).ToList();
 
-            var decisions = choices.Select((choice, index) => ReadDecision(choice, names[index], parts[index], attributes, units, libraryUnits)).ToList();
-            var fixedTotals = attributes.ToDictionary(attribute => attribute, attribute => GetFixedTotal(root, attribute, parts, units[attribute]));
+            var drafts = parts.Select((part, index) => ReadDecision(choices[index], names[index], part, attributes, units, libraryUnits)).ToList();
+            var space = new TradeOffDesignSpace(root.Id, [.. drafts.Select(draft => new TradeOffOpenPart(draft.Part?.Part as IPartUsage, draft.Name, [.. draft.Options.Select(option => option.Content)]))]);
+            var totals = new TotalReader(space, drafts, units);
+
+            foreach (var attribute in attributes)
+            {
+                totals.ReadTotal(attribute, space.GetTotalParts(root, attribute).Value, contributions => SumContributions(contributions, units[attribute], attribute));
+            }
+
+            requirements = ReadRequirementLimits(requirements, totals, limits);
+
+            var decisions = drafts.Select((draft, decisionIndex) => new TradeOffDecision(draft.Name, draft.Part?.Part.Id, draft.Part?.Part.qualifiedName,
+                [.. draft.Options.Select((option, optionIndex) => new TradeOffOption(option.Variant, option.Quantity, option.IsCurrent, totals.OptionValues[decisionIndex][optionIndex]))],
+                draft.Required)).ToList();
+
             var dependencies = (request.Rules ?? []).Select((rule, index) => ReadDependency(rule, index, decisions)).ToList();
             var excluded = ReadExcluded(request.Excluded ?? [], decisions);
+
             int? compareDecisionIndex = null;
 
             if (!string.IsNullOrWhiteSpace(request.CompareBy))
@@ -123,7 +151,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     : throw new McpException($"compareBy names '{request.CompareBy}', which is not a choice. Give the name of a choice: {string.Join(", ", names)}.");
             }
 
-            return new TradeOffProblem(decisions, fixedTotals, objectives, limits, dependencies, request.Count, compareDecisionIndex, units, excluded);
+            return new TradeOffProblem(decisions, totals.FixedTotals, objectives, limits, dependencies, request.Count, compareDecisionIndex, units, excluded)
+            {
+                Requirements = requirements,
+                Space = space
+            };
         }
 
         /// <summary>
@@ -317,31 +349,34 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Reads the values of a variant, converted to the unit of their attribute and by trimmed attribute name.
+        /// Reads the values of a variant, each converted to the unit of its attribute when the problem knows it.
         /// </summary>
         /// <param name="variant">The <see cref="TradeOffVariant"/> to read.</param>
-        /// <param name="choiceName">The name of the choice.</param>
-        /// <param name="units">The unit of each attribute of the problem.</param>
-        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
-        /// <returns>The values of the variant, in the unit of their attribute.</returns>
+        /// <param name="choiceName">The name of the choice of the variant.</param>
+        /// <param name="units">The unit of each attribute of the problem, by attribute name.</param>
+        /// <param name="libraryUnits">The units declared in the libraries of the model.</param>
+        /// <returns>The values, by attribute name, in the unit of the attribute, or else in the unit that the variant gives.</returns>
         /// <exception cref="McpException">
-        /// Thrown when a unit is not known, has a different dimension from the attribute, or gives a value that is too large.
+        /// Thrown when a unit is not known or cannot be converted, or when a converted value is out of the range of the solver.
         /// </exception>
-        private static Dictionary<string, double> ReadValues(TradeOffVariant variant, string choiceName, Dictionary<string, Unit> units, LibraryUnits libraryUnits)
+        private static Dictionary<string, NumberValue> ReadValues(TradeOffVariant variant, string choiceName, Dictionary<string, Unit> units, LibraryUnits libraryUnits)
         {
             var label = $"The variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'";
+
             var variantUnits = (variant.Units ?? new Dictionary<string, string>())
                 .ToDictionary(pair => pair.Key.Trim(), pair => ParseUnit(pair.Value, $"{label} gives the unit of '{pair.Key.Trim()}', which", libraryUnits));
 
             return (variant.Values ?? new Dictionary<string, double>()).ToDictionary(pair => pair.Key.Trim(), pair =>
             {
                 var attribute = pair.Key.Trim();
+                var variantUnit = variantUnits.GetValueOrDefault(attribute);
+
                 var converted = units.TryGetValue(attribute, out var reference)
-                    ? ConvertValue(pair.Value, variantUnits.GetValueOrDefault(attribute), reference, $"The '{attribute}' of the variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'", attribute)
+                    ? ConvertValue(pair.Value, variantUnit, reference, $"The '{attribute}' of the variant '{choiceName}{ReferenceSeparator}{variant.Name.Trim()}'", attribute)
                     : pair.Value;
 
                 return IsAllowedValue(converted)
-                    ? converted
+                    ? new NumberValue(converted, reference ?? variantUnit)
                     : throw new McpException($"{label} has a '{attribute}' that is not a number between -{TradeOffScale.MaximumValue} and {TradeOffScale.MaximumValue} in {reference?.Symbol ?? "the unit of the attribute"}.");
             });
         }
@@ -481,16 +516,15 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             // The part counts once for each unit of itself and of its owners under the root (wheels[4] in bogies[2] counts 8 times).
-            var unitCount = 1;
+            var uncountedPart = owners.SkipLast(1).Prepend(part).Cast<IPartUsage>().FirstOrDefault(countedPart => countedPart.GetUnitCount() == null);
 
-            foreach (var countedPart in owners.SkipLast(1).Prepend(part).Cast<IPartUsage>())
+            if (uncountedPart != null)
             {
-                unitCount *= countedPart.GetUnitCount()
-                    ?? throw new McpException($"The number of units of '{countedPart.DeclaredName}' is not fixed ({countedPart.DescribeMultiplicity()}), so '{part.DeclaredName}' cannot be counted: "
-                        + "give it a single number as multiplicity first.");
+                throw new McpException($"The number of units of '{uncountedPart.DeclaredName}' is not fixed ({uncountedPart.DescribeMultiplicity()}), so '{part.DeclaredName}' cannot be counted: "
+                    + "give it a single number as multiplicity first.");
             }
 
-            return new ChosenPart(part, owners, unitCount);
+            return new ChosenPart(part, owners, ((IPartUsage)part).GetUnitCount(), ((IPartUsage)part).GetVariants());
         }
 
         /// <summary>
@@ -551,24 +585,27 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Checks the variants of a choice and expands them into options.
+        /// Reads a choice into the draft of a decision: checks its variants and expands them into options, each with what the
+        /// part then holds. The variants of the catalogue that types the part come first, then the variants that the request
+        /// gives.
         /// </summary>
-        /// <param name="choice">The <see cref="TradeOffChoice"/> to read.</param>
+        /// <param name="choice">The <see cref="TradeOffChoice"/> to read, or <c>null</c> for a part that only the model makes a choice.</param>
         /// <param name="name">The name of the choice.</param>
         /// <param name="part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
-        /// <param name="attributes">The attributes of the problem.</param>
-        /// <param name="units">The unit of each attribute of the problem.</param>
-        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
-        /// <returns>The <see cref="TradeOffDecision"/> of the choice.</returns>
+        /// <param name="attributes">The attributes of the objectives and constraints.</param>
+        /// <param name="units">The unit of each attribute of the problem, by attribute name.</param>
+        /// <param name="libraryUnits">The units declared in the libraries of the model.</param>
+        /// <returns>The <see cref="DecisionDraft"/>.</returns>
         /// <exception cref="McpException">
-        /// Thrown when a variant is invalid.
+        /// Thrown when the choice has no variant, or when a variant is invalid.
         /// </exception>
-        private static TradeOffDecision ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, Dictionary<string, Unit> units,
+        private static DecisionDraft ReadDecision(TradeOffChoice choice, string name, ChosenPart part, IReadOnlyList<string> attributes, Dictionary<string, Unit> units,
             LibraryUnits libraryUnits)
         {
-            var variants = choice.Variants ?? [];
+            var variants = choice?.Variants ?? [];
+            var catalogueVariants = part?.Variants ?? [];
 
-            if (variants.Count == 0)
+            if (variants.Count == 0 && catalogueVariants.Count == 0)
             {
                 throw new McpException($"The choice '{name}' has no variant.");
             }
@@ -578,7 +615,10 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 CheckVariant(variant, name, part);
             }
 
-            var duplicateVariant = variants.GroupBy(variant => variant.Name.Trim()).FirstOrDefault(group => group.Count() > 1);
+            var duplicateVariant = variants.Select(variant => variant.Name.Trim())
+                .Concat(catalogueVariants.Select(variant => variant.DeclaredName))
+                .GroupBy(variantName => variantName)
+                .FirstOrDefault(group => group.Count() > 1);
 
             if (duplicateVariant != null)
             {
@@ -587,32 +627,60 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             var givenCurrent = variants.FirstOrDefault(variant => variant.Name.Trim() == TradeOffVariant.CurrentName);
             var givenValues = givenCurrent == null ? [] : ReadValues(givenCurrent, name, units, libraryUnits);
-            var currentValues = attributes.ToDictionary(attribute => attribute, attribute => GetCurrentValue(part, givenValues, attribute, name, units[attribute]));
 
-            List<TradeOffOption> options = part == null
-                ? [new TradeOffOption(TradeOffVariant.NoneName, 0, true, attributes.ToDictionary(attribute => attribute, _ => 0d))]
-                : [new TradeOffOption(TradeOffVariant.CurrentName, 1, true, currentValues)];
-
-            var others = variants.Where(variant => variant.Name.Trim() is not (TradeOffVariant.CurrentName or TradeOffVariant.NoneName));
-            options.AddRange(others.SelectMany(variant => ExpandVariant(variant, ReadValues(variant, name, units, libraryUnits), currentValues, attributes)));
-
-            if (part != null && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
+            if (choice != null)
             {
-                options.Add(new TradeOffOption(TradeOffVariant.NoneName, 0, false, attributes.ToDictionary(attribute => attribute, _ => 0d)));
+                foreach (var attribute in attributes)
+                {
+                    CheckNotHidden(part, attribute, name);
+                }
             }
 
-            if (part == null && choice.Required && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
+            // Equipment to add always comes from a choice of the request: only an existing part has no choice.
+            var required = part == null && choice?.Required == true;
+            List<OptionDraft> options;
+
+            if (part == null)
+            {
+                options = [new OptionDraft(TradeOffVariant.NoneName, 0, true, new TradeOffPartContent(null, null, 0, IsCurrent: true))];
+            }
+            else if (catalogueVariants.Count > 0)
+            {
+                (options, required) = ReadCatalogueOptions(part);
+            }
+            else
+            {
+                options = [new OptionDraft(TradeOffVariant.CurrentName, 1, true, new TradeOffPartContent((IFeature)part.Part, givenValues, part.OwnCount ?? 1, IsCurrent: true))];
+            }
+
+            // A variant of the request counts for each unit of an existing part (wheels[4]), and keeps the values of the part
+            // that it does not give.
+            var unitCount = Math.Max(part?.OwnCount ?? 1, 1);
+
+            foreach (var variant in variants.Where(variant => variant.Name.Trim() is not (TradeOffVariant.CurrentName or TradeOffVariant.NoneName)))
+            {
+                var values = ReadValues(variant, name, units, libraryUnits);
+
+                foreach (var givenValue in givenValues.Where(givenValue => !values.ContainsKey(givenValue.Key)))
+                {
+                    values.Add(givenValue.Key, givenValue.Value);
+                }
+
+                options.AddRange(Enumerable.Range(variant.MinQuantity, variant.MaxQuantity - variant.MinQuantity + 1)
+                    .Select(quantity => new OptionDraft(variant.Name.Trim(), quantity, false, new TradeOffPartContent(part?.Part as IFeature, values, unitCount * quantity))));
+            }
+
+            if (part != null && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName) && !options.Exists(option => option.Quantity == 0))
+            {
+                options.Add(new OptionDraft(TradeOffVariant.NoneName, 0, false, new TradeOffPartContent(null, null, 0)));
+            }
+
+            if (part == null && choice?.Required == true && variants.Any(variant => variant.Name.Trim() == TradeOffVariant.NoneName))
             {
                 throw new McpException($"The equipment '{name}' is required, so it cannot take the variant '{TradeOffVariant.NoneName}'.");
             }
 
-            // A choice on a part that counts several times (wheels[4]) applies to each of its units.
-            if (part is { UnitCount: not 1 })
-            {
-                options = [.. options.Select(option => option with { Values = option.Values.ToDictionary(pair => pair.Key, pair => pair.Value * part.UnitCount) })];
-            }
-
-            return new TradeOffDecision(name, part?.Part.Id, part?.Part.qualifiedName, options, part == null && choice.Required);
+            return new DecisionDraft(name, part, required, options);
         }
 
         /// <summary>
@@ -680,68 +748,25 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Gets the current value of an attribute for one unit of a choice: the value in the model of an existing part (its own
-        /// value, or the sum over its sub-parts), completed by the given <c>current</c> variant, and 0 for equipment to add.
+        /// Checks that a choice on an existing part can change an attribute: no owner of the part gives its own value for
+        /// it, which would replace the values of its parts in the total.
         /// </summary>
         /// <param name="part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
-        /// <param name="givenValues">The values of the <c>current</c> variant given by the AI assistant, in the unit of their attribute.</param>
         /// <param name="attribute">The name of the attribute.</param>
         /// <param name="choiceName">The name of the choice.</param>
-        /// <param name="unit">The unit of the attribute, or <c>null</c> when it has none.</param>
-        /// <returns>The current value of the attribute, in its unit.</returns>
         /// <exception cref="McpException">
         /// Thrown when an owner of the part gives its own value for the attribute, so that the value of the part is not in the
         /// total.
         /// </exception>
-        private static double GetCurrentValue(ChosenPart part, Dictionary<string, double> givenValues, string attribute, string choiceName, Unit unit)
+        private static void CheckNotHidden(ChosenPart part, string attribute, string choiceName)
         {
-            if (part == null)
-            {
-                return 0;
-            }
-
-            var hidingOwner = part.Owners.FirstOrDefault(owner => HasOwnValue(owner, attribute));
+            var hidingOwner = part?.Owners.FirstOrDefault(owner => HasOwnValue(owner, attribute));
 
             if (hidingOwner != null)
             {
                 throw new McpException($"The choice '{choiceName}' cannot change '{attribute}': '{hidingOwner.DeclaredName}' gives its own '{attribute}', "
                     + "which replaces the values of its parts in the total. Make the choice on it instead.");
             }
-
-            return givenValues.TryGetValue(attribute, out var givenValue) ? givenValue : SumContributions(part.Part.CollectContributions(attribute), unit, attribute);
-        }
-
-        /// <summary>
-        /// Expands a variant into one option per number of units.
-        /// </summary>
-        /// <param name="variant">The <see cref="TradeOffVariant"/> to expand.</param>
-        /// <param name="values">The values of the variant, in the unit of their attribute.</param>
-        /// <param name="currentValues">The current value of each attribute for one unit, used when the variant does not give it.</param>
-        /// <param name="attributes">The attributes of the problem.</param>
-        /// <returns>The <see cref="TradeOffOption"/>s of the variant.</returns>
-        private static IEnumerable<TradeOffOption> ExpandVariant(TradeOffVariant variant, Dictionary<string, double> values, Dictionary<string, double> currentValues,
-            IReadOnlyList<string> attributes)
-        {
-            return Enumerable.Range(variant.MinQuantity, variant.MaxQuantity - variant.MinQuantity + 1)
-                .Select(quantity => new TradeOffOption(variant.Name.Trim(), quantity, false,
-                    attributes.ToDictionary(attribute => attribute, attribute => values.GetValueOrDefault(attribute, currentValues[attribute]) * quantity)));
-        }
-
-        /// <summary>
-        /// Computes the part of the total of an attribute that no choice changes: the total under the root, as
-        /// <c>sum_attribute</c> computes it, minus the current value of each chosen part.
-        /// </summary>
-        /// <param name="root">The element under which the totals are computed.</param>
-        /// <param name="attribute">The name of the attribute.</param>
-        /// <param name="parts">The chosen part of each choice, <c>null</c> for equipment to add.</param>
-        /// <param name="unit">The unit of the attribute, or <c>null</c> when it has none.</param>
-        /// <returns>The fixed part of the total, in the unit of the attribute.</returns>
-        private static double GetFixedTotal(IElement root, string attribute, IReadOnlyList<ChosenPart> parts, Unit unit)
-        {
-            var total = SumContributions(root.CollectContributions(attribute), unit, attribute);
-            var chosenTotal = parts.Where(part => part != null).Sum(part => SumContributions(part.Part.CollectContributions(attribute), unit, attribute) * part.UnitCount);
-
-            return total - chosenTotal;
         }
 
         /// <summary>
@@ -757,16 +782,19 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Tells whether an attribute has a value somewhere: in a part under the root, or in a variant.
+        /// Tells whether an attribute has a value somewhere: in a part under the root, in a variant of the request or in a
+        /// variant of a catalogue.
         /// </summary>
         /// <param name="root">The element under which the totals are computed.</param>
         /// <param name="attribute">The name of the attribute.</param>
-        /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
+        /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request, <c>null</c> for a part that only the model makes a choice.</param>
+        /// <param name="parts">The existing part of each choice, or <c>null</c> for equipment to add.</param>
         /// <returns><c>true</c> when the attribute has a value somewhere.</returns>
-        private static bool IsKnown(IElement root, string attribute, IReadOnlyList<TradeOffChoice> choices)
+        private static bool IsKnown(IElement root, string attribute, IReadOnlyList<TradeOffChoice> choices, IReadOnlyList<ChosenPart> parts)
         {
             return root.CollectContributions(attribute).Count > 0
-                || choices.SelectMany(choice => choice.Variants ?? []).Any(variant => (variant?.Values?.Keys ?? []).Any(key => key?.Trim() == attribute));
+                || choices.SelectMany(choice => choice?.Variants ?? []).Any(variant => (variant?.Values?.Keys ?? []).Any(key => key?.Trim() == attribute))
+                || parts.SelectMany(part => part?.Variants ?? []).Any(variant => variant.CollectContributions(attribute).Count > 0);
         }
 
         /// <summary>
@@ -858,10 +886,26 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// </summary>
         /// <param name="Part">The chosen part.</param>
         /// <param name="Owners">The owners of the part, from its direct owner to the root.</param>
-        /// <param name="UnitCount">
-        /// The number of units of the part under the root, from its multiplicity and the ones of its owners, which multiplies
-        /// the values of each option of the choice.
-        /// </param>
-        private sealed record ChosenPart(IElement Part, IReadOnlyList<IElement> Owners, int UnitCount);
+        /// <param name="OwnCount">The number of units of the part itself, or <c>null</c> when its multiplicity does not fix it.</param>
+        /// <param name="Variants">The variants of the catalogues that type the part, empty when none does.</param>
+        private sealed record ChosenPart(IElement Part, IReadOnlyList<IElement> Owners, int? OwnCount, IReadOnlyList<IUsage> Variants);
+
+        /// <summary>
+        /// An option of a choice before its values are computed.
+        /// </summary>
+        /// <param name="Variant">The name of the variant.</param>
+        /// <param name="Quantity">The number of units of the variant.</param>
+        /// <param name="IsCurrent">Whether the option is what the model holds.</param>
+        /// <param name="Content">What the part holds when the option is taken.</param>
+        private sealed record OptionDraft(string Variant, int Quantity, bool IsCurrent, TradeOffPartContent Content);
+
+        /// <summary>
+        /// A choice before the values of its options are computed.
+        /// </summary>
+        /// <param name="Name">The name of the choice.</param>
+        /// <param name="Part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
+        /// <param name="Required">Whether the option that the model holds may not be taken.</param>
+        /// <param name="Options">The options of the choice.</param>
+        private sealed record DecisionDraft(string Name, ChosenPart Part, bool Required, List<OptionDraft> Options);
     }
 }

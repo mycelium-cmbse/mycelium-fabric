@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     using Mycelium.Fabric.Mcp.TradeOff;
 
@@ -176,6 +177,76 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
                 Assert.That(this.problem.CountChanges([0, 0]), Is.EqualTo(0));
                 Assert.That(this.problem.CountChanges([1, 0]), Is.EqualTo(1));
                 Assert.That(this.problem.CountChanges([1, 1]), Is.EqualTo(2));
+            }
+        }
+
+        [Test]
+        public void VerifyGetRangeAndGetReference()
+        {
+            var camera = new TradeOffDecision("camera", null, null,
+            [
+                new TradeOffOption("current", 1, true, new Dictionary<string, double> { ["mass"] = 38, ["power"] = 55 }),
+                new TradeOffOption("A", 1, false, new Dictionary<string, double> { ["mass"] = 30, ["power"] = 70 })
+            ], false);
+
+            var fixedTotals = new Dictionary<string, double> { ["mass"] = 80, ["power"] = 100, ["powerOutput"] = 200 };
+            var massBudget = new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 150, null, 20);
+            var powerBalance = new TradeOffLimit("power", TradeOffOperator.LessThanOrEqual, null, "powerOutput", 0);
+            var massOverNothing = new TradeOffLimit("mass", TradeOffOperator.GreaterThanOrEqual, null, "spare", 0);
+            var nothingOverNothing = new TradeOffLimit("spare", TradeOffOperator.LessThanOrEqual, null, "other", 0);
+            var problem = new TradeOffProblem([camera], fixedTotals, [], [massBudget, powerBalance], [], 1, null);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => problem.GetRange(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => problem.GetReference(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(problem.GetRange(massBudget), Is.EqualTo((1_320_000_000L, 1_416_000_000L)));
+                Assert.That(problem.GetRange(powerBalance), Is.EqualTo((-450_000_000L, -300_000_000L)));
+
+                // The excess of a broken limit is compared to the limit, or to the current total that stands for it.
+                Assert.That(problem.GetReference(massBudget), Is.EqualTo(1_500_000_000L));
+                Assert.That(problem.GetReference(powerBalance), Is.EqualTo(2_000_000_000L));
+                Assert.That(problem.GetReference(massOverNothing), Is.EqualTo(1_180_000_000L));
+                Assert.That(problem.GetReference(nothingOverNothing), Is.EqualTo(TradeOffScale.UnitsPerFactor * TradeOffScale.UnitsPerValue));
+            }
+        }
+
+        [Test]
+        public void VerifyCountBrokenAndTheTotalsOfTheModel()
+        {
+            var camera = new TradeOffDecision("camera", null, null,
+            [
+                new TradeOffOption("current", 1, true, new Dictionary<string, double> { ["mass"] = 38, ["satellite.mass"] = 38 }),
+                new TradeOffOption("A", 1, false, new Dictionary<string, double> { ["mass"] = 30, ["satellite.mass"] = 30 })
+            ], false);
+
+            var fixedTotals = new Dictionary<string, double> { ["mass"] = 80, ["satellite.mass"] = 80 };
+            var given = new TradeOffLimit("mass", TradeOffOperator.LessThanOrEqual, 100, null, 0);
+            var fromModel = new TradeOffLimit("satellite.mass", TradeOffOperator.LessThanOrEqual, 115, null, 0, Name: "REQ-SYS-001") { IsFromModel = true };
+
+            var problem = new TradeOffProblem([camera], fixedTotals, [], [given, fromModel], [], 1, null)
+            {
+                Penalties = [new TradeOffPenalty(0, new Dictionary<int, int> { [0] = 1 }, 1)]
+            };
+
+            var manyModelLimits = Enumerable.Range(0, TradeOffProblem.MaximumModelTotals + 1)
+                .Select(index => new TradeOffLimit($"part{index}.mass", TradeOffOperator.LessThanOrEqual, 10, null, 0) { IsFromModel = true })
+                .ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => problem.CountBroken(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(problem.Requirements, Is.Empty);
+                Assert.That(problem.Space, Is.Null);
+                Assert.That(problem.CountBroken([0]), Is.EqualTo(2));
+                Assert.That(problem.CountBroken([1]), Is.EqualTo(2));
+                Assert.That((problem with { Penalties = [] }).CountBroken([1]), Is.EqualTo(1));
+
+                // The totals that the requirements of the model compare are shown after those of the request, unless they are
+                // too many.
+                Assert.That(problem.GetAttributes(), Is.EqualTo(["mass", "satellite.mass"]));
+                Assert.That((problem with { Limits = [fromModel] }).GetAttributes(), Is.EqualTo(["satellite.mass"]));
+                Assert.That((problem with { Limits = [.. manyModelLimits] }).GetAttributes(), Is.Empty);
             }
         }
     }

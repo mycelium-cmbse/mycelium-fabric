@@ -408,5 +408,169 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             part.AssignOwnership(new FeatureMembership(), attribute);
             attribute.AssignOwnership(new FeatureValue(), new LiteralInteger { Value = value });
         }
+
+        [Test]
+        public void VerifyBuildFromTheModel()
+        {
+            var orbiterProvider = OrbiterChangesHelper.CreateModel();
+            var orbiterId = orbiterProvider.Elements.OfType<IPartUsage>().Single(part => part.DeclaredName == OrbiterChangesHelper.OrbiterName).Id;
+            var problem = TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, null, null, null, null, 1, null));
+            var current = problem.GetCurrentSelection();
+
+            using (Assert.EnterMultipleScope())
+            {
+                // The parts typed by a catalogue are the choices, with the variants and the numbers of units of the catalogue.
+                Assert.That(problem.Decisions.Select(decision => decision.Name), Is.EqualTo(["camera", "battery", "solarPanel", "engine", "tank"]));
+                Assert.That(problem.Decisions.Select(decision => decision.QualifiedName), Has.All.StartsWith("Orbiter::orbiter::"));
+                Assert.That(problem.Decisions.Select(decision => decision.Required), Is.All.False);
+                Assert.That(problem.Decisions[0].Options.Select(option => (option.Variant, option.Quantity, option.IsCurrent)), Is.EqualTo([("wide", 1, true), ("sharp", 1, false)]));
+                Assert.That(problem.Decisions[1].Options.Select(option => (option.Variant, option.Quantity)), Is.EqualTo(
+                    [("liIon150", 1), ("liIon150", 2), ("liIon150", 3), ("liIon150", 4), ("liIon300", 1), ("liIon300", 2), ("liIon300", 3), ("liIon300", 4)]));
+                Assert.That(problem.Decisions[2].Options, Has.Count.EqualTo(10));
+                Assert.That(problem.Decisions[2].Options[current[2]], Has.Property(nameof(TradeOffOption.Variant)).EqualTo("regular").And.Property(nameof(TradeOffOption.Quantity)).EqualTo(2));
+                Assert.That(problem.Decisions[4].Options.Select(option => (option.Variant, option.Quantity, option.IsCurrent)), Is.EqualTo([("small", 1, false), ("large", 1, true), ("none", 0, false)]));
+
+                // The requirements that compare sums are limits for the solver; the one on the propellant is only checked.
+                Assert.That(problem.Requirements.Select(requirement => requirement.Name), Is.EqualTo(["REQ-PL-001", "REQ-PRP-001", "REQ-PRP-002", "REQ-PWR-001", "REQ-PWR-002", "REQ-SYS-001"]));
+                Assert.That(problem.Requirements.Select(requirement => requirement.LimitIndex), Is.EqualTo(new int?[] { 0, 1, null, 2, 3, 4 }));
+                Assert.That(problem.Requirements.Select(requirement => requirement.IsIgnored), Is.All.False);
+
+                Assert.That(problem.Limits.Select(limit => $"{limit.Name}: {limit.Description}"), Is.EqualTo(
+                [
+                    "REQ-PL-001: payload.mass <= 25 kg", "REQ-PRP-001: orbiter.fuelCapacity >= orbiter.fuelNeed", "REQ-PWR-001: orbiter.power * 1.1 <= orbiter.powerOutput",
+                    "REQ-PWR-002: orbiter.energyCapacity >= orbiter.energyNeed", "REQ-SYS-001: orbiter.mass <= 125 kg"
+                ]));
+
+                Assert.That(problem.Limits.Select(limit => limit.IsFromModel), Is.All.True);
+                Assert.That(problem.Limits.Select(limit => problem.IsSatisfied(limit, current)), Is.All.True);
+                Assert.That(problem.FixedTotals["orbiter.mass"], Is.EqualTo(45));
+                Assert.That(problem.GetTotalUnits("orbiter.mass", current), Is.EqualTo(92_000));
+                Assert.That(problem.GetTotalUnits("payload.mass", [1, .. current.Skip(1)]), Is.EqualTo(30_000));
+                Assert.That(problem.GetTotalUnits("orbiter.fuelCapacity", [.. current.Take(4), 2]), Is.Zero);
+                Assert.That(problem.GetTotalUnits("orbiter.powerOutput", [0, 0, 6, 0, 0]), Is.EqualTo(270_000));
+                Assert.That(problem.GetUnit("orbiter.mass").Symbol, Is.EqualTo("kg"));
+                Assert.That(problem.GetAttributes(), Has.Count.EqualTo(8));
+                Assert.That(problem.Space, Is.Not.Null);
+            }
+        }
+
+        [Test]
+        public void VerifyBuildFromTheModelAndTheRequest()
+        {
+            var orbiterProvider = OrbiterChangesHelper.CreateModel();
+            var parts = orbiterProvider.Elements.OfType<IPartUsage>().ToDictionary(part => part.qualifiedName, part => part.Id);
+            var orbiterId = parts["Orbiter::orbiter"];
+
+            TradeOffChoice[] choices =
+            [
+                new TradeOffChoice { PartId = parts["Orbiter::orbiter::payload::camera"], Variants = [new TradeOffVariant { Name = "compact", Values = new Dictionary<string, double> { ["mass"] = 12, ["power"] = 30 } }] },
+                new TradeOffChoice { Name = "radiator", Variants = [new TradeOffVariant { Name = "panel", Values = new Dictionary<string, double> { ["mass"] = 4 }, MaxQuantity = 2 }] }
+            ];
+
+            TradeOffObjective[] lowestMass = [new TradeOffObjective { Attribute = "mass" }];
+            var problem = TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, choices, lowestMass, null, null, 1, "engine", IgnoredRequirements: ["REQ-PL-001", " ", "greenPropellant"]));
+            var current = problem.GetCurrentSelection();
+
+            TradeOffChoice[] sameVariant = [new TradeOffChoice { PartId = parts["Orbiter::orbiter::payload::camera"], Variants = [new TradeOffVariant { Name = "wide", Values = new Dictionary<string, double> { ["mass"] = 1 } }] }];
+
+            using (Assert.EnterMultipleScope())
+            {
+                // A choice of the request on a part of a catalogue adds its variants; the other parts of a catalogue follow.
+                Assert.That(problem.Decisions.Select(decision => decision.Name), Is.EqualTo(["camera", "radiator", "battery", "solarPanel", "engine", "tank"]));
+                Assert.That(problem.Decisions[0].Options.Select(option => (option.Variant, option.IsCurrent)), Is.EqualTo([("wide", true), ("sharp", false), ("compact", false)]));
+                Assert.That(problem.Decisions[1].Options.Select(option => (option.Variant, option.Quantity)), Is.EqualTo([("none", 0), ("panel", 1), ("panel", 2)]));
+                Assert.That(problem.CompareDecisionIndex, Is.EqualTo(4));
+                Assert.That(problem.GetTotalUnits("mass", current), Is.EqualTo(92_000));
+                Assert.That(problem.GetTotalUnits("mass", [2, 2, .. current.Skip(2)]), Is.EqualTo(94_000));
+                Assert.That(problem.GetTotalUnits("orbiter.mass", [2, 2, .. current.Skip(2)]), Is.EqualTo(94_000));
+                Assert.That(problem.GetTotalUnits("orbiter.power", [2, .. current.Skip(1)]), Is.EqualTo(65_000));
+
+                // A requirement that the request ignores is neither a limit nor checked.
+                Assert.That(problem.Requirements.Where(requirement => requirement.IsIgnored).Select(requirement => requirement.Name), Is.EqualTo(["REQ-PL-001", "REQ-PRP-002"]));
+                Assert.That(problem.Limits.Select(limit => limit.Name), Is.EqualTo(["REQ-PRP-001", "REQ-PWR-001", "REQ-PWR-002", "REQ-SYS-001"]));
+
+                Assert.That(() => TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, null, null, null, null, 1, null, IgnoredRequirements: ["REQ-XYZ"])),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("ignoredRequirements names 'REQ-XYZ', which is not a requirement with a value to check. "
+                        + "The requirements are: REQ-PL-001, REQ-PRP-001, REQ-PRP-002, REQ-PWR-001, REQ-PWR-002, REQ-SYS-001."));
+
+                Assert.That(() => TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, sameVariant, null, null, null, 1, null)),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("The choice 'camera' has two variants named 'wide'."));
+
+                Assert.That(() => TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, null, null, null, null, 6, null)),
+                    Throws.TypeOf<McpException>().With.Message.EqualTo("The number of combinations must be between 1 and 5."));
+
+                Assert.That(() => TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, null, [new TradeOffObjective { Attribute = "cost" }], null, null, 1, null)),
+                    Throws.TypeOf<McpException>().With.Message.StartsWith("No part under 'orbiter' and no variant has a value for 'cost'."));
+            }
+        }
+
+        [Test]
+        public void VerifyBuildFromTheModelWithPartsToDecide()
+        {
+            var orbiterProvider = OrbiterChangesHelper.CreateModel();
+
+            // A part that takes no variant yet, a tank that is not on board, a second battery, parts that the totals do not
+            // count, a requirement that two parts satisfy and requirements that are not a comparison of two sums.
+            var result = orbiterProvider.ApplyChanges(
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "powerSystem", Name = "spare", Definition = "BatteryOptions" } },
+                new ModelChange { Identity = "tank", Payload = new ElementPayload { Multiplicity = "0" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "payload", Name = "battery", Definition = "BatteryOptions", Variant = "liIon300", Multiplicity = "6" } },
+                new ModelChange { Identity = "antennas", Payload = new ElementPayload { Type = "PartUsage", Owner = OrbiterChangesHelper.OrbiterName, Name = "antennas", Multiplicity = "1..2" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "antennas", Name = "feed", Definition = "CameraOptions", Variant = "wide" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "camera", Name = "lens", Definition = "CameraOptions", Variant = "sharp" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "Orbiter", Name = "groundCamera", Definition = "CameraOptions", Variant = "wide" } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "payloadMass", SatisfyingPart = "powerSystem" } },
+                new ModelChange { Identity = "margin", Payload = new ElementPayload { Type = "RequirementUsage", Owner = "Requirements", Name = "margin", ReqId = "REQ-PWR-003", Text = "The solar panels shall generate 20 % more than 100 W.",
+                    Constraint = new ConstraintPayload { Attribute = "powerOutput", Operator = ">=", Limit = 100, Unit = "W", Margin = 20 } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "margin", SatisfyingPart = OrbiterChangesHelper.OrbiterName } },
+                new ModelChange { Identity = "structureMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = "Requirements", Name = "structureMass", ReqId = "REQ-STR-001", Text = "The structure shall weigh at most 45 kg.",
+                    Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 45, Unit = "kg" } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "structureMass", SatisfyingPart = "structure" } },
+                new ModelChange { Identity = "energyMargin", Payload = new ElementPayload { Type = "RequirementUsage", Owner = "Requirements", Name = "energyMargin", ReqId = "REQ-PWR-004", Text = "The batteries shall store 20 % more than the energy needed.",
+                    Constraint = new ConstraintPayload { Attribute = "energyCapacity", Operator = ">=", LimitAttribute = "energyNeed", Margin = 20 } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "energyMargin", SatisfyingPart = OrbiterChangesHelper.OrbiterName } },
+                new ModelChange { Identity = "engineMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = "Requirements", Name = "engineMass", ReqId = "REQ-PRP-003", Text = "The engine shall weigh at most 10 kg.",
+                    Constraint = new ConstraintPayload { Attribute = "engine.mass", Operator = "<=", Limit = 10000, Unit = "g" } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "engineMass", SatisfyingPart = "propulsion" } }
+            ]);
+
+            var orbiterId = orbiterProvider.Elements.OfType<IPartUsage>().Single(part => part.DeclaredName == OrbiterChangesHelper.OrbiterName).Id;
+            var problem = TradeOffProblemBuilder.Build(orbiterProvider, new TradeOffRequest(orbiterId, null, null, null, null, 1, null));
+            var decisions = problem.Decisions.ToDictionary(decision => decision.Name);
+            var limits = problem.Limits.ToDictionary(limit => limit.Name, limit => limit.Description);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True, string.Join(" ", result.Problems));
+
+                // The part inside a part of a catalogue, the part under a part without a fixed number of units and the part
+                // outside the orbiter are not choices; two parts with the same name are told apart by their owner.
+                Assert.That(decisions.Keys, Is.EqualTo(["battery", "camera", "battery (powerSystem)", "solarPanel", "spare", "engine", "tank"]));
+
+                // The part that takes no variant must take one; the tank that is not on board may stay out.
+                Assert.That(decisions["spare"].Required, Is.True);
+                Assert.That(decisions["spare"].Options[0], Is.EqualTo(new TradeOffOption("none", 0, true, decisions["spare"].Options[0].Values)));
+                Assert.That(decisions["spare"].Options, Has.Count.EqualTo(9));
+                Assert.That(problem.IsAllowed(4, 0), Is.False);
+                Assert.That(decisions["tank"].Options.Select(option => (option.Variant, option.Quantity, option.IsCurrent)), Is.EqualTo([("small", 1, false), ("large", 1, false), ("none", 0, true)]));
+
+                // Six batteries are more than the catalogue allows: what the model holds stays an option.
+                Assert.That(decisions["battery"].Options[0], Has.Property(nameof(TradeOffOption.Variant)).EqualTo("liIon300").And.Property(nameof(TradeOffOption.Quantity)).EqualTo(6));
+                Assert.That(decisions["battery"].Options, Has.Count.EqualTo(9));
+
+                // A requirement that two parts satisfy is checked for each; a margin on a number goes into the limit, a margin
+                // between two sums stays a margin, and a limit in another unit is converted.
+                Assert.That(problem.Requirements.Select(requirement => requirement.Name), Has.Member("REQ-PL-001 (payload)").And.Member("REQ-PL-001 (powerSystem)"));
+                Assert.That(limits["REQ-PWR-003"], Is.EqualTo("orbiter.powerOutput >= 120 W"));
+                Assert.That(limits["REQ-PWR-004"], Is.EqualTo("orbiter.energyCapacity >= orbiter.energyNeed * 1.2"));
+                Assert.That(limits["REQ-PRP-003"], Is.EqualTo("engine.mass <= 10 kg"));
+                Assert.That(limits["REQ-PL-001 (powerSystem)"], Is.EqualTo("powerSystem.mass <= 25 kg"));
+
+                // A requirement that no choice changes needs no limit.
+                Assert.That(limits.Keys, Has.No.Member("REQ-STR-001"));
+                Assert.That(problem.Requirements.Single(requirement => requirement.Name == "REQ-STR-001").LimitIndex, Is.Null);
+            }
+        }
     }
 }

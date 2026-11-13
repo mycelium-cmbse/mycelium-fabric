@@ -30,10 +30,31 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Rules">The text of each rule, for example <c>propulsion.thermal requires fuelTank.small</c>.</param>
     /// <param name="Current">The <see cref="TradeOffCombination"/> of the current state.</param>
     /// <param name="Best">The best <see cref="TradeOffCombination"/>s of the solver, as <c>solve_trade_off</c> returns them.</param>
-    /// <param name="Points">The <see cref="TradeOffPoint"/> of every combination, or only those of the best when there are too many.</param>
+    /// <param name="Points">
+    /// The <see cref="TradeOffPoint"/> of every combination or, when there are too many, of the best ones and of those that are
+    /// one choice away from the current state and from the best one.
+    /// </param>
     /// <param name="PointsComplete">Whether <paramref name="Points"/> holds every combination.</param>
     /// <param name="Conflicts">The constraints and rules that conflict when no combination exists.</param>
     public sealed record TradeOffStudy(string Title, TradeOffRoot Root, TradeOffStatus Status, TradeOffRequest Request, IReadOnlyList<TradeOffAttribute> Attributes,
         IReadOnlyList<TradeOffStudyChoice> Choices, IReadOnlyList<TradeOffObjective> Objectives, IReadOnlyList<TradeOffStudyConstraint> Constraints, IReadOnlyList<string> Rules,
-        TradeOffCombination Current, IReadOnlyList<TradeOffCombination> Best, IReadOnlyList<TradeOffPoint> Points, bool PointsComplete, IReadOnlyList<string> Conflicts);
+        TradeOffCombination Current, IReadOnlyList<TradeOffCombination> Best, IReadOnlyList<TradeOffPoint> Points, bool PointsComplete, IReadOnlyList<string> Conflicts)
+    {
+        /// <summary>
+        /// Gets the requirements of the model that the server checks on every combination, as they are in the current state:
+        /// those that the choices can change, those that do not hold today, and those that the user turned off.
+        /// </summary>
+        public IReadOnlyList<TradeOffStudyRequirement> Requirements { get; init; } = [];
+
+        /// <summary>
+        /// Gets the number of requirements of the model that hold today and that no choice changes: they are not listed.
+        /// </summary>
+        public int OtherRequirementCount { get; init; }
+
+        /// <summary>
+        /// Gets the totals that the chart of the view draws, chosen by <see cref="TradeOffAxes"/>: two for a chart of points,
+        /// one for a chart of bars, none when the study has no total.
+        /// </summary>
+        public IReadOnlyList<string> Axes { get; init; } = [];
+    }
 }

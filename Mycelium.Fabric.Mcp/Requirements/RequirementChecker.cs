@@ -106,6 +106,54 @@ namespace Mycelium.Fabric.Mcp.Requirements
         }
 
         /// <summary>
+        /// Gets the requirements that can be checked: each requirement that has a required constraint, once for each part
+        /// that satisfies it.
+        /// </summary>
+        /// <returns>The <see cref="SatisfiedRequirement"/>s, sorted by requirement identifier, then by name and by satisfying part.</returns>
+        public IReadOnlyList<SatisfiedRequirement> GetSatisfiedRequirements()
+        {
+            var satisfyingFeatures = this.GetSatisfyingFeatures();
+
+            return
+            [
+                .. this.elements
+                    .OfType<IRequirementUsage>()
+                    .Where(requirement => requirement is not ISatisfyRequirementUsage)
+                    .Select(requirement => (Requirement: requirement, Constraints: ReadConstraints(requirement)))
+                    .Where(pair => pair.Constraints.Required.Count > 0)
+                    .SelectMany(pair => satisfyingFeatures[pair.Requirement]
+                        .Select(feature => new SatisfiedRequirement(pair.Requirement, feature, pair.Constraints.Subject, pair.Constraints.Assumptions, pair.Constraints.Required)))
+                    .OrderBy(requirement => requirement.Requirement.ReqId == null)
+                    .ThenBy(requirement => requirement.Requirement.ReqId, StringComparer.Ordinal)
+                    .ThenBy(requirement => requirement.Requirement.DeclaredName, StringComparer.Ordinal)
+                    .ThenBy(requirement => requirement.SatisfyingFeature.qualifiedName, StringComparer.Ordinal)
+            ];
+        }
+
+        /// <summary>
+        /// Checks one requirement against one part that satisfies it, on the model or on one combination of a trade-off, with
+        /// the same evaluation as <see cref="CheckRequirements"/>.
+        /// </summary>
+        /// <param name="requirement">The <see cref="SatisfiedRequirement"/> to check.</param>
+        /// <param name="selection">
+        /// What some parts hold in the combination, or <c>null</c> to check the model as it is.
+        /// </param>
+        /// <returns>The <see cref="CombinationCheck"/>: the check, and the parts of the combination that it has read.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="requirement"/> is <c>null</c>.
+        /// </exception>
+        public static CombinationCheck CheckRequirement(SatisfiedRequirement requirement, IPartSelection selection)
+        {
+            ArgumentNullException.ThrowIfNull(requirement);
+
+            var constraints = new RequirementConstraints(requirement.Subject, requirement.Assumptions, requirement.Required);
+            var context = new ModelEvaluationContext(requirement.Subject, requirement.SatisfyingFeature, selection: selection);
+            var check = CreateCheck(requirement.Requirement, constraints) with { SatisfiedBy = requirement.SatisfyingFeature.qualifiedName };
+
+            return new CombinationCheck(Evaluate(check, constraints, context), context.ReadPartIds);
+        }
+
+        /// <summary>
         /// Gets the features that satisfy each requirement, from the satisfy links of the model that are not negated.
         /// </summary>
         /// <returns>The satisfying features, grouped by requirement.</returns>

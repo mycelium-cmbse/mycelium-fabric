@@ -25,7 +25,10 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     /// The part of the total of each attribute that comes from the parts that no decision changes, by attribute name.
     /// </param>
     /// <param name="Objectives">The <see cref="TradeOffObjective"/>s, by order of priority.</param>
-    /// <param name="Limits">The <see cref="TradeOffLimit"/>s that every combination respects.</param>
+    /// <param name="Limits">
+    /// The <see cref="TradeOffLimit"/>s: the constraints given with the request, then the limits read from the requirements of
+    /// the model. A combination may break a limit when no combination meets them all: the fewer, the better.
+    /// </param>
     /// <param name="Dependencies">The <see cref="TradeOffDependency"/>s that every combination respects.</param>
     /// <param name="Count">The number of combinations to find, from the best, for each alternative.</param>
     /// <param name="CompareDecisionIndex">
@@ -41,6 +44,119 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         IReadOnlyList<TradeOffLimit> Limits, IReadOnlyList<TradeOffDependency> Dependencies, int Count, int? CompareDecisionIndex,
         IReadOnlyDictionary<string, Unit> AttributeUnits = null, IReadOnlyList<TradeOffVariantReference> Excluded = null)
     {
+        /// <summary>
+        /// The largest number of totals read by the requirements of the model that are shown with each combination.
+        /// </summary>
+        public const int MaximumModelTotals = 12;
+
+        /// <summary>
+        /// Gets the requirements of the model that are checked on every combination.
+        /// </summary>
+        public IReadOnlyList<TradeOffRequirement> Requirements { get; init; } = [];
+
+        /// <summary>
+        /// Gets what the checks of the requirements have taught so far about the combinations.
+        /// </summary>
+        public IReadOnlyList<TradeOffPenalty> Penalties { get; init; } = [];
+
+        /// <summary>
+        /// Gets the <see cref="TradeOffDesignSpace"/> that tells what the parts hold in a combination, or <c>null</c> for a
+        /// problem that is not read from a model.
+        /// </summary>
+        public TradeOffDesignSpace Space { get; init; }
+
+        /// <summary>
+        /// Gets the smallest and the largest value that the linear form of a limit takes over the combinations.
+        /// </summary>
+        /// <param name="limit">The <see cref="TradeOffLimit"/>.</param>
+        /// <returns>The range, in units of the linear form.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="limit"/> is <c>null</c>.
+        /// </exception>
+        public (long Minimum, long Maximum) GetRange(TradeOffLimit limit)
+        {
+            ArgumentNullException.ThrowIfNull(limit);
+
+            var form = limit.GetLinearForm();
+            var (minimum, maximum) = Scale(this.GetTotalRange(limit.Attribute), form.TotalCoefficient);
+
+            if (limit.LimitAttribute == null)
+            {
+                return (minimum, maximum);
+            }
+
+            var (limitMinimum, limitMaximum) = Scale(this.GetTotalRange(limit.LimitAttribute), form.LimitCoefficient);
+
+            return (minimum + limitMinimum, maximum + limitMaximum);
+        }
+
+        /// <summary>
+        /// Gets the size to which the excess of a broken limit is compared, in units of its linear form: the limit itself,
+        /// or the current total that stands for it when the limit is the total of another attribute or is 0.
+        /// </summary>
+        /// <param name="limit">The <see cref="TradeOffLimit"/>.</param>
+        /// <returns>The reference, at least 1.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="limit"/> is <c>null</c>.
+        /// </exception>
+        public long GetReference(TradeOffLimit limit)
+        {
+            ArgumentNullException.ThrowIfNull(limit);
+
+            var form = limit.GetLinearForm();
+            var current = this.GetCurrentSelection();
+
+            long[] candidates =
+            [
+                limit.LimitAttribute == null ? form.Bound : form.LimitCoefficient * this.GetTotalUnits(limit.LimitAttribute, current),
+                form.TotalCoefficient * this.GetTotalUnits(limit.Attribute, current),
+                TradeOffScale.UnitsPerFactor * TradeOffScale.UnitsPerValue
+            ];
+
+            return candidates.Select(Math.Abs).First(candidate => candidate > 0);
+        }
+
+        /// <summary>
+        /// Counts the limits that a combination breaks, with the penalties that apply to it: the number of requirements and
+        /// constraints that it does not meet, as far as the checks done so far tell.
+        /// </summary>
+        /// <param name="selection">The index of the selected option of each decision.</param>
+        /// <returns>The number of broken limits.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="selection"/> is <c>null</c>.
+        /// </exception>
+        public int CountBroken(IReadOnlyList<int> selection)
+        {
+            ArgumentNullException.ThrowIfNull(selection);
+
+            return this.Limits.Count(limit => !this.IsSatisfied(limit, selection)) + this.Penalties.Where(penalty => penalty.AppliesTo(selection)).Sum(penalty => penalty.Weight);
+        }
+
+        /// <summary>
+        /// Gets the smallest and the largest total of an attribute over the combinations, in units of
+        /// <see cref="TradeOffScale"/>.
+        /// </summary>
+        /// <param name="attribute">The name of the attribute.</param>
+        /// <returns>The range.</returns>
+        private (long Minimum, long Maximum) GetTotalRange(string attribute)
+        {
+            var fixedUnits = TradeOffScale.ToUnits(this.FixedTotals.GetValueOrDefault(attribute));
+            var optionUnits = this.Decisions.Select(decision => decision.Options.Select(option => TradeOffScale.ToUnits(option.Values.GetValueOrDefault(attribute))).ToList()).ToList();
+
+            return (fixedUnits + optionUnits.Sum(units => units.Min()), fixedUnits + optionUnits.Sum(units => units.Max()));
+        }
+
+        /// <summary>
+        /// Multiplies a range by a coefficient, which reverses it when it is negative.
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <param name="coefficient">The coefficient.</param>
+        /// <returns>The multiplied range.</returns>
+        private static (long Minimum, long Maximum) Scale((long Minimum, long Maximum) range, long coefficient)
+        {
+            return coefficient >= 0 ? (range.Minimum * coefficient, range.Maximum * coefficient) : (range.Maximum * coefficient, range.Minimum * coefficient);
+        }
+
         /// <summary>
         /// Tells whether a combination may take an option: its variant is not turned off, and it is not the absence of a
         /// required equipment.
@@ -177,16 +293,25 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
         /// <summary>
         /// Gets the names of the attributes of the problem, without duplicates: those of the objectives, then those of the
-        /// limits, then the limit attributes.
+        /// limits, then the limit attributes, then the totals that the requirements of the model compare.
         /// </summary>
         /// <returns>The names of the attributes.</returns>
         public IReadOnlyList<string> GetAttributes()
         {
+            var givenLimits = this.Limits.Where(limit => !limit.IsFromModel).ToList();
+            var modelLimits = this.Limits.Where(limit => limit.IsFromModel).ToList();
+
+            // The totals that the requirements of the model compare are shown too, so that every consequence of a choice is seen,
+            // unless there are too many of them.
+            var modelTotals = modelLimits.Select(limit => limit.Attribute).Concat(modelLimits.Select(limit => limit.LimitAttribute)).Where(total => total != null).Distinct().ToList();
+            var showsModelTotals = modelTotals.Count <= MaximumModelTotals;
+
             return
             [
                 .. this.Objectives.Select(objective => objective.Attribute)
-                    .Concat(this.Limits.Select(limit => limit.Attribute))
-                    .Concat(this.Limits.Select(limit => limit.LimitAttribute))
+                    .Concat(givenLimits.Select(limit => limit.Attribute))
+                    .Concat(givenLimits.Select(limit => limit.LimitAttribute))
+                    .Concat(showsModelTotals ? modelTotals : [])
                     .Where(attribute => attribute != null)
                     .Distinct()
             ];

@@ -106,6 +106,7 @@ function study(values) {
             title: "Camera and X-band transmitter"
         },
         attributes: [{ name: "mass", unit: "kg" }, { name: "power", unit: null }],
+        axes: ["mass", "power"],
         choices: [
             {
                 name: "camera",
@@ -240,6 +241,36 @@ function points(page) {
     return byId(page, "chart").querySelectorAll("g").map(group => {
         const number = group.children.find(child => child.tagName === "TEXT")?.textContent ?? "-";
         return group.className + " | " + number + " | " + group.querySelector("title").textContent;
+    });
+}
+
+/**
+ * Gets the texts of the table of the totals, line by line.
+ * @param {object} page The page.
+ * @returns {string[][]} The text of each cell.
+ */
+function tableCells(page) {
+    return byId(page, "chart").querySelectorAll("tr").map(line => line.children.map(cell => cell.textContent));
+}
+
+/**
+ * Gets the classes of the cells of the table of the totals, line by line.
+ * @param {object} page The page.
+ * @returns {string[][]} The classes of each cell.
+ */
+function tableClasses(page) {
+    return byId(page, "chart").querySelectorAll("tr").map(line => line.children.map(cell => cell.className));
+}
+
+/**
+ * Gets the items of the legend: the class of the mark and the meaning, or the text alone for an item without mark.
+ * @param {object} page The page.
+ * @returns {string[]} The items.
+ */
+function legend(page) {
+    return byId(page, "legend").children.map(item => {
+        const mark = item.querySelector("i");
+        return mark ? mark.className + ": " + item.textContent : item.textContent;
     });
 }
 
@@ -405,7 +436,8 @@ describe("trade-off view", () => {
         it("lists the best options from 1, with their totals against today and their checks, the first one selected", async () => {
             await open(study());
 
-            assert.equal(byId(page, "today").textContent, "vs today: 125.8 kg · 227");
+            assert.equal(byId(page, "today").textContent, "Today: 1 not met");
+            assert.equal(byId(page, "today").title, "Today: mass 125.8 kg · power 227");
             assert.deepEqual(options(page), [
                 "1* (tr-rank n1) | camera: A · xBandTransmitter: XT-low | 117.4 kg (−8.4) · 235 (+8) | ✓ REQ-SYS-001 · 140.88 / 150",
                 "2 (tr-rank n2) | camera: A · xBandTransmitter: current | 117.8 kg (−8) · 242 (+15) | ✓ REQ-SYS-001 · 141.36 / 150",
@@ -415,7 +447,7 @@ describe("trade-off view", () => {
             assert.deepEqual(differences, ["tr-better", "tr-worse", "tr-better", "tr-worse", "tr-better", "tr-better"]);
         });
 
-        it("colours a difference by the way of its objective, shows an unchanged total, a quantity, and a check without value", async () => {
+        it("colours a difference by the way of its objective, leaves out an unchanged total, shows a quantity and a check without value", async () => {
             const option = combination(1, "A", "XT-low", [117.4, 227, -8.4, 0], 140.88);
             option.choices = chosen("A", "XT-low", 2);
             option.constraints.push({ constraint: "power <= powerOutput", satisfied: false, name: null, value: null, limit: null });
@@ -423,9 +455,9 @@ describe("trade-off view", () => {
             await open(study({ objectives: [{ attribute: "mass", direction: "Maximize" }], best: [option] }));
 
             assert.deepEqual(options(page), [
-                "1* (tr-rank n1) | camera: A · xBandTransmitter: XT-low × 2 | 117.4 kg (−8.4) · 227 (=) | ✓ REQ-SYS-001 · 140.88 / 150✗ power <= powerOutput"
+                "1* (tr-rank n1) | camera: A · xBandTransmitter: XT-low × 2 | mass 117.4 kg (−8.4) | ✓ REQ-SYS-001 · 140.88 / 150✗ power <= powerOutput"
             ]);
-            assert.deepEqual(byId(page, "options").querySelectorAll(".tr-totals span").map(span => span.className), ["tr-worse", ""]);
+            assert.deepEqual(byId(page, "options").querySelectorAll(".tr-totals span").map(span => span.className), ["tr-worse"]);
             assert.deepEqual(byId(page, "options").querySelectorAll(".tr-checks span").map(span => span.className), ["tagv ok", "tagv bad"]);
         });
 
@@ -448,8 +480,8 @@ describe("trade-off view", () => {
 
             await open(study({ status: "Infeasible", best: [], points: rejected, conflicts: ["constraint 1: mass * 1.2 <= 150 kg"] }));
 
-            assert.equal(byId(page, "subtitle").textContent, "EOSat1::Architecture::eosat1 · 6 combinations · no combination meets the constraints");
-            assert.equal(byId(page, "options").textContent, "No combination meets the constraints.");
+            assert.equal(byId(page, "subtitle").textContent, "EOSat1::Architecture::eosat1 · 6 combinations · the rules leave no combination");
+            assert.equal(byId(page, "options").textContent, "The rules leave no combination.");
             assert.deepEqual(byId(page, "excluded").querySelectorAll("h3").map(heading => heading.textContent), ["Excluded (6)", "Why no combination works"]);
             assert.equal(byId(page, "excluded").children.at(-1).textContent, "constraint 1: mass * 1.2 <= 150 kg");
             assert.equal(byId(page, "pick").hidden, true);
@@ -519,8 +551,8 @@ describe("trade-off view", () => {
             assert.equal(chart.querySelector(".tr-limit-label").textContent, "REQ-SYS-001 · 125 kg");
             assert.deepEqual(byId(page, "legend").children.map(item => item.querySelector("i").className + ": " + item.textContent), [
                 "best: Best options",
-                "ok: Meets the constraints",
-                "bad: Breaks a constraint or rule",
+                "ok: Meets everything",
+                "bad: Breaks a requirement, a constraint or a rule",
                 "limit: REQ-SYS-001 limit"
             ]);
         });
@@ -553,18 +585,95 @@ describe("trade-off view", () => {
             assert.equal(chart.querySelector(".tr-limit-label").textContent, "REQ-MASS · 120 kg");
         });
 
-        it("draws no chart for a single attribute", async () => {
-            await open(study({ attributes: [{ name: "mass", unit: "kg" }], objectives: [{ attribute: "mass", direction: "Minimize" }] }));
+        it("draws a single total as bars, today then each best option, with the limit across them and its legend", async () => {
+            await open(study({ attributes: [{ name: "mass", unit: "kg" }], axes: ["mass"], objectives: [{ attribute: "mass", direction: "Minimize" }] }));
 
-            assert.equal(byId(page, "chart").textContent, "One attribute only: see the list of best options.");
+            const bars = byId(page, "chart").querySelectorAll("g");
+            assert.deepEqual(bars.map(bar => bar.className + " | " + bar.querySelector("title").textContent), [
+                "tr-bar tr-bar-today tr-bar-bad | Today · 125.8 kg",
+                "tr-bar tr-bar-best pt-rank1 on | Option 1 · camera: A · xBandTransmitter: XT-low · 117.4 kg",
+                "tr-bar tr-bar-best pt-rank2 | Option 2 · camera: A · xBandTransmitter: current · 117.8 kg",
+                "tr-bar tr-bar-best pt-rank3 | Option 3 · camera: B · xBandTransmitter: XT-low · 121.4 kg"
+            ]);
+            assert.deepEqual(bars.map(bar => bar.dataset.option), [undefined, 1, 2, 3]);
+            const line = byId(page, "chart").querySelector(".tr-limit");
+            assert.equal(line.getAttribute("y1"), line.getAttribute("y2"));
+            assert.equal(byId(page, "chart").querySelector(".tr-limit-label").textContent, "REQ-SYS-001 · 125 kg");
+            assert.deepEqual(byId(page, "legend").children.map(item => item.querySelector("i").className), ["today", "best", "bad", "limit"]);
+        });
+
+        it("selects an option clicked on its bar", async () => {
+            await open(study({ attributes: [{ name: "mass", unit: "kg" }], axes: ["mass"] }));
+
+            byId(page, "chart").querySelectorAll("g").find(group => group.dataset.option === 3).querySelector("rect").dispatch("click");
+
+            assert.equal(options(page)[2].startsWith("3*"), true);
+            assert.equal(byId(page, "chart").querySelectorAll("g.on").map(bar => bar.dataset.option).join(), "3");
+        });
+
+        it("tells when there is no total to draw", async () => {
+            const first = study({ attributes: [], axes: [] });
+            first.current.totals = [];
+
+            await open(first);
+
+            assert.equal(byId(page, "chart").textContent, "No total to draw: see the list of best options.");
             assert.equal(byId(page, "legend").children.length, 0);
         });
 
-        it("draws today alone when there is no combination to show", async () => {
+        it("shows today alone in the table when there is no combination to show, and the totals that never change", async () => {
             await open(study({ best: [], points: [], constraints: [] }));
 
+            assert.deepEqual(tableCells(page), [["", "Today"], ["requirements", "✗ REQ-SYS-001"]]);
+            assert.deepEqual(legend(page), ["Same everywhere: mass, power"]);
+        });
+
+        it("shows the totals in a table, today against each best option, when the server could not give every combination", async () => {
+            await open(study({ pointsComplete: false }));
+
+            assert.equal(byId(page, "chart-title").textContent, "Best options against today");
+            assert.equal(byId(page, "chart-hint").textContent, "Click a column to select it");
+            assert.deepEqual(tableCells(page), [
+                ["", "Today", "Option 1camera: A · xBandTransmitter: XT-low", "Option 2camera: A", "Option 3camera: B · xBandTransmitter: XT-low"],
+                ["mass", "125.8 kg", "117.4 kg−8.4", "117.8 kg−8", "121.4 kg−4.4"],
+                ["power", "227", "235+8", "242+15", "215−12"],
+                ["requirements", "✗ REQ-SYS-001", "✓ 1 met", "✓ 1 met", "✓ 1 met"]
+            ]);
+            assert.deepEqual(tableClasses(page)[1], ["tr-row-name", "tr-cell tr-cell-breach", "tr-cell tr-cell-better on", "tr-cell tr-cell-better", "tr-cell tr-cell-better"]);
+            assert.deepEqual(tableClasses(page)[2], ["tr-row-name", "tr-cell tr-cell-same", "tr-cell tr-cell-worse on", "tr-cell tr-cell-worse", "tr-cell tr-cell-better"]);
+            assert.equal(byId(page, "chart").querySelectorAll("td")[1].title, "Breaks REQ-SYS-001");
+            assert.deepEqual(legend(page), ["better: Better for an objective", "worse: Worse for an objective", "breach: Breaks a limit"]);
+            assert.equal(byId(page, "options").querySelectorAll(".tr-totals").length, 0);
+        });
+
+        it("shows the table when the combinations pile up on the two totals", async () => {
+            await open(study({ points: study().points.map(p => ({ ...p, totals: { mass: 120, power: 220 } })) }));
+
             assert.equal(byId(page, "chart").querySelectorAll("g").length, 0);
-            assert.equal(byId(page, "chart").querySelectorAll(".tr-today-dot").length, 1);
+            assert.equal(tableCells(page).length, 4);
+        });
+
+        it("darkens a cell as its total changes more when the total has no objective, and shows a total of the root once", async () => {
+            const first = study({ objectives: [], pointsComplete: false });
+            for (const option of [first.current, ...first.best]) option.totals.push({ ...option.totals[0], attribute: "eosat1.mass" }, { attribute: "volume", total: 2, difference: 0, unit: null });
+            first.best[0].totals[1] = { attribute: "power", total: 500, difference: 273, unit: null };
+            first.best[1].totals[1] = { attribute: "power", total: 300, difference: 73, unit: null };
+
+            await open(first);
+
+            assert.deepEqual(tableCells(page).map(row => row[0]), ["", "mass", "power", "requirements"]);
+            assert.deepEqual(tableClasses(page)[1].slice(2), ["tr-cell tr-cell-change1 on", "tr-cell tr-cell-change1", "tr-cell tr-cell-change1"]);
+            assert.deepEqual(tableClasses(page)[2].slice(2), ["tr-cell tr-cell-change3 on", "tr-cell tr-cell-change2", "tr-cell tr-cell-change1"]);
+            assert.deepEqual(legend(page), ["change: The darker, the bigger the change", "breach: Breaks a limit", "Same everywhere: volume"]);
+        });
+
+        it("selects an option clicked in its column of the table", async () => {
+            await open(study({ pointsComplete: false }));
+
+            byId(page, "chart").querySelectorAll("td").find(cell => cell.dataset.option === 3).dispatch("click");
+
+            assert.deepEqual(byId(page, "options").querySelectorAll(".tr-option.on").map(card => card.dataset.option), [3]);
+            assert.deepEqual(byId(page, "chart").querySelectorAll("th.on").map(cell => cell.dataset.option), [3]);
         });
     });
 
@@ -580,12 +689,31 @@ describe("trade-off view", () => {
                 const [box, name, values] = label.children;
                 return `${box.dataset.key} ${box.checked ? "on" : "off"}: ${name.textContent} (${values.textContent})`;
             }), [
-                "camera.current on: Current (38 kg · 55)",
-                "camera.A on: A (30 kg · 70)",
-                "camera.B off: B (34 kg · 50)",
-                "xBandTransmitter.current on: Current (1.6 kg · 35)",
-                "xBandTransmitter.XT-low on: XT-low (1.2 kg · 28)"
+                "camera.current on: Current (38 kg)",
+                "camera.A on: A (30 kg)",
+                "camera.B off: B (34 kg)",
+                "xBandTransmitter.current on: Current (1.6 kg)",
+                "xBandTransmitter.XT-low on: XT-low (1.2 kg)"
             ]);
+        });
+
+        it("shows the mass of the root next to a variant, and all its values but zeros on hover", async () => {
+            const first = study({ attributes: [{ name: "eosat1.power", unit: "W" }, { name: "eosat1.mass", unit: "kg" }, { name: "eosat1.fuelNeed", unit: "kg" }] });
+            first.choices = [{ name: "engine", variants: [{ name: "thermal", isCurrent: true, excluded: false, values: { "eosat1.power": 15, "eosat1.mass": 12, "eosat1.fuelNeed": 40 } }] }];
+            first.choices[0].variants.push({ name: "electric", isCurrent: false, excluded: false, values: { "eosat1.power": 180, "eosat1.mass": 8, "eosat1.fuelNeed": 0 } });
+
+            await open(first);
+
+            assert.deepEqual(byId(page, "choices").querySelectorAll("label").map(label => label.children[2].textContent + " | " + label.title), [
+                "12 kg | eosat1.power 15 W · eosat1.mass 12 kg · eosat1.fuelNeed 40 kg",
+                "8 kg | eosat1.power 180 W · eosat1.mass 8 kg"
+            ]);
+        });
+
+        it("shows the first total of the chart next to a variant when the study has no mass", async () => {
+            await open(study({ attributes: [{ name: "power", unit: "W" }], axes: ["power"] }));
+
+            assert.equal(byId(page, "choices").querySelectorAll("label")[0].children[2].textContent, "55 W");
         });
 
         it("shows no owner for equipment to add", async () => {
@@ -651,7 +779,7 @@ describe("trade-off view", () => {
 
             const call = requests(page, "tools/call").at(-1);
             assert.equal(call.params.name, "explore_trade_off");
-            assert.deepEqual(call.params.arguments, { ...study().request, excluded: ["camera.A"] });
+            assert.deepEqual(call.params.arguments, { ...study().request, excluded: ["camera.A"], ignoredRequirements: [] });
             assert.equal(byId(page, "busy").hidden, false);
 
             await answerStudy(page, study({ best: [study().best[2]] }));
@@ -940,6 +1068,238 @@ describe("trade-off view", () => {
             byId(page, "pick").querySelector("button").click();
 
             assert.match(requests(page, "ui/message").at(-1).params.content[0].text, /Settings changed in the view: REQ-SYS-001 turned off\./);
+        });
+    });
+
+    describe("checking the requirements of the model", () => {
+        const MASS = {
+            id: "6b93c533-0395-7e18-1bf6-4475deb47ba5", name: "REQ-SYS-001", text: "The satellite shall weigh at most 150 kg.", constraint: "subj.mass * 1.2 <= 150 [kg]",
+            satisfiedBy: "EOSat1::Architecture::eosat1", status: "NotSatisfied", explanation: "150.96 [kg] > 150 [kg]", dependsOnChoices: true, ignored: false, searched: true,
+            attribute: "mass", operator: "<=", threshold: 125
+        };
+        const BAND = {
+            id: "d17c3498-3404-4a62-9728-c58e59a4954f", name: "REQ-COM-001", text: null, constraint: "subj.xBandTransmitter.band == \"X\"",
+            satisfiedBy: "EOSat1::Architecture::eosat1::communicationSubsystem", status: "Satisfied", explanation: "\"X\" == \"X\"", dependsOnChoices: true, ignored: false,
+            searched: false, attribute: null, operator: null, threshold: null
+        };
+        const STIFFNESS = {
+            id: "24253a34-a8ba-fc0a-0dba-e5e83d42bd5f", name: "REQ-STR-001", text: null, constraint: "subj.stiffness >= 30", satisfiedBy: "EOSat1::Architecture::eosat1::structure",
+            status: "NotEvaluated", explanation: "The value of 'stiffness' is missing.", dependsOnChoices: false, ignored: false, searched: false, attribute: null, operator: null,
+            threshold: null
+        };
+
+        /**
+         * Builds a study whose model holds the requirements, instead of a constraint of the request.
+         * @param {object} [values] The values that replace those of the study.
+         * @returns {object} The study.
+         */
+        function modelStudy(values) {
+            const first = study({ constraints: [], requirements: [MASS, BAND, STIFFNESS], otherRequirementCount: 4, ...values });
+            first.request.constraints = [];
+            first.request.ignoredRequirements = values?.ignoredRequirements ?? [];
+            return first;
+        }
+
+        /**
+         * Builds what a combination does to a requirement.
+         * @param {object} requirement The requirement.
+         * @param {string} status The status on the combination.
+         * @param {string} explanation The values compared.
+         * @returns {object} The outcome.
+         */
+        function outcome(requirement, status, explanation) {
+            return { name: requirement.name, satisfiedBy: requirement.satisfiedBy, status, explanation, changed: status !== requirement.status };
+        }
+
+        it("shows the requirements that an option breaks or that cannot be checked, with the reason, and counts those met", async () => {
+            const closest = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            closest.constraints = [];
+            closest.requirements = [
+                outcome(BAND, "NotSatisfied", "\"S\" != \"X\""),
+                outcome(STIFFNESS, "NotEvaluated", "The value of 'stiffness' is missing."),
+                outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]")
+            ];
+
+            await open(modelStudy({ best: [closest] }));
+
+            const tags = byId(page, "options").querySelectorAll(".tr-checks span");
+            assert.deepEqual(tags.map(tag => tag.className + ": " + tag.textContent), [
+                "tagv bad: ✗ REQ-COM-001 · \"S\" != \"X\"",
+                "tagv warn: ? REQ-STR-001 · The value of 'stiffness' is missing.",
+                "tagv ok: ✓ 1 requirement"
+            ]);
+            assert.equal(tags.at(-1).title, "REQ-SYS-001: 140.88 [kg] <= 150 [kg]");
+            assert.equal(byId(page, "closest").hidden, false);
+        });
+
+        it("marks in the table the total whose value breaks a requirement turned on", async () => {
+            const broken = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            broken.constraints = [];
+            broken.requirements = [outcome(MASS, "NotSatisfied", "140.88 [kg] > 130 [kg]")];
+
+            await open(modelStudy({ pointsComplete: false, best: [broken] }));
+            const marked = byId(page, "chart").querySelectorAll("td")[2];
+            await open(modelStudy({ pointsComplete: false, best: [broken], requirements: [{ ...MASS, ignored: true }, BAND, STIFFNESS] }));
+
+            assert.equal(marked.className, "tr-cell tr-cell-breach on");
+            assert.equal(marked.title, "Breaks REQ-SYS-001");
+            assert.equal(byId(page, "chart").querySelectorAll("td")[2].className, "tr-cell tr-cell-better on");
+        });
+
+        it("does not say that the options come closest when the best one meets everything", async () => {
+            const best = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            best.requirements = [outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]"), outcome(BAND, "Satisfied", "\"X\" == \"X\"")];
+
+            await open(modelStudy({ best: [best] }));
+
+            assert.equal(byId(page, "closest").hidden, true);
+            assert.equal(byId(page, "options").querySelectorAll(".tr-checks span").at(-1).textContent, "✓ 2 requirements");
+        });
+
+        it("lists the requirements of the model with their state today, and a switch for those that a choice can change", async () => {
+            await open(modelStudy());
+
+            const target = byId(page, "requirements");
+            assert.equal(target.querySelector("h3").textContent, "Requirements of the model");
+            assert.deepEqual(target.querySelectorAll(".tr-constraint").map(line => line.textContent), [
+                "REQ-SYS-001broken todaysubj.mass * 1.2 <= 150 [kg]",
+                "REQ-COM-001met todaysubj.xBandTransmitter.band == \"X\" · checked on each combination",
+                "REQ-STR-001not checkedsubj.stiffness >= 30 · no choice changes it"
+            ]);
+            assert.deepEqual(target.querySelectorAll("input").map(input => input.dataset.key + ": " + input.checked), ["REQ-SYS-001: true", "REQ-COM-001: true"]);
+            assert.equal(target.querySelector("label").title, "The satellite shall weigh at most 150 kg.");
+            assert.equal(target.children.at(-1).textContent, "4 more hold today and do not depend on these choices.");
+        });
+
+        it("names the variant of a catalogue that the model takes, and marks it as current", async () => {
+            const first = modelStudy();
+            first.choices[0].variants[0] = { name: "wide", isCurrent: true, excluded: false, values: { mass: 18 } };
+
+            await open(first);
+
+            const labels = byId(page, "choices").querySelectorAll(".tr-variant").map(label => label.children[1].textContent);
+            assert.deepEqual(labels, ["wide (current)", "A", "B", "Current", "XT-low"]);
+        });
+
+        it("shows no requirement when the model has none to check", async () => {
+            await open(study());
+
+            assert.equal(byId(page, "requirements").children.length, 0);
+        });
+
+        it("runs the trade-off again without a requirement turned off, then with it again", async () => {
+            await open(modelStudy());
+
+            change(field(page, "requirement", "REQ-SYS-001"), { checked: false });
+            const without = lastArguments(page).ignoredRequirements;
+            change(field(page, "requirement", "REQ-SYS-001"), { checked: true });
+
+            assert.deepEqual(without, ["REQ-SYS-001"]);
+            assert.deepEqual(lastArguments(page).ignoredRequirements, []);
+            assert.equal(requests(page, "tools/call").every(call => call.params.name === "explore_trade_off"), true);
+        });
+
+        it("shows as turned off a requirement that the request ignores", async () => {
+            await open(modelStudy({ requirements: [{ ...MASS, ignored: true }, BAND], ignoredRequirements: ["REQ-SYS-001"] }));
+
+            assert.equal(field(page, "requirement", "REQ-SYS-001").checked, false);
+            assert.equal(field(page, "requirement", "REQ-COM-001").checked, true);
+        });
+
+        it("does not list among the excluded combinations one that is shown with the best", async () => {
+            const closest = combination(1, "current", "XT-low", [125.4, 220, -0.4, -7], 150.48);
+            closest.requirements = [outcome(MASS, "NotSatisfied", "150.48 [kg] > 150 [kg]")];
+
+            await open(modelStudy({ best: [closest] }));
+
+            assert.deepEqual(byId(page, "excluded").querySelectorAll("h3").map(heading => heading.textContent), ["Excluded (1)"]);
+        });
+
+        it("draws the limit of a requirement on the chart, unless it is turned off", async () => {
+            await open(modelStudy());
+            const drawn = byId(page, "legend").children.at(-1).textContent;
+
+            await open(modelStudy({ requirements: [{ ...MASS, ignored: true }] }));
+
+            assert.equal(drawn, "REQ-SYS-001 limit");
+            assert.equal(byId(page, "legend").children.length, 3);
+        });
+
+        it("tells the assistant the requirements that the option does not meet, the number of units and the requirements turned off", async () => {
+            const closest = combination(1, "A", "XT-low", [117.4, 235, -8.4, 8], 140.88);
+            closest.choices = chosen("A", "XT-low", 2);
+            closest.requirements = [outcome(BAND, "NotSatisfied", "\"S\" != \"X\""), outcome(MASS, "Satisfied", "140.88 [kg] <= 150 [kg]")];
+            await open(modelStudy({ best: [closest] }));
+            change(field(page, "requirement", "REQ-COM-001"), { checked: false });
+            await answerStudy(page, modelStudy({ best: [closest] }));
+
+            byId(page, "pick").querySelector("button").click();
+
+            const text = requests(page, "ui/message").at(-1).params.content[0].text;
+            assert.match(text, /variant XT-low × 2 \(mass 1\.2 kg, power 28\)/);
+            assert.match(text, /Requirements not met: REQ-COM-001 \("S" != "X"\)\./);
+            assert.match(text, /Settings changed in the view: REQ-COM-001 turned off\./);
+        });
+    });
+
+    describe("display", () => {
+        it("asks for the full screen when the host offers it, and offers the way back", async () => {
+            await answer(page, messages(page)[0], { hostContext: { theme: "light", displayMode: "inline", availableDisplayModes: ["inline", "fullscreen"] } });
+
+            const [ask] = requests(page, "ui/request-display-mode");
+            assert.equal(ask.params.mode, "fullscreen");
+            assert.equal(byId(page, "back").hidden, true);
+            await answer(page, ask, { mode: "fullscreen" });
+            assert.equal(byId(page, "view").classList.contains("full"), true);
+            assert.equal(byId(page, "back").hidden, false);
+            assert.equal(byId(page, "fullscreen").hidden, true);
+
+            byId(page, "back").dispatch("click");
+            const back = requests(page, "ui/request-display-mode").at(-1);
+            assert.equal(back.params.mode, "inline");
+            await answer(page, back, { mode: "inline" });
+            assert.equal(byId(page, "view").classList.contains("full"), false);
+            assert.equal(byId(page, "back").hidden, true);
+            assert.equal(byId(page, "fullscreen").hidden, false);
+            assert.equal(byId(page, "display-note").hidden, true);
+
+            page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { displayMode: "fullscreen" } });
+            assert.equal(byId(page, "view").classList.contains("full"), true);
+            assert.equal(requests(page, "ui/request-display-mode").length, 2);
+        });
+
+        it("asks for the full screen once, when the host offers it only after the start", async () => {
+            await answer(page, messages(page)[0], { hostContext: { theme: "light", displayMode: "inline", availableDisplayModes: ["inline"] } });
+            const asked = requests(page, "ui/request-display-mode").length;
+            const button = byId(page, "fullscreen").hidden;
+
+            page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { availableDisplayModes: ["inline", "fullscreen"] } });
+            page.receive({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { availableDisplayModes: ["inline", "fullscreen"] } });
+
+            assert.equal(asked, 0);
+            assert.equal(button, true);
+            assert.deepEqual(requests(page, "ui/request-display-mode").map(request => request.params.mode), ["fullscreen"]);
+            assert.equal(byId(page, "fullscreen").hidden, false);
+        });
+
+        it("asks for the full screen with its button, and tells when the host refuses it or keeps the view in the conversation", async () => {
+            await open(study());
+            const asked = requests(page, "ui/request-display-mode").length;
+
+            byId(page, "fullscreen").dispatch("click");
+            await answer(page, requests(page, "ui/request-display-mode").at(-1), undefined, { code: -32000, message: "Not now" });
+            const refused = byId(page, "display-note").textContent;
+            byId(page, "fullscreen").dispatch("click");
+            const hiddenWhileAsking = byId(page, "display-note").hidden;
+            await answer(page, requests(page, "ui/request-display-mode").at(-1), { mode: "inline" });
+
+            assert.equal(asked, 0);
+            assert.equal(refused, "The host did not change the display: Not now");
+            assert.equal(hiddenWhileAsking, true);
+            assert.equal(byId(page, "display-note").textContent, "The host kept the view in the conversation.");
+            assert.equal(byId(page, "display-note").hidden, false);
+            assert.equal(byId(page, "view").classList.contains("full"), false);
+            assert.equal(byId(page, "error").hidden, true);
         });
     });
 });

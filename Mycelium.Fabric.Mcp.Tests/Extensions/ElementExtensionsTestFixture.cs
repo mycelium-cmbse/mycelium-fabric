@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.Mcp.Tests.Extensions
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Linq;
 
@@ -167,6 +168,56 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(launcherMass, Has.Count.EqualTo(4));
                 Assert.That(launcherMass.Sum(contribution => contribution.Value), Is.EqualTo(8));
                 Assert.That(nodeMass, Is.Empty);
+            }
+        }
+
+        [Test]
+        public void CollectValues_OfPartsTypedByACatalogue_CountsTheVariantThatEachOneTakes()
+        {
+            var modelProvider = OrbiterChangesHelper.CreateModel();
+            var parts = modelProvider.Elements.OfType<IPartUsage>().ToDictionary(part => part.qualifiedName);
+            var orbiter = parts["Orbiter::orbiter"];
+
+            var mass = orbiter.CollectValues("mass");
+            var powerOutput = orbiter.CollectValues("powerOutput");
+            var open = orbiter.CollectValues("mass", new HashSet<Guid> { parts["Orbiter::orbiter::powerSystem::battery"].Id, parts["Orbiter::orbiter::powerSystem::solarPanel"].Id });
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(mass.Contributions.Select(contribution => contribution.QualifiedName), Is.EqualTo(
+                [
+                    "Orbiter::orbiter::structure", "Orbiter::orbiter::computer", "Orbiter::Catalogues::CameraOptions::wide", "Orbiter::Catalogues::EngineOptions::thermal",
+                    "Orbiter::Catalogues::TankOptions::large", "Orbiter::Catalogues::BatteryOptions::liIon150", "Orbiter::Catalogues::SolarPanelOptions::regular"
+                ]));
+
+                Assert.That(mass.Contributions.Sum(contribution => contribution.GetTotal().Number), Is.EqualTo(92));
+                Assert.That(mass.MissingValues, Is.Empty);
+                Assert.That(mass.Slots, Is.Empty);
+                Assert.That(powerOutput.Contributions.Single().Count, Is.EqualTo(2));
+                Assert.That(powerOutput.Contributions.Single().GetTotal().Number, Is.EqualTo(120));
+                Assert.That(open.Contributions.Sum(contribution => contribution.GetTotal().Number), Is.EqualTo(84));
+                Assert.That(open.Slots.Select(slot => (slot.Part.DeclaredName, slot.Count)), Is.EqualTo([("battery", 1), ("solarPanel", 1)]));
+            }
+
+            // A part taken 0 times counts for 0, and a part that takes no variant yet misses its value.
+            var result = modelProvider.ApplyChanges(
+            [
+                new ModelChange { Identity = "tank", Payload = new ElementPayload { Multiplicity = "0" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "powerSystem", Name = "spare", Definition = "BatteryOptions" } }
+            ]);
+
+            orbiter = modelProvider.Elements.OfType<IPartUsage>().Single(part => part.qualifiedName == "Orbiter::orbiter");
+            var fuelCapacity = orbiter.CollectValues("fuelCapacity");
+            var massWithSpare = orbiter.CollectValues("mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Applied, Is.True, string.Join(" ", result.Problems));
+                Assert.That(fuelCapacity.Contributions.Single().Count, Is.Zero);
+                Assert.That(fuelCapacity.Contributions.Single().GetTotal().Number, Is.Zero);
+                Assert.That(massWithSpare.Contributions.Sum(contribution => contribution.GetTotal().Number), Is.EqualTo(83));
+                Assert.That(massWithSpare.MissingValues.Select(missingValue => missingValue.QualifiedName), Is.EqualTo(["Orbiter::orbiter::powerSystem::spare"]));
+                Assert.That(orbiter.CollectValues("fuelNeed").MissingValues, Is.Empty);
             }
         }
     }

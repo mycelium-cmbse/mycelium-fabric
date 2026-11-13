@@ -16,10 +16,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Expressions;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
+    using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.Values;
 
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Core.POCO.Systems.Parts;
     using SysML2.NET.Serializer.Json;
+
+    using ErrorOr;
+
+    using Moq;
 
     using AttributeUsageDto = SysML2.NET.Core.DTO.Systems.Attributes.AttributeUsage;
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
@@ -242,6 +248,61 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             var value = context.GetValue(this.Feature(name));
 
             return value.IsError ? $"error: {value.FirstError.Description}" : value.Value.ToString();
+        }
+
+        [Test]
+        public void VerifyEvaluationOfACombination()
+        {
+            var parts = OrbiterChangesHelper.CreateModel().Elements.OfType<IPartUsage>().ToDictionary(part => part.qualifiedName);
+            var orbiter = parts["Orbiter::orbiter"];
+            var propulsion = parts["Orbiter::orbiter::propulsion"];
+            var engine = parts["Orbiter::orbiter::propulsion::engine"];
+            var electric = parts["Orbiter::Catalogues::EngineOptions::electric"];
+
+            // In the combination, the engine takes the electric variant, a thrust is given, and the orbiter weighs 80 kg.
+            var selection = new Mock<IPartSelection>();
+
+            selection.Setup(mock => mock.Resolve(It.IsAny<IFeature>(), It.IsAny<ISet<Guid>>())).Returns((IFeature part, ISet<Guid> readPartIds) =>
+            {
+                if (part.Id != engine.Id)
+                {
+                    return ErrorOrFactory.From(part);
+                }
+
+                readPartIds.Add(engine.Id);
+
+                return ErrorOrFactory.From<IFeature>(electric);
+            });
+
+            selection.Setup(mock => mock.GetGivenValue(engine, "thrust", It.IsAny<ISet<Guid>>())).Returns(new NumberValue(5));
+            selection.Setup(mock => mock.CollectValues(orbiter, "mass", It.IsAny<ISet<Guid>>())).Returns(new CollectedValues([new Contribution(orbiter.Id, "Orbiter::orbiter", [], 80)], []));
+            selection.Setup(mock => mock.CollectValues(orbiter, "volume", It.IsAny<ISet<Guid>>())).Returns(Error.Validation(description: "'orbiter' is not taken in this combination."));
+
+            var context = new ModelEvaluationContext(null, null, selection: selection.Object);
+            var modelContext = new ModelEvaluationContext(null, null);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(((PartValue)context.Navigate(new PartValue(propulsion), "engine").Value).Feature, Is.SameAs(engine));
+                Assert.That(context.ReadPartIds, Is.Empty);
+                Assert.That(((TextValue)context.Navigate(new PartValue(engine), "propellant").Value).Text, Is.EqualTo("xenon"));
+                Assert.That(context.ReadPartIds, Is.EquivalentTo(new[] { engine.Id }));
+                Assert.That(((NumberValue)context.Navigate(new PartValue(engine), "thrust").Value).Number, Is.EqualTo(5));
+                Assert.That(((NumberValue)context.Navigate(new PartValue(orbiter), "mass").Value).Number, Is.EqualTo(80));
+                Assert.That(context.RollUps.Single().Part, Is.SameAs(orbiter));
+                Assert.That(context.Navigate(new PartValue(orbiter), "volume").FirstError.Description, Is.EqualTo("'orbiter' is not taken in this combination."));
+
+                // Without combination, the model is read: the engine takes the thermal variant, and stays the part.
+                Assert.That(((TextValue)modelContext.Navigate(new PartValue(engine), "propellant").Value).Text, Is.EqualTo("hydrazine"));
+                Assert.That(((NumberValue)modelContext.Navigate(new PartValue(orbiter), "mass").Value).Number, Is.EqualTo(92));
+                Assert.That(((PartValue)modelContext.GetValue(engine).Value).Feature, Is.SameAs(engine));
+                Assert.That(modelContext.ReadPartIds, Is.Empty);
+            }
+
+            selection.Setup(mock => mock.Resolve(engine, It.IsAny<ISet<Guid>>())).Returns(Error.Validation(description: "'engine' is not taken in this combination."));
+
+            Assert.That(new ModelEvaluationContext(null, null, selection: selection.Object).Navigate(new PartValue(engine), "propellant").FirstError.Description,
+                Is.EqualTo("'engine' is not taken in this combination."));
         }
     }
 }

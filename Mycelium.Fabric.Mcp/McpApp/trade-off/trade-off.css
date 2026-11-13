@@ -5,8 +5,14 @@
 }
 
 .tr { padding: 14px 16px; }
+.tr.full { min-height: 100vh; display: flex; flex-direction: column; }
+.tr.full .tr-grid { flex: 1; }
 .tr-title { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
 .tr-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.tr-display { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.tr-display:not(:has(> :not([hidden]))) { display: none; }
+.tr-fullscreen { font: inherit; color: var(--primary); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.tr-fullscreen:hover { border-color: var(--primary); }
 .tr-error { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--danger-bg); color: var(--danger); font-size: 12px; }
 .tr-note { font-size: 11.5px; color: var(--muted); margin: 4px 0; }
 .tr-empty { padding: 10px 12px; font-size: 12px; color: var(--muted); }
@@ -85,6 +91,7 @@
 .tr-legend .best { background: var(--primary); }
 .tr-legend .ok { background: #CBD5E1; }
 .tr-legend .bad { border: 1.5px solid var(--danger); background: var(--card); }
+.tr-legend .today { border: 1.5px dashed var(--muted); background: var(--muted-bg); border-radius: 2px; }
 .tr-legend .limit { width: 16px; height: 0; border-radius: 0; border-top: 1.5px dashed var(--danger); }
 
 .tr-svg { width: 100%; height: auto; max-height: 360px; display: block; }
@@ -105,3 +112,35 @@
 .pt-bad circle { fill: var(--card); stroke: var(--danger); }
 .pt-bad path { stroke: var(--danger); stroke-width: 1.5; }
 .tr-svg .pt .tr-ring { fill: none; stroke: var(--primary); stroke-width: 2; }
+.tr-bar rect { stroke-width: 1.5; }
+.tr-bar-today rect { fill: var(--muted-bg); stroke: var(--muted); stroke-dasharray: 3 2; }
+.tr-bar-best { cursor: pointer; }
+.tr-bar-best rect { fill: var(--primary); }
+.tr-bar-best.pt-rank2 rect { fill: var(--rank2); }
+.tr-bar-best.pt-rank3 rect { fill: var(--rank3); }
+.tr-bar.tr-bar-bad rect { stroke: var(--danger); stroke-dasharray: none; }
+.tr-bar.on rect { stroke: var(--primary-deep); stroke-width: 2.5; }
+.tr-svg .tr-bar-value { fill: var(--fg2); font-family: var(--mono); }
+
+.tr-table { width: 100%; border-collapse: separate; border-spacing: 4px; table-layout: fixed; }
+.tr-table th { font-size: 12px; font-weight: 600; text-align: center; vertical-align: bottom; padding: 6px 4px 8px; border-radius: 6px; cursor: pointer; }
+.tr-table th:first-child, .tr-table .tr-col-today { cursor: default; }
+.tr-table th small { display: block; font-weight: 400; font-size: 10.5px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
+.tr-table th.on, .tr-table td.on { box-shadow: inset 0 0 0 2px var(--primary); }
+.tr-row-name { font-size: 12px; font-weight: 600; color: var(--fg2); overflow-wrap: anywhere; }
+.tr-cell { text-align: center; padding: 8px 4px; border-radius: 6px; font: 12px var(--mono); color: var(--fg); cursor: pointer; overflow-wrap: anywhere; }
+.tr-cell small { display: block; font-size: 10.5px; opacity: .85; }
+.tr-cell-same { background: var(--muted-bg); color: var(--fg2); }
+.tr-cell-change1 { background: color-mix(in srgb, var(--primary) 16%, transparent); }
+.tr-cell-change2 { background: color-mix(in srgb, var(--primary) 34%, transparent); }
+.tr-cell-change3 { background: color-mix(in srgb, var(--primary) 56%, transparent); }
+.tr-cell-better, .tr-cell-ok { background: var(--success-bg); color: var(--success); }
+.tr-cell-worse { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.tr-cell-breach, .tr-cell-bad { background: var(--danger-bg); color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger); }
+.tr-cell-ok, .tr-cell-bad { font-family: inherit; font-size: 11.5px; }
+.tr-table tr > :nth-child(2) { cursor: default; }
+.tr-legend .better { background: var(--success); border-radius: 2px; }
+.tr-legend .worse { background: color-mix(in srgb, var(--danger) 40%, transparent); border-radius: 2px; }
+.tr-legend .change { background: color-mix(in srgb, var(--primary) 56%, transparent); border-radius: 2px; }
+.tr-legend .breach { background: var(--danger-bg); border: 1.5px solid var(--danger); border-radius: 2px; }
+#chart:has(> .tr-table) { justify-content: flex-start; }

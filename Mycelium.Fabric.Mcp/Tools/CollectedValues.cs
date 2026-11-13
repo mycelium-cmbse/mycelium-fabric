@@ -17,5 +17,6 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// </summary>
     /// <param name="Contributions">The <see cref="Contribution"/> of each part that gives a value.</param>
     /// <param name="MissingValues">The <see cref="MissingValue"/> of each part that should give a value and has none yet.</param>
-    public sealed record CollectedValues(IReadOnlyList<Contribution> Contributions, IReadOnlyList<MissingValue> MissingValues);
+    /// <param name="Slots">The <see cref="PartSlot"/> of each part left open, or <c>null</c> when no part is left open.</param>
+    public sealed record CollectedValues(IReadOnlyList<Contribution> Contributions, IReadOnlyList<MissingValue> MissingValues, IReadOnlyList<PartSlot> Slots = null);
 }

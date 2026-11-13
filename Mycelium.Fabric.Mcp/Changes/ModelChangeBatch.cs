@@ -31,6 +31,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Systems.Flows;
     using SysML2.NET.Core.DTO.Systems.Interfaces;
     using SysML2.NET.Core.DTO.Systems.Occurrences;
+    using SysML2.NET.Core.DTO.Systems.Parts;
     using SysML2.NET.Core.DTO.Systems.Ports;
     using SysML2.NET.Core.DTO.Systems.Requirements;
     using SysML2.NET.Core.DTO.Systems.States;
@@ -428,7 +429,12 @@ namespace Mycelium.Fabric.Mcp.Changes
             this.CheckRequirementProperties(member, payload);
             CheckFeatureProperties(member, owner, payload);
             CheckBehaviourProperties(member, payload);
+            CheckVariationProperties(member, owner, payload);
+
+            var variant = payload.Variant == null ? null : this.ResolveVariant(member, definition, payload.Variant);
+
             SetFeatureFlags(member, owner, payload);
+            SetVariation(member, payload);
             this.AddOwnedMember(owner, member, change.Identity);
 
             if (!string.IsNullOrWhiteSpace(payload.Text))
@@ -441,6 +447,8 @@ namespace Mycelium.Fabric.Mcp.Changes
                 this.AddTyping(member, definition, payload.Conjugated == true);
             }
 
+            this.AddCatalogueTyping(member, owner, definition);
+
             if (general != null)
             {
                 this.SetSpecialization(member, general);
@@ -449,6 +457,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (payload.Value != null)
             {
                 this.AddValue(member, payload.Value.Value, payload.Unit);
+            }
+
+            if (variant != null)
+            {
+                this.SetVariant(member, variant);
             }
 
             if (payload.Multiplicity != null)
@@ -479,6 +492,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var definition = this.CheckUpdate(element, payload);
             var general = payload.Specializes == null ? null : this.ResolveGeneral(element, payload.Specializes);
+            var variantDefinition = payload.Definition == null ? null : definition;
+            var variant = payload.Variant == null ? null : this.ResolveVariant(element, variantDefinition, payload.Variant);
 
             if (general != null)
             {
@@ -512,6 +527,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 this.RemoveOwnedRelationships<IFeatureValue>(element);
                 this.AddValue(element, payload.Value.Value, payload.Unit);
+            }
+
+            if (variant != null)
+            {
+                this.SetVariant(element, variant);
             }
 
             if (payload.Text != null)
@@ -554,10 +574,15 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             CheckNoBehaviourUpdate(element, payload);
 
-            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Constraints: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
-                && payload.Multiplicity == null && string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload.IsVariation != null)
             {
-                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, text, direction, conjugated, multiplicity, reqId or constraint to change, "
+                throw new InvalidChangeException("isVariation only applies to the creation of a PartDefinition: delete the definition and create it again.");
+            }
+
+            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Constraints: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
+                && payload.Multiplicity == null && payload.Variant == null && string.IsNullOrWhiteSpace(payload.ReqId))
+            {
+                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, variant, text, direction, conjugated, multiplicity, reqId or constraint to change, "
                     + "or no payload to delete the element.");
             }
 
@@ -892,8 +917,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Creates the public membership through which an element owns a member: a <c>FeatureMembership</c> for a feature
         /// (part, attribute...) of a type (part definition, part), an <c>EndFeatureMembership</c> for an end feature, a
-        /// <c>VariantMembership</c> for a value of an enumeration definition, and an <c>OwningMembership</c> for any other
-        /// member, for example an element of a package.
+        /// <c>VariantMembership</c> for a value of an enumeration definition or a variant of a catalogue, and an
+        /// <c>OwningMembership</c> for any other member, for example an element of a package.
         /// </summary>
         /// <param name="owner">The element that owns the member.</param>
         /// <param name="member">The owned member.</param>
@@ -903,6 +928,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             return (member, owner) switch
             {
                 (IEnumerationUsage, IEnumerationDefinition) => new VariantMembership { Visibility = VisibilityKind.Public },
+                (IPartUsage, IPartDefinition { IsVariation: true }) => new VariantMembership { Visibility = VisibilityKind.Public },
                 (IFeature { IsEnd: true }, IType) => new EndFeatureMembership { Visibility = VisibilityKind.Public },
                 (IFeature, IType) => new FeatureMembership { Visibility = VisibilityKind.Public },
                 _ => new OwningMembership { Visibility = VisibilityKind.Public }

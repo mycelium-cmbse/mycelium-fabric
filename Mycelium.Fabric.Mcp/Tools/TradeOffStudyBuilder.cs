@@ -33,22 +33,28 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <param name="root">The <see cref="TradeOffRoot"/> under which the totals are computed.</param>
         /// <param name="problem">The solved <see cref="TradeOffProblem"/>.</param>
         /// <param name="solution">The <see cref="TradeOffSolution"/> of the solver.</param>
+        /// <param name="verifier">
+        /// The <see cref="TradeOffVerifier"/> that checks the requirements of the model on the combinations, or <c>null</c> to
+        /// create one.
+        /// </param>
         /// <returns>The <see cref="TradeOffStudy"/>.</returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="request"/>, <paramref name="problem"/> or <paramref name="solution"/> is <c>null</c>.
         /// </exception>
-        public static TradeOffStudy Build(TradeOffRequest request, TradeOffRoot root, TradeOffProblem problem, TradeOffSolution solution)
+        public static TradeOffStudy Build(TradeOffRequest request, TradeOffRoot root, TradeOffProblem problem, TradeOffSolution solution, TradeOffVerifier verifier = null)
         {
             ArgumentNullException.ThrowIfNull(request);
             ArgumentNullException.ThrowIfNull(problem);
             ArgumentNullException.ThrowIfNull(solution);
+
+            verifier ??= new TradeOffVerifier(problem);
 
             var currentSelection = problem.GetCurrentSelection();
             var compareName = problem.CompareDecisionIndex is { } compareIndex ? problem.Decisions[compareIndex].Name : null;
 
             var best = solution.Alternatives
                 .SelectMany(alternative => alternative.Selections.Select((selection, index) =>
-                    CreateCombination(problem, selection, currentSelection, Describe(compareName, alternative), index + 1)))
+                    CreateCombination(problem, verifier, selection, currentSelection, Describe(compareName, alternative), index + 1)))
                 .ToList();
 
             var conflicts = solution.Alternatives
@@ -56,18 +62,98 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .ToList();
 
             var pointsComplete = problem.TryEnumerateSelections(MaximumPoints, out var allSelections);
-            IReadOnlyList<IReadOnlyList<int>> pointSelections = pointsComplete ? allSelections : [.. solution.Alternatives.SelectMany(alternative => alternative.Selections)];
+            IReadOnlyList<IReadOnlyList<int>> pointSelections = pointsComplete ? allSelections : GetNearSelections(problem, [.. solution.Alternatives.SelectMany(alternative => alternative.Selections)]);
 
-            var settings = request with { Objectives = request.Objectives ?? [], Constraints = request.Constraints ?? [], Excluded = request.Excluded ?? [] };
+            var settings = request with
+            {
+                Choices = request.Choices ?? [],
+                Objectives = request.Objectives ?? [],
+                Constraints = request.Constraints ?? [],
+                Excluded = request.Excluded ?? [],
+                IgnoredRequirements = request.IgnoredRequirements ?? []
+            };
+
             var attributes = problem.GetAttributes().Select(attribute => new TradeOffAttribute(attribute, problem.GetUnit(attribute))).ToList();
             var choices = problem.Decisions.Select((decision, decisionIndex) => CreateChoice(problem, decision, decisionIndex)).ToList();
-            var constraints = problem.Limits.Select(CreateConstraint).ToList();
+            var constraints = problem.Limits.Where(limit => !limit.IsFromModel).Select(CreateConstraint).ToList();
             var dependencies = problem.Dependencies.Select(dependency => dependency.Description).ToList();
-            var current = CreateCombination(problem, currentSelection, currentSelection, null, 0);
-            var points = CreatePoints(problem, pointSelections, currentSelection);
+            var current = CreateCombination(problem, verifier, currentSelection, currentSelection, null, 0);
+            var points = CreatePoints(problem, verifier, pointSelections, currentSelection);
+            var compared = best.Prepend(current).Select(IReadOnlyDictionary<string, double> (combination) => combination.Totals.ToDictionary(total => total.Attribute, total => total.Total)).ToList();
+            var axes = TradeOffAxes.Choose([.. attributes.Select(attribute => attribute.Name)], [.. problem.Objectives.Select(objective => objective.Attribute)], compared, [.. points.Select(point => point.Totals)]);
+            var requirementChecks = verifier.Verify(currentSelection, true);
+            var requirements = requirementChecks
+                .Where(check => check.DependsOnChoices || !check.IsMet || check.Requirement.IsIgnored)
+                .Select(check => CreateRequirement(problem, check))
+                .ToList();
 
             return new TradeOffStudy(request.Title, root, solution.Status, settings, attributes, choices, problem.Objectives, constraints, dependencies, current, best,
-                points, pointsComplete, conflicts);
+                points, pointsComplete, conflicts)
+            {
+                Requirements = requirements,
+                OtherRequirementCount = requirementChecks.Count - requirements.Count,
+                Axes = axes
+            };
+        }
+
+        /// <summary>
+        /// Gets the combinations listed when there are too many of them to list them all: the best ones, the current state,
+        /// then those that are one choice away from the current state and from the best one, which show what a single change
+        /// does.
+        /// </summary>
+        /// <param name="problem">The <see cref="TradeOffProblem"/>.</param>
+        /// <param name="best">The selections of the best combinations.</param>
+        /// <returns>The selections, without duplicate, at most <see cref="MaximumPoints"/>.</returns>
+        private static List<IReadOnlyList<int>> GetNearSelections(TradeOffProblem problem, IReadOnlyList<IReadOnlyList<int>> best)
+        {
+            IReadOnlyList<int>[] origins = best.Count == 0 ? [problem.GetCurrentSelection()] : [problem.GetCurrentSelection(), best[0]];
+
+            var near = origins.SelectMany(origin => problem.Decisions.SelectMany((decision, decisionIndex) => Enumerable.Range(0, decision.Options.Count)
+                .Where(optionIndex => optionIndex != origin[decisionIndex])
+                .Select(optionIndex => (IReadOnlyList<int>)[.. origin.Take(decisionIndex), optionIndex, .. origin.Skip(decisionIndex + 1)])));
+
+            return
+            [
+                .. best.Concat(origins).Concat(near)
+                    .Where(selection => selection.Select((optionIndex, decisionIndex) => problem.IsAllowed(decisionIndex, optionIndex)).All(isAllowed => isAllowed))
+                    .DistinctBy(selection => string.Join(',', selection))
+                    .Take(MaximumPoints)
+            ];
+        }
+
+        /// <summary>
+        /// Describes a requirement of the model, as it is in the current state.
+        /// </summary>
+        /// <param name="problem">The <see cref="TradeOffProblem"/>.</param>
+        /// <param name="check">The check of the requirement on the current state.</param>
+        /// <returns>The <see cref="TradeOffStudyRequirement"/>.</returns>
+        private static TradeOffStudyRequirement CreateRequirement(TradeOffProblem problem, TradeOffRequirementCheck check)
+        {
+            var limit = check.Requirement.LimitIndex is { } limitIndex ? problem.Limits[limitIndex] : null;
+
+            return new TradeOffStudyRequirement(check.Check.Id, check.Requirement.Name, check.Check.Text, check.Check.Constraint, check.Check.SatisfiedBy, check.Check.Status,
+                check.Check.Explanation, check.DependsOnChoices, check.Requirement.IsIgnored, limit != null, limit?.Attribute, limit?.Symbol, limit?.Threshold);
+        }
+
+        /// <summary>
+        /// Lists what a combination does to the requirements of the model that depend on the choices, those that it does not
+        /// meet first.
+        /// </summary>
+        /// <param name="verifier">The <see cref="TradeOffVerifier"/>.</param>
+        /// <param name="selection">The selection of the combination.</param>
+        /// <param name="currentSelection">The selection of the current state.</param>
+        /// <returns>The <see cref="RequirementOutcome"/>s.</returns>
+        private static List<RequirementOutcome> CreateOutcomes(TradeOffVerifier verifier, IReadOnlyList<int> selection, IReadOnlyList<int> currentSelection)
+        {
+            return
+            [
+                .. verifier.Verify(selection)
+                    .Zip(verifier.Verify(currentSelection))
+                    .Where(pair => pair.First.DependsOnChoices || pair.Second.DependsOnChoices)
+                    .OrderBy(pair => pair.First.IsMet)
+                    .Select(pair => new RequirementOutcome(pair.First.Requirement.Name, pair.First.Check.SatisfiedBy, pair.First.Check.Status, pair.First.Check.Explanation,
+                        pair.First.Check.Status != pair.Second.Check.Status))
+            ];
         }
 
         /// <summary>
@@ -91,12 +177,17 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The <see cref="TradeOffStudyChoice"/>.</returns>
         private static TradeOffStudyChoice CreateChoice(TradeOffProblem problem, TradeOffDecision decision, int decisionIndex)
         {
+            var shownAttributes = problem.GetAttributes().ToHashSet();
+
             var variants = decision.Options
                 .GroupBy(option => option.Variant)
                 .Select(group =>
                 {
                     var smallest = group.MinBy(option => option.Quantity);
-                    var values = smallest.Values.ToDictionary(pair => pair.Key, pair => Math.Round(smallest.Quantity > 0 ? pair.Value / smallest.Quantity : pair.Value, 3));
+                    // The values shown are those of the totals shown: the totals that only a requirement reads stay out.
+                    var values = smallest.Values
+                        .Where(pair => shownAttributes.Contains(pair.Key))
+                        .ToDictionary(pair => pair.Key, pair => Math.Round(smallest.Quantity > 0 ? pair.Value / smallest.Quantity : pair.Value, 3));
 
                     return new TradeOffStudyVariant(group.Key, group.Any(option => option.IsCurrent), problem.IsExcluded(new TradeOffVariantReference(decisionIndex, group.Key)),
                         smallest.Quantity, group.Max(option => option.Quantity), values);
@@ -110,12 +201,14 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// ones, ordered like the solver orders them: by each objective in turn, then by the fewest changes.
         /// </summary>
         /// <param name="problem">The <see cref="TradeOffProblem"/>.</param>
+        /// <param name="verifier">The <see cref="TradeOffVerifier"/>.</param>
         /// <param name="selections">The selections of the combinations.</param>
         /// <param name="currentSelection">The selection of the current state.</param>
         /// <returns>The <see cref="TradeOffPoint"/> of each combination, in the order of <paramref name="selections"/>.</returns>
-        private static List<TradeOffPoint> CreatePoints(TradeOffProblem problem, IReadOnlyList<IReadOnlyList<int>> selections, IReadOnlyList<int> currentSelection)
+        private static List<TradeOffPoint> CreatePoints(TradeOffProblem problem, TradeOffVerifier verifier, IReadOnlyList<IReadOnlyList<int>> selections,
+            IReadOnlyList<int> currentSelection)
         {
-            var broken = selections.Select(selection => GetBroken(problem, selection)).ToList();
+            var broken = selections.Select(selection => GetBroken(problem, verifier, selection)).ToList();
 
             var ranks = Enumerable.Range(0, selections.Count)
                 .Where(index => broken[index].Count == 0)
@@ -137,16 +230,21 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Lists the constraints and rules that a combination breaks, with its values.
+        /// Lists the constraints, the requirements of the model and the rules that a combination breaks, with its values.
         /// </summary>
         /// <param name="problem">The <see cref="TradeOffProblem"/>.</param>
+        /// <param name="verifier">The <see cref="TradeOffVerifier"/>.</param>
         /// <param name="selection">The selection of the combination.</param>
         /// <returns>The text of each breach, for example <c>REQ-SYS-001: mass * 1.2 = 150.96 kg &gt; 150 kg</c>.</returns>
-        private static List<string> GetBroken(TradeOffProblem problem, IReadOnlyList<int> selection)
+        private static List<string> GetBroken(TradeOffProblem problem, TradeOffVerifier verifier, IReadOnlyList<int> selection)
         {
+            var brokenRequirements = verifier.Verify(selection)
+                .Where(check => check.DependsOnChoices && !check.IsMet)
+                .Select(check => $"{check.Requirement.Name}: {check.Check.Explanation}");
+
             var brokenLimits = problem.Limits
                 .Select((limit, index) => (limit, index))
-                .Where(pair => !problem.IsSatisfied(pair.limit, selection))
+                .Where(pair => !pair.limit.IsFromModel && !problem.IsSatisfied(pair.limit, selection))
                 .Select(pair =>
                 {
                     var (value, limitValue) = GetComparedValues(problem, pair.limit, selection);
@@ -158,7 +256,7 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .Where(pair => !problem.IsRespected(pair.dependency, selection))
                 .Select(pair => $"rule {pair.index + 1}: {pair.dependency.Description}");
 
-            return [.. brokenLimits.Concat(brokenRules)];
+            return [.. brokenLimits.Concat(brokenRequirements).Concat(brokenRules)];
         }
 
         /// <summary>
@@ -219,12 +317,14 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// Describes a selection of the problem: the variant of each choice, the totals and the constraints.
         /// </summary>
         /// <param name="problem">The solved <see cref="TradeOffProblem"/>.</param>
+        /// <param name="verifier">The <see cref="TradeOffVerifier"/>.</param>
         /// <param name="selection">The index of the selected option of each decision.</param>
         /// <param name="currentSelection">The selection of the current state, to compute the differences.</param>
         /// <param name="alternative">The compared variant that the selection takes, or <c>null</c>.</param>
         /// <param name="rank">The rank of the selection, 0 for the current state.</param>
         /// <returns>The <see cref="TradeOffCombination"/> of the selection.</returns>
-        private static TradeOffCombination CreateCombination(TradeOffProblem problem, IReadOnlyList<int> selection, IReadOnlyList<int> currentSelection, string alternative, int rank)
+        private static TradeOffCombination CreateCombination(TradeOffProblem problem, TradeOffVerifier verifier, IReadOnlyList<int> selection, IReadOnlyList<int> currentSelection,
+            string alternative, int rank)
         {
             var choices = problem.Decisions
                 .Select((decision, index) => (decision, option: decision.Options[selection[index]]))
@@ -237,11 +337,15 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .ToList();
 
             var constraints = problem.Limits
+                .Where(limit => !limit.IsFromModel)
                 .Select(limit => (limit, values: GetComparedValues(problem, limit, selection)))
                 .Select(pair => new ConstraintCheck(pair.limit.Description, problem.IsSatisfied(pair.limit, selection), pair.limit.Name, pair.values.Value, pair.values.Limit))
                 .ToList();
 
-            return new TradeOffCombination(alternative, rank, problem.CountChanges(selection), choices, totals, constraints);
+            return new TradeOffCombination(alternative, rank, problem.CountChanges(selection), choices, totals, constraints)
+            {
+                Requirements = CreateOutcomes(verifier, selection, currentSelection)
+            };
         }
     }
 }

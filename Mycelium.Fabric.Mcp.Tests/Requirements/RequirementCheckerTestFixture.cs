@@ -477,5 +477,40 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
                 Assert.That(checker.EvaluateImpacts(Guid.NewGuid(), "mass", 10), Has.Count.EqualTo(0));
             }
         }
+
+        [Test]
+        public void VerifyGetSatisfiedRequirementsAndCheckRequirement()
+        {
+            var checker = new RequirementChecker(OrbiterChangesHelper.CreateModel().Elements);
+            var satisfiedRequirements = checker.GetSatisfiedRequirements();
+            var checks = satisfiedRequirements.Select(requirement => RequirementChecker.CheckRequirement(requirement, null)).ToList();
+            var modelChecks = checker.CheckRequirements().Where(check => check.Status != RequirementStatus.NotVerifiable).ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => RequirementChecker.CheckRequirement(null, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(new RequirementChecker([]).GetSatisfiedRequirements(), Is.Empty);
+
+                Assert.That(satisfiedRequirements.Select(requirement => requirement.Requirement.ReqId),
+                    Is.EqualTo(["REQ-PL-001", "REQ-PRP-001", "REQ-PRP-002", "REQ-PWR-001", "REQ-PWR-002", "REQ-SYS-001"]));
+
+                Assert.That(satisfiedRequirements.Select(requirement => requirement.SatisfyingFeature.DeclaredName),
+                    Is.EqualTo(["payload", "orbiter", "propulsion", "orbiter", "orbiter", "orbiter"]));
+
+                Assert.That(satisfiedRequirements.Select(requirement => requirement.Required.Count), Is.All.EqualTo(1));
+                Assert.That(satisfiedRequirements.Select(requirement => requirement.Assumptions.Count), Is.All.Zero);
+
+                Assert.That(checks.Select(check => check.Check.Status), Is.EqualTo(
+                [
+                    RequirementStatus.Satisfied, RequirementStatus.Satisfied, RequirementStatus.NotSatisfied, RequirementStatus.Satisfied, RequirementStatus.Satisfied,
+                    RequirementStatus.Satisfied
+                ]));
+
+                Assert.That(checks.Select(check => check.ReadPartIds.Count), Is.All.Zero);
+                Assert.That(checks.Select(check => (check.Check.ReqId, check.Check.Explanation, check.Check.Value)), Is.EqualTo(modelChecks.Select(check => (check.ReqId, check.Explanation, check.Value))));
+                Assert.That(checks[2].Check.Explanation, Is.EqualTo("\"hydrazine\" == \"hydrazine\""));
+                Assert.That(checks[5].Check.Explanation, Is.EqualTo("110.4 [kg] <= 150 [kg]"));
+            }
+        }
     }
 }

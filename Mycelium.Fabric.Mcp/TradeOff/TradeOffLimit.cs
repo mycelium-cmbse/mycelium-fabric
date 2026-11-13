@@ -29,6 +29,13 @@ namespace Mycelium.Fabric.Mcp.TradeOff
     public sealed record TradeOffLimit(string Attribute, TradeOffOperator Operator, double? Limit, string LimitAttribute, double Margin, Unit Unit = null, string Name = null)
     {
         /// <summary>
+        /// Gets a value indicating whether the limit is read from a requirement of the model, rather than given as a
+        /// constraint: its totals are then those that the requirement reads, with the margins of the parts, under the part
+        /// that satisfies it.
+        /// </summary>
+        public bool IsFromModel { get; init; }
+
+        /// <summary>
         /// Gets a value indicating whether the total must stay under the limit, rather than over it.
         /// </summary>
         public bool IsUpperBound => this.Operator is TradeOffOperator.LessThan or TradeOffOperator.LessThanOrEqual;

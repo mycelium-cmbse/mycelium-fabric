@@ -58,6 +58,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .ap-s { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
 .ap-c { margin-left: auto; display: flex; gap: 4px; }
 
+.back { font-size: 12.5px; color: var(--primary); display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
 .tagv { font-size: 11px; border-radius: 5px; padding: 3px 7px; background: var(--muted-bg); color: var(--fg2); display: inline-flex; align-items: center; gap: 5px; }
 .tagv.bad { background: var(--danger-bg); color: var(--danger); }
 .tagv.warn { background: var(--warning-bg); color: var(--warning); }

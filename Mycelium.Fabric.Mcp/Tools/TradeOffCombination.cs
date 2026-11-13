@@ -27,5 +27,12 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Totals">The <see cref="AttributeTotal"/> of each attribute of the objectives and constraints.</param>
     /// <param name="Constraints">The <see cref="ConstraintCheck"/> of each constraint, in the order of the request.</param>
     public sealed record TradeOffCombination(string Alternative, int Rank, int ChangeCount, IReadOnlyList<ChosenVariant> Choices, IReadOnlyList<AttributeTotal> Totals,
-        IReadOnlyList<ConstraintCheck> Constraints);
+        IReadOnlyList<ConstraintCheck> Constraints)
+    {
+        /// <summary>
+        /// Gets what the combination does to each requirement of the model that the choices can change, those that it does
+        /// not meet first: the check of <c>check_requirements</c> on the model with this combination.
+        /// </summary>
+        public IReadOnlyList<RequirementOutcome> Requirements { get; init; } = [];
+    }
 }

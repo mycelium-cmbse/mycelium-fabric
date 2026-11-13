@@ -95,5 +95,26 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
             return part;
         }
+
+        [Test]
+        public void VerifyGetVariantsAndGetChosenVariant()
+        {
+            var parts = OrbiterChangesHelper.CreateModel().Elements.OfType<IPartUsage>().ToList();
+            var engine = parts.Single(part => part.qualifiedName == "Orbiter::orbiter::propulsion::engine");
+            var structure = parts.Single(part => part.DeclaredName == "structure");
+            var thermal = parts.Single(part => part.qualifiedName == "Orbiter::Catalogues::EngineOptions::thermal");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IFeature)null).GetVariants(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(engine.GetVariants().Select(variant => variant.DeclaredName), Is.EqualTo(["thermal", "electric"]));
+                Assert.That(engine.GetChosenVariant(), Is.SameAs(thermal));
+                Assert.That(structure.GetVariants(), Is.Empty);
+                Assert.That(structure.GetChosenVariant(), Is.Null);
+                Assert.That(thermal.GetTypeNames(), Is.EqualTo(["EngineOptions"]));
+                Assert.That(thermal.GetVariants(), Is.Empty);
+                Assert.That(thermal.GetChosenVariant(), Is.Null);
+            }
+        }
     }
 }

@@ -1626,5 +1626,91 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 .Select(lazyElement => lazyElement.Value)
                 .ToDictionary(element => element.Id);
         }
+
+        [Test]
+        public void Apply_WithACatalogue_BuildsTheVariationItsVariantsAndTheVariantTaken()
+        {
+            var result = this.Apply([],
+            [
+                new ModelChange { Identity = "Battery", Payload = new ElementPayload { Type = "PartDefinition", Name = "Battery" } },
+                new ModelChange { Identity = "BatteryOptions", Payload = new ElementPayload { Type = "PartDefinition", Name = "BatteryOptions", Specializes = "Battery", IsVariation = true } },
+                new ModelChange { Identity = "small", Payload = new ElementPayload { Type = "PartUsage", Owner = "BatteryOptions", Name = "small", Multiplicity = "1..4" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "small", Name = "mass", Value = 3, Unit = "kg" } },
+                new ModelChange { Identity = "large", Payload = new ElementPayload { Type = "PartUsage", Owner = "BatteryOptions", Name = "large", Definition = "Battery" } },
+                new ModelChange { Identity = "satellite", Payload = new ElementPayload { Type = "PartUsage", Name = "satellite" } },
+                new ModelChange { Identity = "battery", Payload = new ElementPayload { Type = "PartUsage", Owner = "satellite", Name = "battery", Definition = "BatteryOptions", Variant = "small", Multiplicity = "2" } },
+                new ModelChange { Identity = "spare", Payload = new ElementPayload { Type = "PartUsage", Owner = "satellite", Name = "spare", Definition = "BatteryOptions", Variant = "large" } },
+                new ModelChange { Identity = "spare", Payload = new ElementPayload { Variant = "small" } },
+                new ModelChange { Identity = "later", Payload = new ElementPayload { Type = "PartUsage", Owner = "satellite", Name = "later" } },
+                new ModelChange { Identity = "later", Payload = new ElementPayload { Definition = "BatteryOptions", Variant = "large" } }
+            ]);
+
+            var elements = Assemble(CommitRequestHelper.Apply([], result.Value));
+            var namedElements = elements.Values.Where(element => element.DeclaredName != null).ToDictionary(element => element.DeclaredName);
+            var catalogue = (IPartDefinition)namedElements["BatteryOptions"];
+            var small = (IPartUsage)namedElements["small"];
+            var large = (IPartUsage)namedElements["large"];
+            var battery = (IPartUsage)namedElements["battery"];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(catalogue.IsVariation, Is.True);
+                Assert.That(catalogue.IsAbstract, Is.True);
+                Assert.That(catalogue.variant, Is.EqualTo([small, large]));
+                Assert.That(((IPartDefinition)namedElements["Battery"]).IsVariation, Is.False);
+                Assert.That(small.OwningRelationship, Is.InstanceOf<IVariantMembership>());
+                Assert.That(small.GetTypeNames(), Is.EqualTo(["BatteryOptions"]));
+                Assert.That(large.GetTypeNames(), Is.EqualTo(["BatteryOptions"]));
+                Assert.That(small.multiplicity.GetUnitRange(),Is.EqualTo((1, (int?)4)));
+                Assert.That(battery.OwningRelationship, Is.InstanceOf<IFeatureMembership>());
+                Assert.That(battery.GetVariants(), Is.EqualTo([small, large]));
+                Assert.That(battery.GetChosenVariant(), Is.SameAs(small));
+                Assert.That(battery.GetUnitCount(), Is.EqualTo(2));
+                Assert.That(battery.CollectContributions("mass").Sum(contribution => contribution.GetTotal().Number), Is.EqualTo(3));
+                Assert.That(((IPartUsage)namedElements["satellite"]).CollectContributions("mass").Sum(contribution => contribution.GetTotal().Number), Is.EqualTo(9));
+                Assert.That(((IPartUsage)namedElements["spare"]).GetChosenVariant(), Is.SameAs(small));
+                Assert.That(((IPartUsage)namedElements["later"]).GetChosenVariant(), Is.SameAs(large));
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidCatalogueProperties_ReturnsEveryProblem()
+        {
+            var result = this.Apply([],
+            [
+                new ModelChange { Identity = "Options", Payload = new ElementPayload { Type = "PartDefinition", Name = "Options", IsVariation = true } },
+                new ModelChange { Identity = "first", Payload = new ElementPayload { Type = "PartUsage", Owner = "Options", Name = "first" } },
+                new ModelChange { Identity = "Other", Payload = new ElementPayload { Type = "PartDefinition", Name = "Other" } },
+                new ModelChange { Identity = "plain", Payload = new ElementPayload { Type = "PartUsage", Owner = "Other", Name = "plain" } },
+                new ModelChange { Identity = "choice", Payload = new ElementPayload { Type = "PartUsage", Name = "choice", Definition = "Options" } },
+                new ModelChange { Payload = new ElementPayload { Type = "Package", Name = "Catalogue", IsVariation = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "Options", Name = "mass", Value = 1 } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Name = "untyped", Variant = "first" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "Other", Name = "size", Variant = "first" } },
+                new ModelChange { Identity = "choice", Payload = new ElementPayload { Variant = "second" } },
+                new ModelChange { Identity = "choice", Payload = new ElementPayload { Variant = "plain" } },
+                new ModelChange { Identity = "choice", Payload = new ElementPayload { Variant = " " } },
+                new ModelChange { Identity = "Other", Payload = new ElementPayload { IsVariation = true } }
+            ]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+
+                Assert.That(result.Errors.Select(error => error.Description), Is.EqualTo(
+                [
+                    "Change 6 (create): Only a PartDefinition is a catalogue of variants (isVariation), not the Package 'Catalogue'.",
+                    "Change 7 (create): The PartDefinition 'Options' is a catalogue: it only owns its variants, which are parts (PartUsage), not the AttributeUsage 'mass'. "
+                        + "Give the attributes to the definition that the catalogue specializes, and their values to each variant.",
+                    "Change 8 (create): The PartUsage 'untyped' is not typed by a catalogue (a PartDefinition with isVariation): give it the catalogue as definition, then the variant.",
+                    "Change 9 (create): Only a part takes a variant, not the AttributeUsage 'size'.",
+                    "Change 10 (update): 'second' is not a variant of the PartDefinition 'Options': its variants are 'first'.",
+                    "Change 11 (update): The PartUsage 'plain' is not a variant of the PartDefinition 'Options': its variants are 'first'.",
+                    "Change 12 (update): The variant is missing.",
+                    "Change 13 (update): isVariation only applies to the creation of a PartDefinition: delete the definition and create it again."
+                ]));
+            }
+        }
     }
 }
