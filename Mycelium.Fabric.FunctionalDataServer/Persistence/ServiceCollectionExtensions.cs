@@ -15,10 +15,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
 
+    using Mycelium.SDK.Serializer.Json;
+
     using Npgsql;
 
     /// <summary>
-    /// Registers Functional Data access: the connection source and the generated data access objects.
+    /// Registers Functional Data access: the connection source, the JSON serializers and the generated data access objects.
     /// </summary>
     public static class ServiceCollectionExtensions
     {
@@ -27,29 +29,35 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// </summary>
         private const string ConnectionStringName = "functionaldata";
 
-        /// <summary>
-        /// Registers, as singletons, the <see cref="NpgsqlDataSource"/> of the Functional Data database and every <see cref="IDao{TDto}"/>
-        /// implementation of this assembly under its <see cref="IDao{TDto}"/> interface.
-        /// </summary>
-        /// <param name="services">The service collection to extend.</param>
-        /// <returns>The same <paramref name="services"/>, for chaining.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
-        public static IServiceCollection AddFunctionalDataAccess(this IServiceCollection services)
+        /// <param name="services">The service collection the registrations are added to.</param>
+        extension(IServiceCollection services)
         {
-            ArgumentNullException.ThrowIfNull(services);
-
-            services.AddSingleton(CreateDataSource);
-
-            var daoRegistrations = typeof(IDao<>).Assembly.GetTypes()
-                .Where(type => type is { IsClass: true, IsAbstract: false })
-                .SelectMany(type => type.GetInterfaces().Where(IsDaoInterface).Select(serviceType => (ServiceType: serviceType, ImplementationType: type)));
-
-            foreach (var (serviceType, implementationType) in daoRegistrations)
+            /// <summary>
+            /// Registers, as singletons, the <see cref="NpgsqlDataSource"/> of the Functional Data database, the JSON <see cref="ISerializer"/> and
+            /// <see cref="IDeSerializer"/> injected into the data access objects, and every <see cref="IDao{TDto}"/> implementation of this assembly under
+            /// its <see cref="IDao{TDto}"/> interface.
+            /// </summary>
+            /// <returns>The same service collection, so that registrations chain.</returns>
+            /// <exception cref="ArgumentNullException">The service collection is null.</exception>
+            public IServiceCollection AddFunctionalDataAccess()
             {
-                services.AddSingleton(serviceType, implementationType);
-            }
+                ArgumentNullException.ThrowIfNull(services);
 
-            return services;
+                services.AddSingleton(CreateDataSource);
+                services.AddSingleton<ISerializer, Serializer>();
+                services.AddSingleton<IDeSerializer, DeSerializer>();
+
+                var daoRegistrations = typeof(IDao<>).Assembly.GetTypes()
+                    .Where(type => type is { IsClass: true, IsAbstract: false })
+                    .SelectMany(type => type.GetInterfaces().Where(IsDaoInterface).Select(serviceType => (ServiceType: serviceType, ImplementationType: type)));
+
+                foreach (var (serviceType, implementationType) in daoRegistrations)
+                {
+                    services.AddSingleton(serviceType, implementationType);
+                }
+
+                return services;
+            }
         }
 
         /// <summary>

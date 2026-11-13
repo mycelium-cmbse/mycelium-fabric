@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
     using Mycelium.SDK.DTO;
+    using Mycelium.SDK.Serializer.Json;
 
     using Npgsql;
 
@@ -54,30 +55,27 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             Assert.That(services.AddFunctionalDataAccess(), Is.SameAs(services));
 
-            var daoDescriptors = services.Where(descriptor => IsDaoInterface(descriptor.ServiceType)).ToList();
+            var accessDescriptors = services.Where(descriptor => descriptor.ServiceType != typeof(IConfiguration)).ToList();
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(daoDescriptors.Select(descriptor => descriptor.ServiceType), Is.EquivalentTo(ExpectedDaos.Keys));
-                Assert.That(daoDescriptors.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(accessDescriptors.Select(descriptor => descriptor.ServiceType).Where(IsDaoInterface), Is.EquivalentTo(ExpectedDaos.Keys));
+                Assert.That(accessDescriptors.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Singleton));
             }
 
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
 
             foreach (var (serviceType, implementationType) in ExpectedDaos)
             {
-                var dao = provider.GetRequiredService(serviceType);
-
-                using (Assert.EnterMultipleScope())
-                {
-                    Assert.That(dao, Is.TypeOf(implementationType));
-                    Assert.That(provider.GetRequiredService(serviceType), Is.SameAs(dao));
-                }
+                Assert.That(provider.GetRequiredService(serviceType), Is.TypeOf(implementationType));
             }
 
-            var dataSource = provider.GetRequiredService<NpgsqlDataSource>();
-
-            Assert.That(provider.GetRequiredService<NpgsqlDataSource>(), Is.SameAs(dataSource));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.GetRequiredService<ISerializer>(), Is.TypeOf<Serializer>());
+                Assert.That(provider.GetRequiredService<IDeSerializer>(), Is.TypeOf<DeSerializer>());
+                Assert.That(provider.GetRequiredService<NpgsqlDataSource>, Throws.Nothing);
+            }
 
             string[] invalidConnectionStrings = [null, " "];
 
