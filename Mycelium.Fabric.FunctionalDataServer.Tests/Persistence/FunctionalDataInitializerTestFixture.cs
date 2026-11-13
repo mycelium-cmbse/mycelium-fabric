@@ -22,11 +22,29 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
     using Mycelium.Fabric.FunctionalDataServer.Tests.TestHelpers;
 
+    using Npgsql;
+
     using NUnit.Framework;
 
     [TestFixture]
     public class FunctionalDataInitializerTestFixture
     {
+        private const string UnusedConnectionString = "Host=localhost;Database=mycelium_functional_data";
+
+        private NpgsqlDataSource dataSource;
+
+        [SetUp]
+        public void SetUp()
+        {
+            this.dataSource = NpgsqlDataSource.Create(UnusedConnectionString);
+        }
+
+        [TearDown]
+        public async Task TearDown()
+        {
+            await this.dataSource.DisposeAsync();
+        }
+
         [Test]
         public void VerifyConstructor()
         {
@@ -35,9 +53,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new FunctionalDataInitializer(null, logger.Object), Throws.ArgumentNullException);
-                Assert.That(() => new FunctionalDataInitializer(configuration, null), Throws.ArgumentNullException);
-                Assert.That(() => new FunctionalDataInitializer(configuration, logger.Object), Throws.Nothing);
+                Assert.That(() => new FunctionalDataInitializer(null, configuration, logger.Object), Throws.ArgumentNullException);
+                Assert.That(() => new FunctionalDataInitializer(this.dataSource, null, logger.Object), Throws.ArgumentNullException);
+                Assert.That(() => new FunctionalDataInitializer(this.dataSource, configuration, null), Throws.ArgumentNullException);
+                Assert.That(() => new FunctionalDataInitializer(this.dataSource, configuration, logger.Object), Throws.Nothing);
             }
 
             logger.VerifyNoOtherCalls();
@@ -50,55 +69,42 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             logger.Setup(log => log.IsEnabled(LogLevel.Debug)).Returns(true);
 
-            var initializer = new FunctionalDataInitializer(CreateConfiguration(null), logger.Object);
-
-            Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.InnerException.TypeOf<InvalidOperationException>()
-                    .And.InnerException.Message.Contains("'functionaldata' connection string"));
-
-            logger.VerifyLogged(LogLevel.Debug, "reading the connection configuration", Times.Once());
-            logger.VerifyLogged(LogLevel.Error, "Functional Data initialization failed.", Times.Once());
-
             string[] invalidTimeouts = ["0", "-1", "invalid", "4294967295"];
 
             foreach (var timeout in invalidTimeouts)
             {
-                initializer = new FunctionalDataInitializer(CreateConfiguration(null, timeout), logger.Object);
+                var misconfiguredInitializer = new FunctionalDataInitializer(this.dataSource, CreateConfiguration(timeout), logger.Object);
 
-                Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
+                Assert.That(() => misconfiguredInitializer.InitializeAsync(CancellationToken.None),
                     Throws.TypeOf<InvalidOperationException>().With.Message.Contains("InitializationTimeoutSeconds"));
             }
 
-            initializer = new FunctionalDataInitializer(CreateConfiguration(null, "60"), logger.Object);
+            var initializer = new FunctionalDataInitializer(this.dataSource, CreateConfiguration("60"), logger.Object);
 
             using var cancellation = new CancellationTokenSource();
 
             await cancellation.CancelAsync();
 
-            Assert.That(() => initializer.InitializeAsync(cancellation.Token), Throws.TypeOf<OperationCanceledException>());
+            var canceledToken = cancellation.Token;
 
-            const string secret = "sensitive-test-value";
+            Assert.That(() => initializer.InitializeAsync(canceledToken), Throws.TypeOf<OperationCanceledException>());
 
-            initializer = new FunctionalDataInitializer(CreateConfiguration($"Password={secret};UnknownOption=value"), logger.Object);
+            await this.dataSource.DisposeAsync();
 
-            Assert.That(() => initializer.InitializeAsync(CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Not.Contains(secret)
-                    .And.InnerException.Not.Null.And.InnerException.Message.Not.Contains(secret));
+            var failingInitializer = new FunctionalDataInitializer(this.dataSource, CreateConfiguration(null), logger.Object);
+
+            Assert.That(() => failingInitializer.InitializeAsync(CancellationToken.None),
+                Throws.TypeOf<InvalidOperationException>().With.InnerException.InstanceOf<ObjectDisposedException>());
 
             logger.VerifyLogged(LogLevel.Debug, "opening the Functional Data database", Times.Once());
-
-            foreach (var level in Enum.GetValues<LogLevel>())
-            {
-                logger.VerifyLogged(level, secret, Times.Never());
-            }
+            logger.VerifyLogged(LogLevel.Error, "Functional Data initialization failed.", Times.Once());
         }
 
-        private static IConfiguration CreateConfiguration(string connectionString, string timeout = null)
+        private static IConfiguration CreateConfiguration(string timeout)
         {
             return new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string>
                 {
-                    ["ConnectionStrings:functionaldata"] = connectionString,
                     ["FunctionalData:InitializationTimeoutSeconds"] = timeout
                 })
                 .Build();
