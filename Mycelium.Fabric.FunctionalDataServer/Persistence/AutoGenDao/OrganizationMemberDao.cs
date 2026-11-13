@@ -47,44 +47,54 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// The query that rebuilds the complete JSON document of the stored objects of this class: the stored non-reference values, merged with
         /// every reference read from the class-table column, link table or opposite column that stores it.
         /// </summary>
-        private const string ReadSql =
-            "SELECT thing.data" +
-            " || jsonb_build_object(" +
-            "'createdBy', auditable_thing.created_by" +
-            ", 'updatedBy', auditable_thing.updated_by" +
-            ")" +
-            " || jsonb_build_object(" +
-            "'organization', organization_member.organization" +
-            ", 'user', organization_member.model_user" +
-            ")" +
-            " FROM fabric.thing" +
-            " JOIN fabric.auditable_thing ON auditable_thing.id = thing.id" +
-            " JOIN fabric.organization_member ON organization_member.id = thing.id" +
-            " WHERE thing.class_kind = @class_kind";
+        private const string ReadSql = """
+            SELECT thing.data
+                || jsonb_build_object(
+                    'createdBy', auditable_thing.created_by,
+                    'updatedBy', auditable_thing.updated_by
+                )
+                || jsonb_build_object(
+                    'organization', organization_member.organization,
+                    'user', organization_member.model_user
+                )
+            FROM fabric.thing
+            JOIN fabric.auditable_thing ON auditable_thing.id = thing.id
+            JOIN fabric.organization_member ON organization_member.id = thing.id
+            WHERE thing.class_kind = @class_kind
+            """;
 
         /// <summary>
         /// The query that reads every stored object of this class, ordered by identifier.
         /// </summary>
-        private const string ReadAllSql = ReadSql + " ORDER BY thing.id;";
+        private const string ReadAllSql = $"""
+            {ReadSql}
+            ORDER BY thing.id;
+            """;
 
         /// <summary>
         /// The query that reads one stored object of this class.
         /// </summary>
-        private const string ReadByIdSql = ReadSql + " AND thing.id = @id;";
+        private const string ReadByIdSql = $"""
+            {ReadSql}
+                AND thing.id = @id;
+            """;
 
         /// <summary>
         /// The statement that replaces the JSON document of one stored object of this class, without its reference members.
         /// </summary>
-        private const string UpdateDataSql =
-            "UPDATE fabric.thing SET data = @data - ARRAY['createdBy', 'updatedBy', 'organization', 'user'] " +
-            "WHERE id = @id AND class_kind = @class_kind;";
+        private const string UpdateDataSql = """
+            UPDATE fabric.thing
+            SET data = @data - ARRAY['createdBy', 'updatedBy', 'organization', 'user']
+            WHERE id = @id AND class_kind = @class_kind;
+            """;
 
         /// <summary>
         /// The statement that deletes one stored object of this class; the database's cascades and triggers remove its other rows.
         /// </summary>
-        private const string DeleteSql =
-            "DELETE FROM fabric.thing " +
-            "WHERE id = @id AND class_kind = @class_kind;";
+        private const string DeleteSql = """
+            DELETE FROM fabric.thing
+            WHERE id = @id AND class_kind = @class_kind;
+            """;
 
         /// <summary>
         /// The statements that store a new object: the root row with its JSON document without reference members, one row per class from the
@@ -92,12 +102,18 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// </summary>
         private static readonly string[] CreateStatements =
         [
-            "INSERT INTO fabric.thing (id, class_kind, data) " +
-            "VALUES (@id, @class_kind, @data - ARRAY['createdBy', 'updatedBy', 'organization', 'user']);",
-            "INSERT INTO fabric.auditable_thing (id, created_by, updated_by) " +
-            "VALUES (@id, @auditable_thing_created_by, @auditable_thing_updated_by);",
-            "INSERT INTO fabric.organization_member (id, organization, model_user) " +
-            "VALUES (@id, @organization_member_organization, @organization_member_model_user);",
+            """
+            INSERT INTO fabric.thing (id, class_kind, data)
+            VALUES (@id, @class_kind, @data - ARRAY['createdBy', 'updatedBy', 'organization', 'user']);
+            """,
+            """
+            INSERT INTO fabric.auditable_thing (id, created_by, updated_by)
+            VALUES (@id, @auditable_thing_created_by, @auditable_thing_updated_by);
+            """,
+            """
+            INSERT INTO fabric.organization_member (id, organization, model_user)
+            VALUES (@id, @organization_member_organization, @organization_member_model_user);
+            """,
         ];
 
         /// <summary>
@@ -105,14 +121,18 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// </summary>
         private static readonly string[] UpdateRelationStatements =
         [
-            "UPDATE fabric.auditable_thing SET " +
-            "created_by = @auditable_thing_created_by" +
-            ", updated_by = @auditable_thing_updated_by" +
-            " WHERE id = @id;",
-            "UPDATE fabric.organization_member SET " +
-            "organization = @organization_member_organization" +
-            ", model_user = @organization_member_model_user" +
-            " WHERE id = @id;",
+            """
+            UPDATE fabric.auditable_thing SET
+                created_by = @auditable_thing_created_by,
+                updated_by = @auditable_thing_updated_by
+            WHERE id = @id;
+            """,
+            """
+            UPDATE fabric.organization_member SET
+                organization = @organization_member_organization,
+                model_user = @organization_member_model_user
+            WHERE id = @id;
+            """,
         ];
 
         /// <summary>
