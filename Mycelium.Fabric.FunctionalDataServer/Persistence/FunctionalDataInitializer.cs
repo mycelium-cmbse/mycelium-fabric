@@ -122,8 +122,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 this.LogStep("acquiring the initialization lock and preparing the script history");
 
-                await using (var prepare = new NpgsqlCommand(PrepareHistorySql, connection, transaction) { CommandTimeout = commandTimeout })
+                await using (var prepare = new NpgsqlCommand(PrepareHistorySql, connection, transaction))
                 {
+                    prepare.CommandTimeout = commandTimeout;
+
                     await prepare.ExecuteNonQueryAsync(token);
                 }
 
@@ -180,13 +182,16 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private static async Task ApplyScriptAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string name, string sql, int commandTimeout,
             CancellationToken cancellationToken)
         {
-            await using (var script = new NpgsqlCommand(sql, connection, transaction) { CommandTimeout = commandTimeout })
+            await using (var script = new NpgsqlCommand(sql, connection, transaction))
             {
+                script.CommandTimeout = commandTimeout;
+
                 await script.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await using var record = new NpgsqlCommand(RecordScriptSql, connection, transaction) { CommandTimeout = commandTimeout };
+            await using var record = new NpgsqlCommand(RecordScriptSql, connection, transaction);
 
+            record.CommandTimeout = commandTimeout;
             record.Parameters.Add(new NpgsqlParameter { Value = name });
 
             await record.ExecuteNonQueryAsync(cancellationToken);
@@ -205,7 +210,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private static async Task<HashSet<string>> ReadAppliedScriptsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int commandTimeout,
             CancellationToken cancellationToken)
         {
-            await using var command = new NpgsqlCommand(ReadHistorySql, connection, transaction) { CommandTimeout = commandTimeout };
+            await using var command = new NpgsqlCommand(ReadHistorySql, connection, transaction);
+
+            command.CommandTimeout = commandTimeout;
+
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
             var appliedScripts = new HashSet<string>(StringComparer.Ordinal);
