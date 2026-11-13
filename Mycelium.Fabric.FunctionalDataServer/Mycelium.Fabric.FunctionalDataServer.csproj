@@ -19,7 +19,9 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" />
+        <PackageReference Include="Mycelium.SDK" />
         <PackageReference Include="Mycelium.SDK.Dal" />
+        <PackageReference Include="Mycelium.SDK.Serializer.Json" />
         <PackageReference Include="Npgsql" />
     </ItemGroup>
 
