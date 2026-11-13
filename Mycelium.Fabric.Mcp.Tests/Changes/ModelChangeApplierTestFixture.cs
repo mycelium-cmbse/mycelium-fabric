@@ -1662,7 +1662,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 Assert.That(small.OwningRelationship, Is.InstanceOf<IVariantMembership>());
                 Assert.That(small.GetTypeNames(), Is.EqualTo(["BatteryOptions"]));
                 Assert.That(large.GetTypeNames(), Is.EqualTo(["BatteryOptions"]));
-                Assert.That(small.GetUnitRange(), Is.EqualTo((1, (int?)4)));
+                Assert.That(small.multiplicity.GetUnitRange(),Is.EqualTo((1, (int?)4)));
                 Assert.That(battery.OwningRelationship, Is.InstanceOf<IFeatureMembership>());
                 Assert.That(battery.GetVariants(), Is.EqualTo([small, large]));
                 Assert.That(battery.GetChosenVariant(), Is.SameAs(small));

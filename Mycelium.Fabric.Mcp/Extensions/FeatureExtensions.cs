@@ -84,28 +84,6 @@ namespace Mycelium.Fabric.Mcp.Extensions
             }
 
             /// <summary>
-            /// Gets the range of the number of units that the multiplicity of the feature allows: <c>(1, 4)</c> for
-            /// <c>[1..4]</c>, <c>(4, 4)</c> for <c>[4]</c>, and no largest number for <c>[0..*]</c>.
-            /// </summary>
-            /// <returns>The range, or <c>null</c> when the feature has no multiplicity or its bounds are not numbers.</returns>
-            /// <exception cref="ArgumentNullException">
-            /// Thrown when <paramref name="feature"/> is <c>null</c>.
-            /// </exception>
-            public (int Minimum, int? Maximum)? GetUnitRange()
-            {
-                ArgumentNullException.ThrowIfNull(feature);
-
-                return feature.multiplicity switch
-                {
-                    IMultiplicityRange { lowerBound: null, upperBound: ILiteralInteger upper } => (upper.Value, upper.Value),
-                    IMultiplicityRange { lowerBound: null, upperBound: ILiteralInfinity } => (0, null),
-                    IMultiplicityRange { lowerBound: ILiteralInteger lower, upperBound: ILiteralInteger upper } => (lower.Value, upper.Value),
-                    IMultiplicityRange { lowerBound: ILiteralInteger lower, upperBound: ILiteralInfinity } => (lower.Value, null),
-                    _ => null
-                };
-            }
-
-            /// <summary>
             /// Gets the variants among which the feature takes one: the variants of the catalogues that type it. A catalogue
             /// is a variation definition (<c>variation part def BatteryOptions</c>), which only owns its variants; an
             /// enumeration definition, whose values are variants too, is not a catalogue. A variant is typed by its catalogue

@@ -151,7 +151,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             foreach (var variant in part.Variants.Where(variant => variant.DeclaredName != null))
             {
-                var (minimum, maximum) = variant.GetUnitRange() ?? (unitCount, unitCount);
+                var (minimum, maximum) = variant.multiplicity?.GetUnitRange() ?? (unitCount, unitCount);
                 canBeNone |= minimum == 0;
 
                 for (var quantity = Math.Max(minimum, 1); quantity <= Math.Min(maximum ?? MaximumQuantity, MaximumQuantity); quantity++)
