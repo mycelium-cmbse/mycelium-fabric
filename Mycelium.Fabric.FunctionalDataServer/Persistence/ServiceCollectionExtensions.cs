@@ -12,30 +12,21 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using System;
     using System.Linq;
 
-    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
 
     using Mycelium.SDK.Serializer.Json;
 
-    using Npgsql;
-
     /// <summary>
-    /// Registers Functional Data access: the connection source, the JSON serializers and the generated data access objects.
+    /// Registers Functional Data access: the JSON serializers and the generated data access objects.
     /// </summary>
     public static class ServiceCollectionExtensions
     {
-        /// <summary>
-        /// The name of the connection string to the Functional Data database.
-        /// </summary>
-        private const string ConnectionStringName = "functionaldata";
-
         /// <param name="services">The service collection the registrations are added to.</param>
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers, as singletons, the <see cref="NpgsqlDataSource"/> of the Functional Data database, the JSON <see cref="ISerializer"/> and
-            /// <see cref="IDeSerializer"/> injected into the data access objects, and every <see cref="IDao{TDto}"/> implementation of this assembly under
-            /// its <see cref="IDao{TDto}"/> interface.
+            /// Registers, as singletons, the JSON <see cref="ISerializer"/> and <see cref="IDeSerializer"/> injected into the data access objects, and every
+            /// <see cref="IDao{TDto}"/> implementation of this assembly under its <see cref="IDao{TDto}"/> interface.
             /// </summary>
             /// <returns>The same service collection, so that registrations chain.</returns>
             /// <exception cref="ArgumentNullException">The service collection is null.</exception>
@@ -43,7 +34,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             {
                 ArgumentNullException.ThrowIfNull(services);
 
-                services.AddSingleton(CreateDataSource);
                 services.AddSingleton<ISerializer, Serializer>();
                 services.AddSingleton<IDeSerializer, DeSerializer>();
 
@@ -58,24 +48,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 return services;
             }
-        }
-
-        /// <summary>
-        /// Creates the <see cref="NpgsqlDataSource"/> of the Functional Data database from the configured connection string, without connecting.
-        /// </summary>
-        /// <param name="provider">The service provider supplying the configuration.</param>
-        /// <returns>The data source that opens connections to the Functional Data database.</returns>
-        /// <exception cref="InvalidOperationException">The connection string is missing or blank.</exception>
-        private static NpgsqlDataSource CreateDataSource(IServiceProvider provider)
-        {
-            var connectionString = provider.GetRequiredService<IConfiguration>().GetConnectionString(ConnectionStringName);
-
-            if (string.IsNullOrWhiteSpace(connectionString))
-            {
-                throw new InvalidOperationException($"The '{ConnectionStringName}' connection string is not configured.");
-            }
-
-            return NpgsqlDataSource.Create(connectionString);
         }
 
         /// <summary>
