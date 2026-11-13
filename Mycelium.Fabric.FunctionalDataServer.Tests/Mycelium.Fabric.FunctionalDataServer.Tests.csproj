@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>14.0</LangVersion>
+        <Company>Starion Group S.A.</Company>
+        <Authors>Sam Gerene, Antoine Théate, Régis André, Tanase-Marius Manafu, Omrane Haj Mohamed</Authors>
+        <Description>NUnit tests for the Mycelium Fabric Functional Data microservice.</Description>
+        <Copyright>Copyright © Starion Group S.A.</Copyright>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <RepositoryUrl>https://github.com/mycelium-cmbse/mycelium-fabric.git</RepositoryUrl>
+        <RepositoryType>Git</RepositoryType>
+        <ImplicitUsings>false</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="NUnit" />
+        <PackageReference Include="NUnit3TestAdapter" />
+        <PackageReference Include="coverlet.collector" />
+        <PackageReference Include="coverlet.msbuild" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../Mycelium.Fabric.FunctionalDataServer/Mycelium.Fabric.FunctionalDataServer.csproj" />
+    </ItemGroup>
+
+</Project>
