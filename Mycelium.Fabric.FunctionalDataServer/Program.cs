@@ -13,10 +13,13 @@ namespace Mycelium.Fabric.FunctionalDataServer
     using System.Diagnostics.CodeAnalysis;
     using System.Threading.Tasks;
 
+    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
+
+    using Npgsql;
 
     /// <summary>
     /// Hosts the Functional Data microservice and its awaited database initialization.
@@ -30,7 +33,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
         /// <param name="args">The command-line configuration arguments.</param>
         /// <returns>A task that completes when the host stops.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
-        /// <exception cref="InvalidOperationException">Host construction or database initialization fails.</exception>
+        /// <exception cref="InvalidOperationException">The connection string is missing, or host construction or database initialization fails.</exception>
         /// <exception cref="OperationCanceledException">Startup or execution is canceled.</exception>
         public static async Task Main(string[] args)
         {
@@ -38,8 +41,17 @@ namespace Mycelium.Fabric.FunctionalDataServer
 
             var builder = Host.CreateApplicationBuilder(args);
 
+            var connectionString = builder.Configuration.GetConnectionString(FunctionalDataInitializer.ConnectionStringName);
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException($"The '{FunctionalDataInitializer.ConnectionStringName}' connection string is required.");
+            }
+
+            builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
             builder.Services.AddSingleton<IFunctionalDataInitializer, FunctionalDataInitializer>();
             builder.Services.AddHostedService<FunctionalDataInitializationService>();
+            builder.Services.AddFunctionalDataAccess();
 
             using var host = builder.Build();
 
