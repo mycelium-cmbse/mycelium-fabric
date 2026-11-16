@@ -148,13 +148,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private readonly IDeSerializer deSerializer;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ReplyDao" /> class that uses the default JSON serializer and deserializer.
-        /// </summary>
-        public ReplyDao() : this(new Serializer(), new DeSerializer())
-        {
-        }
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="ReplyDao" /> class.
         /// </summary>
         /// <param name="serializer">
