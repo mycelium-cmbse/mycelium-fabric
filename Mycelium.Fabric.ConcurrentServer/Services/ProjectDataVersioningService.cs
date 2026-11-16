@@ -687,7 +687,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <param name="identityId">The identifier of the data identity.</param>
         /// <param name="previousState">The state at the previous commits, by data identity.</param>
         /// <returns>The existing <see cref="DataIdentity"/>, or a new one when the data is created.</returns>
-        private static DataIdentity ExistingOrNewIdentity(Guid identityId, IReadOnlyDictionary<Guid, DataVersion> previousState)
+        private static DataIdentity ExistingOrNewIdentity(Guid identityId, Dictionary<Guid, DataVersion> previousState)
         {
             return previousState.TryGetValue(identityId, out var previous) && previous.Identity != null ? previous.Identity : new DataIdentity { Id = identityId };
         }
@@ -735,7 +735,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// and a deletion names the existing identity it deletes and has no payload. §7.1.1 requires every data to provide its identifier,
         /// which §7.1.2 makes the identifier of its identity; every version gets a new identifier.
         /// </remarks>
-        private static ErrorOr<DataVersion> ResolveVersion(DataVersion version, IReadOnlyDictionary<Guid, DataVersion> previousState)
+        private static ErrorOr<DataVersion> ResolveVersion(DataVersion version, Dictionary<Guid, DataVersion> previousState)
         {
             if (version == null)
             {
@@ -1311,9 +1311,9 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         {
             var heldIdentityIds = new HashSet<Guid>();
 
-            foreach (var identity in versions.Where(version => version.Payload != null && !previousState.ContainsKey(version.Identity.Id)).Select(version => version.Identity))
+            foreach (var identityId in versions.Where(version => version.Payload != null && !previousState.ContainsKey(version.Identity.Id)).Select(version => version.Identity.Id))
             {
-                var owner = await this.DataRepository.ReadIdentityOwnerAsync(transaction, identity.Id, cancellationToken);
+                var owner = await this.DataRepository.ReadIdentityOwnerAsync(transaction, identityId, cancellationToken);
 
                 if (owner.IsError && owner.FirstError.Type == ErrorType.NotFound)
                 {
@@ -1327,10 +1327,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
 
                 if (owner.Value != projectId)
                 {
-                    return Error.Validation("change.identity.taken", $"The identity {identity.Id} belongs to another project, so it cannot identify created data.");
+                    return Error.Validation("change.identity.taken", $"The identity {identityId} belongs to another project, so it cannot identify created data.");
                 }
 
-                heldIdentityIds.Add(identity.Id);
+                heldIdentityIds.Add(identityId);
             }
 
             return heldIdentityIds;
