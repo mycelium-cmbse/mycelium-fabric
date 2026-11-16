@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.ConcurrentServer.Persistence
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -63,6 +64,34 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
         /// <returns>The outcome of the operation, or the errors that prevented it.</returns>
         Task<ErrorOr<PagedResult<IElement>>> ReadRootElementsAsync(IDataStoreTransaction transaction, Guid commitId, QueryParameters queryParameters, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Reads the identifiers of the data that cannot outlive the given elements at a commit.
+        /// </summary>
+        /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the operation takes part in.</param>
+        /// <param name="commitId">The identifier of the commit the data is read at.</param>
+        /// <param name="elementIds">The identifiers of the elements the closure starts from.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
+        /// <returns>The outcome of the operation, or the errors that prevented it.</returns>
+        /// <remarks>
+        /// §7.2.3 <c>createCommit</c> deletes the incoming relationships of a deleted element, transitively since a relationship is itself an
+        /// element, and the external relationships whose element end is deleted (§7.1.3). References held in the stored properties of other
+        /// elements are not part of the closure.
+        /// </remarks>
+        Task<ErrorOr<IReadOnlyList<Guid>>> ReadDependentDataClosureAsync(IDataStoreTransaction transaction, Guid commitId, IReadOnlyList<Guid> elementIds,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Reads the identifier of the project that owns a data identity.
+        /// </summary>
+        /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the operation takes part in.</param>
+        /// <param name="identityId">The identifier of the data identity.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
+        /// <returns>The identifier of the owning project, or <see cref="ErrorType.NotFound"/> when no data identity has the identifier.</returns>
+        /// <remarks>
+        /// The model gives a data identity no project of its own while the store keeps one; a creation reuses only an identity of its own project.
+        /// </remarks>
+        Task<ErrorOr<Guid>> ReadIdentityOwnerAsync(IDataStoreTransaction transaction, Guid identityId, CancellationToken cancellationToken);
 
         /// <summary>
         /// Reads one page of the relationships that relate to an element at a commit.

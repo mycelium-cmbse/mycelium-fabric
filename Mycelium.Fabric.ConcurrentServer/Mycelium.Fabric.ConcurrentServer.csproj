@@ -32,4 +32,8 @@
         <PackageReference Include="SysML2.NET.Serializer.MessagePack" />
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\Mycelium.Fabric.Common\Mycelium.Fabric.Common.csproj" />
+    </ItemGroup>
+
 </Project>

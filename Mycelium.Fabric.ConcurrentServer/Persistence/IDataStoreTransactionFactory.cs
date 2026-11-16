@@ -22,12 +22,15 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// <summary>
         /// Opens a transaction against the data store.
         /// </summary>
+        /// <param name="mode">
+        /// The <see cref="TransactionMode"/> that states whether the transaction may write.
+        /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> that cancels the operation.
         /// </param>
         /// <returns>
         /// The opened <see cref="IDataStoreTransaction"/>, or the errors that prevented it.
         /// </returns>
-        Task<ErrorOr<IDataStoreTransaction>> BeginAsync(CancellationToken cancellationToken);
+        Task<ErrorOr<IDataStoreTransaction>> BeginAsync(TransactionMode mode, CancellationToken cancellationToken);
     }
 }

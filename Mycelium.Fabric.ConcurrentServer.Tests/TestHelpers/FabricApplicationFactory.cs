@@ -9,6 +9,7 @@
 
 namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
 {
+    using System.Linq;
     using System.Threading;
 
     using Microsoft.AspNetCore.Hosting;
@@ -20,6 +21,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
 
     using Mycelium.Fabric.ConcurrentServer.Modules;
     using Mycelium.Fabric.ConcurrentServer.Persistence;
+    using Mycelium.Fabric.ConcurrentServer.Services;
 
     public class FabricApplicationFactory : WebApplicationFactory<ApiBase>
     {
@@ -34,7 +36,24 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.TestHelpers
         {
             // The connection string is never opened, since the migrator that would use it is mocked.
             builder.UseSetting($"ConnectionStrings:{SqlSchemaMigrator.ConnectionStringName}", "Host=localhost;Database=unused")
-                .ConfigureTestServices(services => services.AddSingleton(this.Migrator.Object));
+                .ConfigureTestServices(services =>
+                {
+                    services.AddSingleton(this.Migrator.Object);
+                    RemoveServicesWithoutPersistence(services);
+                });
+        }
+
+        // No repository or transaction factory is registered yet, so the PIM services and the database handler cannot be built;
+        // the endpoint tests register the service mocks they need.
+        private static void RemoveServicesWithoutPersistence(IServiceCollection services)
+        {
+            var unresolvable = services.Where(descriptor => typeof(IBaseService).IsAssignableFrom(descriptor.ServiceType) || descriptor.ServiceType == typeof(IDatabaseHandler))
+                .ToList();
+
+            foreach (var descriptor in unresolvable)
+            {
+                services.Remove(descriptor);
+            }
         }
     }
 }
