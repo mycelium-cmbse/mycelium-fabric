@@ -59,25 +59,25 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             this.serviceMocks = new ServiceMocks(ProjectId);
             this.logger = new Mock<ILogger<ExternalRelationshipService>>();
-            this.logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            this.logger.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             this.dataRepository = new Mock<IDataRepository>();
             this.versioningService = new Mock<IProjectDataVersioningService>();
 
-            this.versioningService.Setup(x => x.GetHeadCommitAsync(ProjectId, BranchId, It.IsAny<CancellationToken>())).ReturnsAsync(new Commit { Id = HeadCommitId });
+            this.versioningService.Setup(service => service.GetHeadCommitAsync(ProjectId, BranchId, It.IsAny<CancellationToken>())).ReturnsAsync(new Commit { Id = HeadCommitId });
 
-            this.versioningService.Setup(x => x.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()))
+            this.versioningService.Setup(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Commit { Id = Guid.NewGuid() });
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<IElement>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<IElement>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.NotFound("element.notFound"));
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<IElement>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, ElementId, It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<IElement>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, ElementId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PartUsage { Id = ElementId });
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<ExternalData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<ExternalData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.NotFound("externalData.notFound"));
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<ExternalData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, ExternalDataId, It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<ExternalData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, ExternalDataId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ExternalData { Id = ExternalDataId });
 
             this.serviceMocks.AddCommit(HeadCommitId, ProjectId);
@@ -102,7 +102,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 Is.EqualTo("externalRelationship.elementEnd.invalid"));
 
 
-            this.versioningService.Verify(x => x.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()),
+            this.versioningService.Verify(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()),
                 Times.Never);
 
             this.serviceMocks.Reset();
@@ -111,7 +111,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
 
             var created = await this.service.CreateExternalRelationshipAsync(ProjectId, BranchId, relationship, CancellationToken.None);
 
-            this.dataRepository.Verify(x => x.ReadByIdAsync<ExternalData>(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            this.dataRepository.Verify(repository => repository.ReadByIdAsync<ExternalData>(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
                 Times.Never);
 
             using (Assert.EnterMultipleScope())
@@ -119,7 +119,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 Assert.That(created.IsError, Is.False);
                 this.serviceMocks.VerifyCommitted(TransactionMode.ReadWrite);
 
-                this.versioningService.Verify(x => x.CreateCommitAsync(
+                this.versioningService.Verify(service => service.CreateCommitAsync(
                     It.Is<IReadOnlyList<DataVersion>>(change => change.Count == 1 && change[0].Payload != relationship && change[0].Payload.Id != Guid.Empty
                                                                 && ((ExternalRelationship)change[0].Payload).ElementEnd == ElementId),
                     BranchId, It.Is<Commit>(template => template.OwningProject == ProjectId), It.IsAny<CancellationToken>()), Times.Once);
@@ -131,7 +131,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             var takenId = Guid.NewGuid();
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<SysML2.NET.Common.IData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, takenId, It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<SysML2.NET.Common.IData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, takenId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ExternalRelationship { Id = takenId });
 
             var existing = await this.service.CreateExternalRelationshipAsync(ProjectId, BranchId,
@@ -140,7 +140,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(existing.FirstError.Type, Is.EqualTo(ErrorType.Conflict));
-                this.versioningService.Verify(x => x.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(),
+                this.versioningService.Verify(service => service.CreateCommitAsync(It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<Guid?>(), It.IsAny<Commit>(),
                     It.IsAny<CancellationToken>()),
                     Times.Never);
             }
@@ -151,7 +151,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             var page = new PagedResult<ExternalRelationship> { Records = [new ExternalRelationship { Id = Guid.NewGuid(), ElementEnd = ElementId }] };
 
-            this.dataRepository.Setup(x => x.ReadAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<QueryParameters>(),
+            this.dataRepository.Setup(repository => repository.ReadAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>())).ReturnsAsync(page);
 
             Assert.That((await this.service.GetExternalRelationshipsAsync(ProjectId, HeadCommitId, new QueryParameters(), CancellationToken.None)).Value, Is.SameAs(page));
@@ -159,7 +159,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             Assert.That((await this.service.GetExternalRelationshipsAsync(ProjectId, ForeignCommitId, new QueryParameters(), CancellationToken.None)).FirstError.Code,
                 Is.EqualTo("commit.invalid"));
 
-            this.dataRepository.Verify(x => x.ReadAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<QueryParameters>(),
+            this.dataRepository.Verify(repository => repository.ReadAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
 
@@ -168,10 +168,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             var relationshipId = Guid.NewGuid();
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.NotFound("externalRelationship.notFound"));
 
-            this.dataRepository.Setup(x => x.ReadByIdAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, relationshipId, It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadByIdAsync<ExternalRelationship>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, relationshipId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ExternalRelationship { Id = relationshipId });
 
             using (Assert.EnterMultipleScope())
@@ -190,7 +190,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             var page = new PagedResult<ExternalRelationship> { Records = [new ExternalRelationship { Id = Guid.NewGuid(), ElementEnd = ElementId }] };
 
-            this.dataRepository.Setup(x => x.ReadExternalRelationshipsByElementAsync(It.IsAny<IDataStoreTransaction>(), HeadCommitId, ElementId, It.IsAny<QueryParameters>(),
+            this.dataRepository.Setup(repository => repository.ReadExternalRelationshipsByElementAsync(It.IsAny<IDataStoreTransaction>(), HeadCommitId, ElementId, It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>())).ReturnsAsync(page);
 
             Assert.That((await this.service.GetExternalRelationshipsByElementAsync(ProjectId, HeadCommitId, ElementId, new QueryParameters(), CancellationToken.None)).Value,

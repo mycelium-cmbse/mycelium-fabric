@@ -41,6 +41,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests
 
             using (Assert.EnterMultipleScope())
             {
+                Assert.That(application.Services.GetRequiredService<IHostEnvironment>().IsDevelopment(), Is.True);
                 Assert.That(application.Services.GetService<NpgsqlDataSource>(), Is.Not.Null);
                 Assert.That(application.Services.GetServices<IHostedService>().OfType<SqlSchemaInitializer>().ToList(), Has.Count.EqualTo(1));
             }

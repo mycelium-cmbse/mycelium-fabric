@@ -732,8 +732,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>The version that is written, or the validation error of the request.</returns>
         /// <remarks>
         /// Systems Modeling API and Services 1.0 §7.2.3: a creation may leave its identity empty, an update names an existing identity,
-        /// and a deletion names the existing identity it deletes and has no payload. §7.1.1 requires every data to provide its identifier,
-        /// which §7.1.2 makes the identifier of its identity; every version gets a new identifier.
+        /// and a deletion names the existing identity it deletes and has no payload. §7.1.2 requires every data to provide its identifier
+        /// and makes it the identifier of its identity; every version gets a new identifier.
         /// </remarks>
         private static ErrorOr<DataVersion> ResolveVersion(DataVersion version, Dictionary<Guid, DataVersion> previousState)
         {
@@ -806,7 +806,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         private async Task<ErrorOr<Commit>> CommitChangeAsync(IDataStoreTransaction transaction, Guid projectId, Branch branch, IReadOnlyList<DataVersion> change,
             IReadOnlyList<Guid> otherParentIds, Commit template, CancellationToken cancellationToken)
         {
-            List<Guid> previousIds = [.. new[] { branch.Head }.Concat(otherParentIds).Where(commitId => commitId != Guid.Empty).Distinct()];
+            IEnumerable<Guid> parentIds = [branch.Head, .. otherParentIds];
+            List<Guid> previousIds = [.. parentIds.Where(commitId => commitId != Guid.Empty).Distinct()];
 
             var previousCommits = await this.ReadCommitsAsync(transaction, projectId, previousIds, cancellationToken);
 
@@ -887,6 +888,40 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         }
 
         /// <summary>
+        /// Leaves out of a set of merged commits those another commit of the set descends from.
+        /// </summary>
+        /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the reads take part in.</param>
+        /// <param name="commitIds">The identifiers of the merged commits.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
+        /// <returns>The identifiers of the commits no other commit of the set descends from, or the errors that prevented reading their ancestry.</returns>
+        /// <remarks>
+        /// A commit and one of its own ancestors would otherwise read as two sides that changed the same data differently.
+        /// </remarks>
+        private async Task<ErrorOr<List<Guid>>> ExcludeAncestorsOfOthersAsync(IDataStoreTransaction transaction, List<Guid> commitIds, CancellationToken cancellationToken)
+        {
+            if (commitIds.Count < 2)
+            {
+                return commitIds;
+            }
+
+            var ancestorsOfOthers = new HashSet<Guid>();
+
+            foreach (var commitId in commitIds)
+            {
+                var ancestry = await this.CommitGraphRepository.ReadAncestryAsync(transaction, commitId, cancellationToken);
+
+                if (ancestry.IsError)
+                {
+                    return ancestry.Errors;
+                }
+
+                ancestorsOfOthers.UnionWith(ancestry.Value.Select(commit => commit.Id).Where(ancestorId => ancestorId != commitId));
+            }
+
+            return commitIds.Where(commitId => !ancestorsOfOthers.Contains(commitId)).ToList();
+        }
+
+        /// <summary>
         /// Completes a requested change with what the previous commits of a commit disagree on, once its conflicts are verified to be resolved.
         /// </summary>
         /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the reads take part in.</param>
@@ -917,7 +952,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
                 return otherParents.Errors;
             }
 
-            var plan = await this.PlanMergeAsync(transaction, headId, otherParentIds, cancellationToken);
+            var mergedIds = await this.ExcludeAncestorsOfOthersAsync(transaction, otherParentIds, cancellationToken);
+
+            if (mergedIds.IsError)
+            {
+                return mergedIds.Errors;
+            }
+
+            var plan = await this.PlanMergeAsync(transaction, headId, mergedIds.Value, cancellationToken);
 
             if (plan.IsError)
             {
@@ -1104,7 +1146,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
 
             var ancestorIds = ancestry.Value.Select(commit => commit.Id).ToHashSet();
 
-            return distinctIds.Where(commitId => !ancestorIds.Contains(commitId)).ToList();
+            return await this.ExcludeAncestorsOfOthersAsync(transaction, [.. distinctIds.Where(commitId => !ancestorIds.Contains(commitId))], cancellationToken);
         }
 
         /// <summary>
@@ -1216,6 +1258,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <remarks>
         /// Systems Modeling API and Services 1.0 §7.2.3: deleting an element deletes its incoming relationships, read at every previous
         /// commit so that a merge also drops those only one parent holds; §7.1.2 keeps the identity of a version unique within a change.
+        /// The references other data hold in their stored properties, which §7.2.3 also removes, are left to the core-data services.
         /// </remarks>
         private async Task<ErrorOr<List<DataVersion>>> ResolveChangeAsync(IDataStoreTransaction transaction, IReadOnlyList<Guid> previousIds,
             IReadOnlyList<DataVersion> change, Dictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)

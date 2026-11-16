@@ -30,6 +30,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
     /// <summary>
     /// The QueryService of Systems Modeling API and Services 1.0 §7.2.4, confined to the project of the request.
     /// </summary>
+    /// <remarks>
+    /// The <c>select</c> and <c>orderBy</c> of §7.1.4 are not supported yet: a query that uses them is refused on creation, update and
+    /// execution, so that no stored query is one that cannot run.
+    /// </remarks>
     public class QueryService : ServiceBase, IQueryService
     {
         /// <summary>
@@ -98,7 +102,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
             ArgumentNullException.ThrowIfNull(query);
 
             var projectId = query.Project;
-            var condition = ToSearchFilter(query.Where);
+            var condition = ToExecutableFilter(query);
 
             if (condition.IsError)
             {
@@ -149,7 +153,6 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <returns>The page of data that satisfy the query, or the errors that prevented executing it.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="query"/> is <c>null</c>.</exception>
         /// <exception cref="InvalidOperationException">The query names a project other than the one of the request.</exception>
-        /// <exception cref="NotSupportedException">The query selects or orders by properties, which the data store contract cannot apply.</exception>
         public Task<ErrorOr<PagedResult<IData>>> ExecuteQueryAsync(Query query, Guid? commitId, QueryParameters queryParameters, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(query);
@@ -169,7 +172,6 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
         /// <returns>The page of data that satisfy the query, or the errors that prevented executing it.</returns>
         /// <exception cref="InvalidOperationException">No project is in scope.</exception>
-        /// <exception cref="NotSupportedException">The query selects or orders by properties, which the data store contract cannot apply.</exception>
         public Task<ErrorOr<PagedResult<IData>>> ExecuteQueryByIdAsync(Guid queryId, Guid? commitId, QueryParameters queryParameters, CancellationToken cancellationToken)
         {
             var projectId = this.ProjectScope.ProjectId;
@@ -223,7 +225,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         {
             ArgumentNullException.ThrowIfNull(updateQuery);
 
-            var condition = ToSearchFilter(updateQuery.Where);
+            var condition = ToExecutableFilter(updateQuery);
 
             if (condition.IsError)
             {
@@ -243,6 +245,26 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
 
                 return nameIsFree.IsError ? nameIsFree.Errors : await this.QueryRepository.UpdateAsync(transaction, existing.Value, cancellationToken);
             }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Translates a query into the <see cref="SearchFilter"/> the data store evaluates, provided this server can execute it.
+        /// </summary>
+        /// <param name="query">The <see cref="Query"/> to translate.</param>
+        /// <returns>The <see cref="SearchFilter"/> of its <c>where</c>, an empty list when it has none, or the validation error of the query.</returns>
+        private static ErrorOr<List<SearchFilter>> ToExecutableFilter(Query query)
+        {
+            if ((query.Select?.Count ?? 0) > 0)
+            {
+                return Error.Validation("query.select.unsupported", "This server does not execute a query that selects properties yet.");
+            }
+
+            if ((query.OrderBy?.Count ?? 0) > 0)
+            {
+                return Error.Validation("query.orderBy.unsupported", "This server does not execute a query that orders by properties yet.");
+            }
+
+            return ToSearchFilter(query.Where);
         }
 
         /// <summary>
@@ -346,19 +368,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <param name="queryParameters">The paging parameters applied to the result.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
         /// <returns>The page of data that satisfy the query, or the errors that prevented executing it.</returns>
-        /// <exception cref="NotSupportedException">The query selects or orders by properties.</exception>
         /// <remarks>
-        /// Systems Modeling API and Services 1.0 §7.1.4: an empty scope is the whole project, otherwise the data are among the scope.
+        /// Systems Modeling API and Services 1.0 §7.1.4 makes the owning project the default scope; this server reads a non-empty scope as
+        /// the data the results are taken from.
         /// </remarks>
         private async Task<ErrorOr<PagedResult<IData>>> ExecuteAsync(IDataStoreTransaction transaction, Guid projectId, Query query, Guid? commitId,
             QueryParameters queryParameters, CancellationToken cancellationToken)
         {
-            if ((query.Select?.Count ?? 0) > 0 || (query.OrderBy?.Count ?? 0) > 0)
-            {
-                throw new NotSupportedException("A query that selects or orders by properties cannot be executed by the data store contract yet.");
-            }
-
-            var condition = ToSearchFilter(query.Where);
+            var condition = ToExecutableFilter(query);
 
             if (condition.IsError)
             {

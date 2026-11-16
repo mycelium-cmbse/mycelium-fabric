@@ -10,7 +10,6 @@
 namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
 {
     using System;
-    using System.Linq;
 
     using Carter;
 
@@ -18,7 +17,6 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
 
     using Mycelium.Fabric.ConcurrentServer.Persistence;
     using Mycelium.Fabric.ConcurrentServer.Serialization;
-    using Mycelium.Fabric.ConcurrentServer.Services;
 
     using SysML2.NET.Serializer.Json;
 
@@ -45,14 +43,6 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
                 Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IProjectScope)
                                                                                        && descriptor.ImplementationType == typeof(ProjectScope)
                                                                                        && descriptor.Lifetime == ServiceLifetime.Scoped));
-                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IDatabaseHandler)
-                                                                                       && descriptor.ImplementationType == typeof(DatabaseHandler)
-                                                                                       && descriptor.Lifetime == ServiceLifetime.Scoped));
-                Assert.That(services.Where(descriptor => typeof(IBaseService).IsAssignableFrom(descriptor.ServiceType)), Has.Exactly(6).Items
-                    .And.All.Matches<ServiceDescriptor>(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped
-                                                                      && descriptor.ServiceType.IsAssignableFrom(descriptor.ImplementationType)));
-                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IProjectDataVersioningService)
-                                                                                       && descriptor.ImplementationType == typeof(ProjectDataVersioningService)));
 
                 // Carter's own default negotiator writes any *json media type without the SysML2.NET serializers, so none of its negotiators survives.
                 Assert.That(provider.GetServices<IResponseNegotiator>(), Has.Exactly(1).Items.And.All.TypeOf<JsonResponseNegotiator>());

@@ -77,8 +77,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
         /// <returns>The outcome of the operation, or the errors that prevented it.</returns>
         /// <remarks>
-        /// A version without payload is a deletion; otherwise it is an update when its identity is in effect at one of the
-        /// previous commits, and a creation when it is not (§7.2.3 <c>getCommitChange</c>).
+        /// §7.2.3 <c>getCommitChange</c> keeps only the changes of the given types without defining them; this server reads a version
+        /// without payload as a deletion, and otherwise as an update when its identity is in effect at a previous commit, a creation when not.
         /// </remarks>
         Task<ErrorOr<PagedResult<DataVersion>>> ReadChangeAsync(IDataStoreTransaction transaction, Guid commitId, IReadOnlyList<ChangeType> changeTypes,
             QueryParameters queryParameters, CancellationToken cancellationToken);

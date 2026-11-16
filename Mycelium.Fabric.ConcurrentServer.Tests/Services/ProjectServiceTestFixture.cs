@@ -52,21 +52,21 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             this.serviceMocks = new ServiceMocks(ProjectId);
             this.logger = new Mock<ILogger<ProjectService>>();
-            this.logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            this.logger.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             this.projectRepository = new Mock<IProjectRepository>();
             this.branchRepository = new Mock<IBranchRepository>();
             this.commitRepository = new Mock<ICommitRepository>();
 
-            this.projectRepository.Setup(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Project>(), It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Project>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IDataStoreTransaction _, Project created, CancellationToken _) => created);
 
-            this.projectRepository.Setup(x => x.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Project>(), It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Project>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IDataStoreTransaction _, Project updated, CancellationToken _) => updated);
 
-            this.commitRepository.Setup(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()))
+            this.commitRepository.Setup(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IDataStoreTransaction _, Commit created, CancellationToken _) => created);
 
-            this.branchRepository.Setup(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Branch>(), It.IsAny<CancellationToken>()))
+            this.branchRepository.Setup(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Branch>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IDataStoreTransaction _, Branch created, CancellationToken _) => created);
 
             this.service = new ProjectService(this.serviceMocks.DatabaseHandler.Object, this.serviceMocks.ProjectScope.Object, this.projectRepository.Object,
@@ -83,7 +83,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(unnamed.FirstError.Code, Is.EqualTo("project.name.missing"));
-                this.serviceMocks.DatabaseHandler.Verify(x => x.BeginTransactionAsync(It.IsAny<TransactionMode>(), It.IsAny<CancellationToken>()), Times.Never);
+                this.serviceMocks.DatabaseHandler.Verify(handler => handler.BeginTransactionAsync(It.IsAny<TransactionMode>(), It.IsAny<CancellationToken>()), Times.Never);
             }
 
             var created = await this.service.CreateProjectAsync(new Project { Name = "the project", Description = "the description" }, CancellationToken.None);
@@ -96,17 +96,17 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 this.serviceMocks.VerifyCommitted(TransactionMode.ReadWrite);
             }
 
-            this.branchRepository.Verify(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(),
+            this.branchRepository.Verify(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(),
                 It.Is<Branch>(branch => branch.Id == created.Value.DefaultBranch && branch.Name == ProjectService.DefaultBranchName && branch.OwningProject == created.Value.Id
                                         && branch.Head != Guid.Empty), It.IsAny<CancellationToken>()), Times.Once);
 
-            this.commitRepository.Verify(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(),
+            this.commitRepository.Verify(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(),
                 It.Is<Commit>(commit => commit.OwningProject == created.Value.Id && commit.PreviousCommits.Count == 0 && commit.Change.Count == 0),
                     It.IsAny<CancellationToken>()), Times.Once);
 
             this.serviceMocks.Reset();
 
-            this.commitRepository.Setup(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()))
+            this.commitRepository.Setup(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.Unexpected("store.failed"));
 
             var failed = await this.service.CreateProjectAsync(new Project { Name = "the project" }, CancellationToken.None);
@@ -124,7 +124,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             Assert.That(() => new ProjectService(this.serviceMocks.DatabaseHandler.Object, this.serviceMocks.ProjectScope.Object, this.projectRepository.Object,
                 this.branchRepository.Object, this.commitRepository.Object, null), Throws.TypeOf<ArgumentNullException>());
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Project { Id = ProjectId });
 
             var project = await this.service.GetProjectByIdAsync(ProjectId, CancellationToken.None);
@@ -136,7 +136,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 this.logger.VerifyLogged(LogLevel.Error, "GetProjectByIdAsync", Times.Never());
             }
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.NotFound("project.notFound"));
 
             await this.service.GetProjectByIdAsync(ProjectId, CancellationToken.None);
@@ -147,14 +147,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 this.logger.VerifyLogged(LogLevel.Error, "GetProjectByIdAsync", Times.Never());
             }
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<Error> { Error.NotFound("project.notFound"), Error.Unexpected("store.failed") });
 
             await this.service.GetProjectByIdAsync(ProjectId, CancellationToken.None);
 
             this.logger.VerifyLogged(LogLevel.Error, "GetProjectByIdAsync failed with project.notFound, store.failed", Times.Once());
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new TimeoutException());
 
             Assert.That(() => this.service.GetProjectByIdAsync(ProjectId, CancellationToken.None), Throws.TypeOf<TimeoutException>());
@@ -164,7 +164,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using var cancellation = new CancellationTokenSource();
             await cancellation.CancelAsync();
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new OperationCanceledException());
 
             Assert.That(() => this.service.GetProjectByIdAsync(ProjectId, cancellation.Token), Throws.InstanceOf<OperationCanceledException>());
@@ -177,16 +177,16 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             Assert.That(() => this.service.UpdateProjectAsync(null, CancellationToken.None), Throws.TypeOf<ArgumentNullException>());
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.NotFound("project.notFound"));
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new Project { Id = ProjectId, Name = "old name", Alias = ["old name"], Description = "old description", DefaultBranch = BranchId });
 
-            this.branchRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), BranchId, It.IsAny<CancellationToken>()))
+            this.branchRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), BranchId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Branch { Id = BranchId, OwningProject = ProjectId });
 
-            this.branchRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ForeignBranchId, It.IsAny<CancellationToken>()))
+            this.branchRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ForeignBranchId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Branch { Id = ForeignBranchId, OwningProject = Guid.NewGuid() });
 
             var unchanged = await this.service.UpdateProjectAsync(new Project { Id = ProjectId }, CancellationToken.None);
@@ -215,20 +215,20 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(unknownProject.FirstError.Type, Is.EqualTo(ErrorType.NotFound));
-                this.projectRepository.Verify(x => x.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Project>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+                this.projectRepository.Verify(repository => repository.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Project>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
             }
         }
 
         [Test]
         public async Task VerifyDeleteProjectAsync()
         {
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.NotFound("project.notFound"));
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Project { Id = ProjectId });
 
-            this.projectRepository.Setup(x => x.DeleteAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Deleted);
+            this.projectRepository.Setup(repository => repository.DeleteAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Deleted);
 
             var deleted = await this.service.DeleteProjectAsync(ProjectId, CancellationToken.None);
 
@@ -242,7 +242,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
 
             this.serviceMocks.Reset();
 
-            this.projectRepository.Setup(x => x.DeleteAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.DeleteAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.Conflict("project.used"));
 
             var used = await this.service.DeleteProjectAsync(ProjectId, CancellationToken.None);

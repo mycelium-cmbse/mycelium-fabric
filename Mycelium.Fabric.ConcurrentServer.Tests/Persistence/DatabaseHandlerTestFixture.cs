@@ -32,12 +32,12 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
         public void SetUp()
         {
             this.transaction = new Mock<IDataStoreTransaction>();
-            this.transaction.Setup(x => x.CommitAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
-            this.transaction.Setup(x => x.RollbackAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
+            this.transaction.Setup(dataStoreTransaction => dataStoreTransaction.CommitAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
+            this.transaction.Setup(dataStoreTransaction => dataStoreTransaction.RollbackAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
 
             this.transactionFactory = new Mock<IDataStoreTransactionFactory>();
 
-            this.transactionFactory.Setup(x => x.BeginAsync(It.IsAny<TransactionMode>(), It.IsAny<CancellationToken>()))
+            this.transactionFactory.Setup(factory => factory.BeginAsync(It.IsAny<TransactionMode>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => ErrorOrFactory.From(this.transaction.Object));
 
             this.handler = new DatabaseHandler(this.transactionFactory.Object);
@@ -72,7 +72,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
 
             Assert.That(() => this.handler.BeginTransactionAsync(TransactionMode.ReadWrite, CancellationToken.None), Throws.TypeOf<InvalidOperationException>());
 
-            this.transactionFactory.Verify(x => x.BeginAsync(TransactionMode.ReadOnly, It.IsAny<CancellationToken>()), Times.Once);
+            this.transactionFactory.Verify(factory => factory.BeginAsync(TransactionMode.ReadOnly, It.IsAny<CancellationToken>()), Times.Once);
 
             await joined.Value.DisposeAsync();
 
@@ -83,7 +83,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(this.handler.HasActiveTransaction, Is.False);
-                this.transaction.Verify(x => x.DisposeAsync(), Times.Once);
+                this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.DisposeAsync(), Times.Once);
             }
 
             await using (var _ = (await this.handler.BeginTransactionAsync(TransactionMode.ReadWrite, CancellationToken.None)).Value)
@@ -93,7 +93,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
                 Assert.That(reader.Value.Mode, Is.EqualTo(TransactionMode.ReadWrite));
             }
 
-            this.transactionFactory.Setup(x => x.BeginAsync(It.IsAny<TransactionMode>(), It.IsAny<CancellationToken>())).ReturnsAsync(Error.Unexpected("store.unavailable"));
+            this.transactionFactory.Setup(factory => factory.BeginAsync(It.IsAny<TransactionMode>(), It.IsAny<CancellationToken>())).ReturnsAsync(Error.Unexpected("store.unavailable"));
 
             var failed = await this.handler.BeginTransactionAsync(TransactionMode.ReadOnly, CancellationToken.None);
 
@@ -114,15 +114,15 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
 
                 Assert.That((await joined.Value.CommitAsync(CancellationToken.None)).IsError, Is.False);
 
-                this.transaction.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
+                this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
 
                 Assert.That((await owner.CommitAsync(CancellationToken.None)).IsError, Is.False);
 
-                this.transaction.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+                this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
 
                 Assert.That((await owner.RollbackAsync(CancellationToken.None)).IsError, Is.False);
 
-                this.transaction.Verify(x => x.RollbackAsync(It.IsAny<CancellationToken>()), Times.Never);
+                this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.RollbackAsync(It.IsAny<CancellationToken>()), Times.Never);
             }
 
             await using (var owner = (await this.handler.BeginTransactionAsync(TransactionMode.ReadWrite, CancellationToken.None)).Value)
@@ -136,8 +136,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
                 using (Assert.EnterMultipleScope())
                 {
                     Assert.That(commit.FirstError.Code, Is.EqualTo("transaction.doomed"));
-                    this.transaction.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
-                    this.transaction.Verify(x => x.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
+                    this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+                    this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
                 }
             }
         }
@@ -150,10 +150,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
                 Assert.That((await owner.RollbackAsync(CancellationToken.None)).IsError, Is.False);
                 Assert.That((await owner.RollbackAsync(CancellationToken.None)).IsError, Is.False);
 
-                this.transaction.Verify(x => x.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
+                this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
             }
 
-            this.transaction.Setup(x => x.CommitAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Error.Conflict("store.serialization"));
+            this.transaction.Setup(dataStoreTransaction => dataStoreTransaction.CommitAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Error.Conflict("store.serialization"));
 
             await using (var owner = (await this.handler.BeginTransactionAsync(TransactionMode.ReadWrite, CancellationToken.None)).Value)
             {
@@ -161,7 +161,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Persistence
 
                 await owner.RollbackAsync(CancellationToken.None);
 
-                this.transaction.Verify(x => x.RollbackAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+                this.transaction.Verify(dataStoreTransaction => dataStoreTransaction.RollbackAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
             }
         }
     }

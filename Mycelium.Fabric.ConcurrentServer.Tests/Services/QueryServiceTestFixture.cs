@@ -60,29 +60,29 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             this.serviceMocks = new ServiceMocks(ProjectId);
             this.logger = new Mock<ILogger<QueryService>>();
-            this.logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+            this.logger.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             this.queryRepository = new Mock<IQueryRepository>();
             this.projectRepository = new Mock<IProjectRepository>();
             this.dataRepository = new Mock<IDataRepository>();
             this.versioningService = new Mock<IProjectDataVersioningService>();
 
-            this.projectRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
+            this.projectRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), ProjectId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Project { Id = ProjectId });
 
-            this.queryRepository.Setup(x => x.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
+            this.queryRepository.Setup(repository => repository.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<Query>());
 
-            this.queryRepository.Setup(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()))
+            this.queryRepository.Setup(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IDataStoreTransaction _, Query created, CancellationToken _) => created);
 
-            this.versioningService.Setup(x => x.GetHeadCommitAsync(ProjectId, null, It.IsAny<CancellationToken>())).ReturnsAsync(new Commit { Id = HeadCommitId });
+            this.versioningService.Setup(service => service.GetHeadCommitAsync(ProjectId, null, It.IsAny<CancellationToken>())).ReturnsAsync(new Commit { Id = HeadCommitId });
             this.serviceMocks.AddCommit(ForeignCommitId, Guid.NewGuid());
 
-            this.dataRepository.Setup(x => x.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
+            this.dataRepository.Setup(repository => repository.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<IData>());
 
-            this.dataRepository.Setup(x => x.ReadMatchingAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
+            this.dataRepository.Setup(repository => repository.ReadMatchingAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>())).ReturnsAsync(new PagedResult<IData>());
 
             this.service = new QueryService(this.serviceMocks.DatabaseHandler.Object, this.serviceMocks.ProjectScope.Object, this.queryRepository.Object,
@@ -95,8 +95,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             Assert.That(() => this.service.ExecuteQueryAsync(null, null, new QueryParameters(), CancellationToken.None), Throws.TypeOf<ArgumentNullException>());
             Assert.That(() => this.service.ExecuteQueryAsync(new Query { Project = Guid.NewGuid() }, null, new QueryParameters(), CancellationToken.None),
                 Throws.TypeOf<InvalidOperationException>());
-            Assert.That(() => this.service.ExecuteQueryAsync(new Query { Project = ProjectId, Select = ["declaredName"] }, null, new QueryParameters(), CancellationToken.None),
-                Throws.TypeOf<NotSupportedException>());
+            Assert.That((await this.service.ExecuteQueryAsync(new Query { Project = ProjectId, Select = ["declaredName"] }, null, new QueryParameters(),
+                CancellationToken.None)).FirstError.Code, Is.EqualTo("query.select.unsupported"));
+            Assert.That((await this.service.ExecuteQueryAsync(new Query { Project = ProjectId, OrderBy = ["declaredName"] }, null, new QueryParameters(),
+                CancellationToken.None)).FirstError.Code, Is.EqualTo("query.orderBy.unsupported"));
 
             this.serviceMocks.Reset();
 
@@ -105,7 +107,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(unconstrained.IsError, Is.False);
-                this.dataRepository.Verify(x => x.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<QueryParameters>(),
+                this.dataRepository.Verify(repository => repository.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<QueryParameters>(),
                     It.IsAny<CancellationToken>()), Times.Once);
                 this.serviceMocks.VerifyCommitted(TransactionMode.ReadOnly);
             }
@@ -119,7 +121,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
 
             await this.service.ExecuteQueryAsync(constrained, null, new QueryParameters(), CancellationToken.None);
 
-            this.dataRepository.Verify(x => x.ReadMatchingAsync(It.IsAny<IDataStoreTransaction>(), HeadCommitId,
+            this.dataRepository.Verify(repository => repository.ReadMatchingAsync(It.IsAny<IDataStoreTransaction>(), HeadCommitId,
                 It.Is<CompositeSearchFilter>(filter => filter.Operator == JoinOperator.AND && filter.Filters.Count == 2
                                                        && ((PrimitiveSearchFilter)filter.Filters[0]).Property == "declaredName"
                                                        && ((PrimitiveSearchFilter)filter.Filters[1]).Property == "id"),
@@ -135,7 +137,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(foreignCommit.FirstError.Type, Is.EqualTo(ErrorType.Validation));
-                this.dataRepository.Verify(x => x.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), ForeignCommitId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()),
+                this.dataRepository.Verify(repository => repository.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), ForeignCommitId, It.IsAny<QueryParameters>(), It.IsAny<CancellationToken>()),
                     Times.Never);
             }
         }
@@ -143,7 +145,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         [Test]
         public async Task VerifyExecuteQueryByIdAsync()
         {
-            this.queryRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>()))
+            this.queryRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Query { Id = QueryId, Project = Guid.NewGuid() });
 
             var foreignQuery = await this.service.ExecuteQueryByIdAsync(QueryId, null, new QueryParameters(), CancellationToken.None);
@@ -151,10 +153,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(foreignQuery.FirstError.Code, Is.EqualTo("query.notFound"));
-                this.versioningService.Verify(x => x.GetHeadCommitAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+                this.versioningService.Verify(service => service.GetHeadCommitAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
             }
 
-            this.queryRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>()))
+            this.queryRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Query { Id = QueryId, Project = ProjectId });
 
             var executed = await this.service.ExecuteQueryByIdAsync(QueryId, null, new QueryParameters(), CancellationToken.None);
@@ -162,7 +164,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(executed.IsError, Is.False);
-                this.dataRepository.Verify(x => x.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<QueryParameters>(),
+                this.dataRepository.Verify(repository => repository.ReadAsync<IData>(It.IsAny<IDataStoreTransaction>(), HeadCommitId, It.IsAny<QueryParameters>(),
                     It.IsAny<CancellationToken>()), Times.Once);
             }
         }
@@ -172,17 +174,20 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             Assert.That(() => this.service.CreateQueryAsync(null, CancellationToken.None), Throws.TypeOf<ArgumentNullException>());
 
-            var created = await this.service.CreateQueryAsync(new Query { Project = ProjectId, Name = "parts", Select = ["declaredName"] }, CancellationToken.None);
+            Assert.That((await this.service.CreateQueryAsync(new Query { Project = ProjectId, Name = "parts", Select = ["declaredName"] }, CancellationToken.None))
+                .FirstError.Code, Is.EqualTo("query.select.unsupported"));
+
+            var created = await this.service.CreateQueryAsync(new Query { Project = ProjectId, Name = "parts", Scope = [ScopedElementId] }, CancellationToken.None);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(created.Value.Id, Is.Not.EqualTo(Guid.Empty));
                 Assert.That(created.Value.Project, Is.EqualTo(ProjectId));
                 Assert.That(created.Value.Alias, Does.Contain("parts"));
-                Assert.That(created.Value.Select, Is.EqualTo(["declaredName"]));
+                Assert.That(created.Value.Scope, Is.EqualTo([ScopedElementId]));
             }
 
-            this.queryRepository.Setup(x => x.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
+            this.queryRepository.Setup(repository => repository.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<Query> { Records = [created.Value] });
 
@@ -195,7 +200,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(invalidWhere.FirstError.Code, Is.EqualTo("query.where.property.missing"));
-                this.queryRepository.Verify(x => x.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()), Times.Once);
+                this.queryRepository.Verify(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()), Times.Once);
             }
         }
 
@@ -205,21 +210,24 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             var stored = new Query { Id = QueryId, Project = ProjectId, Name = "parts" };
             var other = new Query { Id = Guid.NewGuid(), Project = ProjectId, Name = "ports" };
 
-            this.queryRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>())).ReturnsAsync(stored);
+            this.queryRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>())).ReturnsAsync(stored);
 
-            this.queryRepository.Setup(x => x.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()))
+            this.queryRepository.Setup(repository => repository.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IDataStoreTransaction _, Query updated, CancellationToken _) => updated);
 
-            this.queryRepository.Setup(x => x.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
+            this.queryRepository.Setup(repository => repository.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<Query> { Records = [stored] });
 
-            var sameName = await this.service.UpdateQueryAsync(ProjectId, new Query { Id = QueryId, Project = ProjectId, Name = "parts", Select = ["declaredName"] },
+            Assert.That((await this.service.UpdateQueryAsync(ProjectId, new Query { Id = QueryId, Project = ProjectId, Name = "parts", OrderBy = ["declaredName"] },
+                CancellationToken.None)).FirstError.Code, Is.EqualTo("query.orderBy.unsupported"));
+
+            var sameName = await this.service.UpdateQueryAsync(ProjectId, new Query { Id = QueryId, Project = ProjectId, Name = "parts", Scope = [ScopedElementId] },
                 CancellationToken.None);
 
-            Assert.That(sameName.Value.Select, Is.EqualTo(["declaredName"]));
+            Assert.That(sameName.Value.Scope, Is.EqualTo([ScopedElementId]));
 
-            this.queryRepository.Setup(x => x.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
+            this.queryRepository.Setup(repository => repository.ReadByFilterAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<SearchFilter>(), It.IsAny<QueryParameters>(),
                 It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<Query> { Records = [other] });
 
@@ -228,7 +236,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(takenName.FirstError.Type, Is.EqualTo(ErrorType.Conflict));
-                this.queryRepository.Verify(x => x.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()), Times.Once);
+                this.queryRepository.Verify(repository => repository.UpdateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Query>(), It.IsAny<CancellationToken>()), Times.Once);
             }
         }
 
@@ -237,19 +245,19 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
         {
             var foreignQueryId = Guid.NewGuid();
 
-            this.queryRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>()))
+            this.queryRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), QueryId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Query { Id = QueryId, Project = ProjectId });
 
-            this.queryRepository.Setup(x => x.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), foreignQueryId, It.IsAny<CancellationToken>()))
+            this.queryRepository.Setup(repository => repository.ReadByIdAsync(It.IsAny<IDataStoreTransaction>(), foreignQueryId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Query { Id = foreignQueryId, Project = Guid.NewGuid() });
 
-            this.queryRepository.Setup(x => x.DeleteAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Deleted);
+            this.queryRepository.Setup(repository => repository.DeleteAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Deleted);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That((await this.service.DeleteQueryAsync(ProjectId, QueryId, CancellationToken.None)).Value.Id, Is.EqualTo(QueryId));
                 Assert.That((await this.service.DeleteQueryAsync(ProjectId, foreignQueryId, CancellationToken.None)).FirstError.Code, Is.EqualTo("query.notFound"));
-                this.queryRepository.Verify(x => x.DeleteAsync(It.IsAny<IDataStoreTransaction>(), foreignQueryId, It.IsAny<CancellationToken>()), Times.Never);
+                this.queryRepository.Verify(repository => repository.DeleteAsync(It.IsAny<IDataStoreTransaction>(), foreignQueryId, It.IsAny<CancellationToken>()), Times.Never);
             }
         }
     }

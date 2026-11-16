@@ -26,7 +26,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
     /// Defines the persistence contract of the versioned payload that a commit carries.
     /// </summary>
     /// <remarks>
-    /// Systems Modeling API and Services 1.0 §7.1.1 (pp. 29–32) makes <c>Data</c> the entity a
+    /// Systems Modeling API and Services 1.0 §7.1.2 (pp. 32–36) makes <c>Data</c> the entity a
     /// <c>DataVersion</c> wraps rather than a record of its own, so it has no class in the API model and
     /// no generated repository. The reads below are the ones §7.2.2, §7.2.4, §7.2.5 and §7.2.6 issue
     /// against the payload of a single commit.
@@ -127,8 +127,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// <returns>The outcome of the operation, or the errors that prevented it.</returns>
         /// <remarks>
         /// This is how §7.2.4 <c>executeQuery</c> reaches the store: the <c>where</c> of a
-        /// <see cref="Query"/> becomes the filter and its <c>scope</c> becomes a condition on the
-        /// identifier. Evaluating it is the store's work, since it holds the index the condition selects
+        /// <see cref="Query"/> becomes the filter and, as this server reads the <c>scope</c> §7.1.4 leaves open, the scope becomes a
+        /// condition on the identifier. Evaluating it is the store's work, since it holds the index the condition selects
         /// on and a service filtering in memory would have to read the whole commit first.
         /// </remarks>
         Task<ErrorOr<PagedResult<IData>>> ReadMatchingAsync(IDataStoreTransaction transaction, Guid commitId, SearchFilter filter, QueryParameters queryParameters, CancellationToken cancellationToken);
