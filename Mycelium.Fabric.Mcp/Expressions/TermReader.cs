@@ -137,8 +137,9 @@ namespace Mycelium.Fabric.Mcp.Expressions
         {
             if (reference.referent is { } feature)
             {
-                // An enumeration value is written with its definition, as OrbitKind::polar.
-                var name = feature.DeclaredName ?? feature.DeclaredShortName ?? feature.qualifiedName;
+                // An enumeration value is written with its definition, as OrbitKind::polar. A feature that redefines another one
+                // without a declared name has the name of the redefined feature.
+                var name = feature.name ?? feature.DeclaredShortName ?? feature.qualifiedName;
 
                 return new ReferenceTerm(ModelEvaluationContext.IsEnumerationValue(feature) ? $"{feature.owningNamespace.DeclaredName}::{name}" : name, feature);
             }
@@ -286,7 +287,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
             // A target such as camera.mass is itself a chain of features.
             var features = target.chainingFeature is { Count: > 0 } chainingFeatures ? chainingFeatures : [target];
 
-            return [.. features.Select(feature => feature.DeclaredName ?? feature.DeclaredShortName)];
+            return [.. features.Select(feature => feature.name ?? feature.DeclaredShortName)];
         }
 
         /// <summary>

@@ -167,6 +167,17 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         }
 
         [Test]
+        public void Build_OnAValueRedefinedWithoutName_UsesTheRedefinedValue()
+        {
+            // The camera weighs 35 instead of the 38 of OpticalCamera.
+            var request = new TradeOffRequest(SatelliteId, [Choice(CameraId, Variant("light", ("mass", 30)))], [new TradeOffObjective { Attribute = "mass" }], [], [], 1, null);
+
+            var problem = TradeOffProblemBuilder.Build(RedefinedValueHelper.CreateModel(), request);
+
+            Assert.That(problem.Decisions[0].Options.Select(option => (option.Variant, option.Values["mass"])), Is.EqualTo([("current", RedefinedValueHelper.CameraMass), ("light", 30.0)]));
+        }
+
+        [Test]
         public void VerifyBuildWithInvalidRequests()
         {
             var camera = Choice(CameraId, Variant("light", ("mass", 30)));

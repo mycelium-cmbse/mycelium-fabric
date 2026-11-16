@@ -183,7 +183,10 @@ namespace Mycelium.Fabric.Mcp.Services
                 this.ApplyCommit(commitRequest.Value);
                 this.temporaryNames = batchTemporaryNames;
 
-                return new ApplyChangesResult(GetCreatedElements(commitRequest.Value, previousElementIds, this.elementsById), []);
+                return new ApplyChangesResult(GetCreatedElements(commitRequest.Value, previousElementIds, this.elementsById), [])
+                {
+                    Notes = BatchNotes.Describe(commitRequest.Value, previousElementIds, this.elementsById)
+                };
             }
         }
 

@@ -416,14 +416,15 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Gets the feature of an element or of its definitions that has the given name, unless it is marked for deletion.
+        /// Gets the feature of an element, owned or inherited, that has the given name, unless it is marked for deletion. A
+        /// feature that redefines another one without declaring a name has the name of the redefined one.
         /// </summary>
         /// <param name="element">The element.</param>
         /// <param name="name">The name of the feature.</param>
         /// <returns>The feature, or <c>null</c> when there is none.</returns>
         private IFeature FindFeature(IElement element, string name)
         {
-            return this.GetFeatures(element).FirstOrDefault(feature => feature.DeclaredName == name && !this.IsMarkedForDeletion(feature));
+            return this.GetFeatures(element).FirstOrDefault(feature => this.GetEffectiveName(feature) == name && !this.IsMarkedForDeletion(feature));
         }
 
         /// <summary>

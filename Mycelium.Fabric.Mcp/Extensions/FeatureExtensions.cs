@@ -20,6 +20,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Multiplicities;
+    using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.POCO.Systems.Enumerations;
     using SysML2.NET.Core.POCO.Systems.Parts;
@@ -50,6 +51,94 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 return feature.owningNamespace is { } owner and not IType
                     ? [.. (owner.ownedElement ?? []).OfType<IPartUsage>().Where(part => part.Id != feature.Id)]
                     : [];
+            }
+
+            /// <summary>
+            /// Gets the documentation of the feature or, when it has none, the one of the feature that it redefines: the value
+            /// <c>:&gt;&gt; mass = 35;</c> of a part keeps the documentation of the <c>mass</c> of its definition, such as
+            /// <c>Dry mass of the unit [kg].</c>
+            /// </summary>
+            /// <returns>The documentation bodies, joined in a single text, or <c>null</c> when none of these features has any.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="feature"/> is <c>null</c>.
+            /// </exception>
+            public string GetOwnOrRedefinedDocumentation()
+            {
+                ArgumentNullException.ThrowIfNull(feature);
+
+                var visitedIds = new HashSet<Guid>();
+
+                for (var current = feature; current != null && visitedIds.Add(current.Id); current = current.ownedRedefinition?.FirstOrDefault()?.RedefinedFeature)
+                {
+                    if (current.GetDocumentationBodies() is { } documentation)
+                    {
+                        return documentation;
+                    }
+                }
+
+                return null;
+            }
+
+            /// <summary>
+            /// Gets the usages of a model that have the feature among their features (<c>feature</c>): the usages typed by the type
+            /// that owns it, directly or through what specializes this type, that do not redefine it. For the <c>mass</c> of
+            /// <c>Camera</c>, they are the parts typed by <c>Camera</c> that have no <c>:&gt;&gt; mass</c> of their own.
+            /// </summary>
+            /// <param name="elements">The elements of the model.</param>
+            /// <returns>The usages, in the order of the model; empty when the feature has no owning type.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="feature"/> or <paramref name="elements"/> is <c>null</c>.
+            /// </exception>
+            public IReadOnlyList<IUsage> GetInheritingUsages(IEnumerable<IElement> elements)
+            {
+                ArgumentNullException.ThrowIfNull(feature);
+                ArgumentNullException.ThrowIfNull(elements);
+
+                if (feature.owningType is not { } owningType)
+                {
+                    return [];
+                }
+
+                // A specialization of a type, a typing by it or a subsetting of it makes the specific type inherit its features.
+                var types = elements.OfType<IType>().ToList();
+                var generalIds = types.ToDictionary(type => type.Id, type => (type.ownedSpecialization ?? []).Where(specialization => specialization.General != null).Select(specialization => specialization.General.Id).ToList());
+                var specificIds = new HashSet<Guid> { owningType.Id };
+                bool isGrowing;
+
+                do
+                {
+                    isGrowing = false;
+
+                    foreach (var type in types.Where(type => !specificIds.Contains(type.Id) && generalIds[type.Id].Exists(specificIds.Contains)))
+                    {
+                        isGrowing |= specificIds.Add(type.Id);
+                    }
+                }
+                while (isGrowing);
+
+                return [.. types.OfType<IUsage>().Where(usage => usage.Id != owningType.Id && specificIds.Contains(usage.Id) && (usage.feature ?? []).Any(candidate => candidate.Id == feature.Id))];
+            }
+
+            /// <summary>
+            /// Gets the types that the feature adds, through its own typings, to the types of the features that it redefines,
+            /// without specializing them: <c>part :&gt;&gt; engine : Battery;</c>, when <c>Battery</c> does not specialize the
+            /// <c>Engine</c> of the redefined <c>engine</c>, makes the part both an <c>Engine</c> and a <c>Battery</c>.
+            /// </summary>
+            /// <returns>Each added type with the type of the redefined feature that it does not specialize.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="feature"/> is <c>null</c>.
+            /// </exception>
+            public IReadOnlyList<(IType Added, IType Redefined)> GetTypesAddedByRedefinition()
+            {
+                ArgumentNullException.ThrowIfNull(feature);
+
+                var ownTypes = (feature.ownedTyping ?? []).Select(typing => typing.Type).Where(type => type != null).ToList();
+
+                return [.. from redefinition in feature.ownedRedefinition ?? []
+                    from redefinedType in redefinition.RedefinedFeature?.type ?? []
+                    from ownType in ownTypes
+                    where ownType.Id != redefinedType.Id && !ownType.Specializes(redefinedType)
+                    select (ownType, redefinedType)];
             }
 
             /// <summary>

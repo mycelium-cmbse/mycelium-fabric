@@ -112,20 +112,20 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <returns>The name of the choice.</returns>
         private static string GetFreeName(ChosenPart part, List<string> names)
         {
-            var name = part.Part.DeclaredName.Replace(ReferenceSeparator, '_');
+            var name = part.Part.name.Replace(ReferenceSeparator, '_');
 
             if (!names.Contains(name))
             {
                 return name;
             }
 
-            name = $"{name} ({part.Owners[0].DeclaredName})";
+            name = $"{name} ({part.Owners[0].name})";
 
             var number = 2;
 
             while (names.Contains(name))
             {
-                name = $"{part.Part.DeclaredName} ({part.Owners[0].DeclaredName} {number})";
+                name = $"{part.Part.name} ({part.Owners[0].name} {number})";
                 number++;
             }
 
@@ -149,7 +149,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             var canBeNone = false;
             List<OptionDraft> options = [];
 
-            foreach (var variant in part.Variants.Where(variant => variant.DeclaredName != null))
+            foreach (var variant in part.Variants.Where(variant => variant.name != null))
             {
                 var (minimum, maximum) = variant.multiplicity?.GetUnitRange() ?? (unitCount, unitCount);
                 canBeNone |= minimum == 0;
@@ -158,7 +158,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 {
                     var isCurrent = variant.Id == chosenVariant?.Id && quantity == currentCount;
 
-                    options.Add(new OptionDraft(variant.DeclaredName, quantity, isCurrent, new TradeOffPartContent(variant, null, quantity, IsVariant: true, IsCurrent: isCurrent)));
+                    options.Add(new OptionDraft(variant.name, quantity, isCurrent, new TradeOffPartContent(variant, null, quantity, IsVariant: true, IsCurrent: isCurrent)));
                 }
             }
 
@@ -172,7 +172,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (currentCount != 0 && !options.Exists(option => option.IsCurrent))
             {
-                options.Insert(0, new OptionDraft(chosenVariant.DeclaredName, unitCount, true, new TradeOffPartContent(chosenVariant, null, unitCount, IsVariant: true, IsCurrent: true)));
+                options.Insert(0, new OptionDraft(chosenVariant.name, unitCount, true, new TradeOffPartContent(chosenVariant, null, unitCount, IsVariant: true, IsCurrent: true)));
             }
 
             if (canBeNone || currentCount == 0)
@@ -197,12 +197,12 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             var satisfiedRequirements = new RequirementChecker(modelProvider.Elements).GetSatisfiedRequirements();
 
             var baseNames = satisfiedRequirements
-                .Select(satisfied => satisfied.Requirement.ReqId ?? satisfied.Requirement.DeclaredName ?? satisfied.Requirement.qualifiedName)
+                .Select(satisfied => satisfied.Requirement.ReqId ?? satisfied.Requirement.name ?? satisfied.Requirement.qualifiedName)
                 .ToList();
 
             // A requirement that several parts satisfy is checked for each of them, and named with the part.
             var names = satisfiedRequirements
-                .Select((satisfied, index) => baseNames.Count(baseName => baseName == baseNames[index]) > 1 ? $"{baseNames[index]} ({satisfied.SatisfyingFeature.DeclaredName})" : baseNames[index])
+                .Select((satisfied, index) => baseNames.Count(baseName => baseName == baseNames[index]) > 1 ? $"{baseNames[index]} ({satisfied.SatisfyingFeature.name})" : baseNames[index])
                 .ToList();
 
             var ignoredTexts = ignored.Where(text => !string.IsNullOrWhiteSpace(text)).Select(text => text.Trim()).ToList();
@@ -235,7 +235,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         {
             var requirement = satisfied.Requirement;
 
-            return text == name || text == requirement.ReqId || text == requirement.DeclaredName || text == requirement.qualifiedName
+            return text == name || text == requirement.ReqId || text == requirement.name || text == requirement.qualifiedName
                 || string.Equals(text, requirement.Id.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
@@ -497,7 +497,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                     return null;
                 }
 
-                key = $"{scope.DeclaredName}{ReferenceSeparator}{attribute}";
+                key = $"{scope.name}{ReferenceSeparator}{attribute}";
 
                 if (this.FixedTotals.ContainsKey(key))
                 {

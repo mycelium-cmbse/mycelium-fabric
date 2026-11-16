@@ -76,7 +76,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             var topLevelElements = this.modelProvider.RootElements
                 .SelectMany(rootElement => rootElement.ownedElement ?? [])
-                .Select(element => element.DeclaredName ?? element.GetType().Name)
+                .Select(element => element.name ?? element.GetType().Name)
                 .ToList();
 
             var mostFrequentTypes = elements
@@ -85,13 +85,14 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .Take(MaximumTypeCount)
                 .ToDictionary(group => group.Key, group => group.Count());
 
-            var namedElementCount = elements.Count(element => !string.IsNullOrWhiteSpace(element.DeclaredName));
+            var namedElementCount = elements.Count(element => !string.IsNullOrWhiteSpace(element.name));
 
             return new ModelOverview(topLevelElements, elements.Count, namedElementCount, mostFrequentTypes);
         }
 
         /// <summary>
-        /// Finds the elements whose declared name contains the given text, ignoring case, one page at a time.
+        /// Finds the elements whose name contains the given text, ignoring case, one page at a time. A feature that redefines
+        /// another one without a declared name has the name of the redefined feature.
         /// </summary>
         /// <param name="text">The text to look for in the names of the elements.</param>
         /// <param name="offset">The number of matching elements to skip, 0 for the first page.</param>
@@ -127,8 +128,10 @@ namespace Mycelium.Fabric.Mcp.Tools
             }
 
             var matches = this.modelProvider.Elements
-                .Where(element => element.DeclaredName != null && element.DeclaredName.Contains(text, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(element => element.DeclaredName, StringComparer.OrdinalIgnoreCase)
+                .Select(element => (Element: element, Name: element.name))
+                .Where(candidate => candidate.Name != null && candidate.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(candidate => candidate.Element)
                 .ToList();
 
             var page = matches
@@ -162,13 +165,13 @@ namespace Mycelium.Fabric.Mcp.Tools
             var connections = this.modelProvider.Elements
                 .OfType<IConnector>()
                 .Where(connector => connector.Connects(element))
-                .Select(connector => new ConnectionSummary(connector.Id, connector.DeclaredName, connector.DescribeType(), connector.owner?.qualifiedName, connector.GetEndPaths()))
+                .Select(connector => new ConnectionSummary(connector.Id, connector.name, connector.DescribeType(), connector.owner?.qualifiedName, connector.GetEndPaths()))
                 .ToList();
 
             var specializes = (element as IType)?.GetSpecializedElements().Select(general => general.qualifiedName).ToList();
 
-            return new ElementDetails(element.Id, element.DeclaredName, element.DeclaredShortName, element.DescribeType(), element.qualifiedName,
-                element.owner?.Id, element.owner?.DeclaredName, element.ownedElement?.Count ?? 0, element.GetDocumentationBodies(),
+            return new ElementDetails(element.Id, element.name, element.DeclaredShortName, element.DescribeType(), element.qualifiedName,
+                element.owner?.Id, element.owner?.name, element.ownedElement?.Count ?? 0, element.GetDocumentationBodies(),
                 (element as IConnector)?.GetEndPaths() ?? (element as ITransitionUsage)?.GetEndPaths(), connections.Count == 0 ? null : connections, specializes is { Count: > 0 } ? specializes : null,
                 (element as IPerformActionUsage)?.performedAction?.qualifiedName, (element as IUsage)?.DescribeMultiplicity());
         }
@@ -200,7 +203,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The <see cref="ElementSummary"/> of the element.</returns>
         private static ElementSummary CreateSummary(IElement element)
         {
-            return new ElementSummary(element.Id, element.DeclaredName, element.DescribeType(), element.qualifiedName);
+            return new ElementSummary(element.Id, element.name, element.DescribeType(), element.qualifiedName);
         }
     }
 }

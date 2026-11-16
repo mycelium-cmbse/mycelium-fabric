@@ -29,7 +29,7 @@ namespace Mycelium.Fabric.Mcp.Values
         /// <returns>The qualified name, for example <c>EOSat1::Architecture::eosat1</c>.</returns>
         public override string ToString()
         {
-            return this.Feature.qualifiedName ?? this.Feature.DeclaredName;
+            return this.Feature.qualifiedName ?? this.Feature.name;
         }
     }
 }

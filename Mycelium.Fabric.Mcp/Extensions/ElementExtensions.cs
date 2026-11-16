@@ -121,10 +121,25 @@ namespace Mycelium.Fabric.Mcp.Extensions
             }
 
             /// <summary>
+            /// Gets the attribute of the element that has the given name, among its <c>GetAttributeUsages</c>. The name is the
+            /// one that SysML gives the attribute (<c>name</c>): an attribute that redefines another one without declaring a
+            /// name takes the name of the redefined attribute (<c>:&gt;&gt; mass = 38;</c> is named <c>mass</c>), and hides it.
+            /// </summary>
+            /// <param name="attributeName">The name of the attribute.</param>
+            /// <returns>The attribute, or <c>null</c> when the element has no attribute with this name.</returns>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="element"/> is <c>null</c>.
+            /// </exception>
+            public IAttributeUsage GetAttributeUsage(string attributeName)
+            {
+                return element.GetAttributeUsages().FirstOrDefault(candidate => candidate.name == attributeName);
+            }
+
+            /// <summary>
             /// Collects the contributions of the element and its sub-parts to the sum of an attribute, as
             /// <c>CollectValues</c> does.
             /// </summary>
-            /// <param name="attributeName">The declared name of the attribute.</param>
+            /// <param name="attributeName">The name of the attribute.</param>
             /// <returns>The <see cref="Contribution"/> of each contributing part, empty when no part has a value.</returns>
             /// <exception cref="ArgumentNullException">
             /// Thrown when <paramref name="element"/> is <c>null</c>.
@@ -150,7 +165,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// holds what this variant holds; a part typed by a catalogue that takes no variant yet misses its value; a part
             /// taken 0 times (<c>[0]</c>), such as an optional tank that is not on board, counts for 0.
             /// </summary>
-            /// <param name="attributeName">The declared name of the attribute.</param>
+            /// <param name="attributeName">The name of the attribute.</param>
             /// <param name="openPartIds">
             /// The <c>Id</c> of the parts left open, or <c>null</c> for none: an open part is not visited, and its place is given
             /// as a <see cref="PartSlot"/>, so that a trade-off can fill it with each of its variants.
@@ -170,7 +185,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// Collects the values of an attribute over the element and its sub-parts, as <c>CollectValues</c> does, without
             /// deciding yet which parts miss their value, so that what the open parts hold can be added first.
             /// </summary>
-            /// <param name="attributeName">The declared name of the attribute.</param>
+            /// <param name="attributeName">The name of the attribute.</param>
             /// <param name="openPartIds">The <c>Id</c> of the parts left open, or <c>null</c> for none.</param>
             /// <returns>The <see cref="ValueCollection"/>.</returns>
             /// <exception cref="ArgumentNullException">
@@ -205,12 +220,12 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 return;
             }
 
-            var attribute = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == collector.AttributeName);
+            var attribute = element.GetAttributeUsage(collector.AttributeName);
             var value = attribute?.GetNumericValue();
 
             if (value != null)
             {
-                var margin = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == collector.AttributeName + MarginSuffix)?.GetNumericValue();
+                var margin = element.GetAttributeUsage(collector.AttributeName + MarginSuffix)?.GetNumericValue();
 
                 collector.Contributions.Add(new Contribution(element.Id, element.qualifiedName, element.GetTypeNames(), value.Number, value.Unit, margin?.Number, count == 1 ? null : count));
                 collector.ContributingTypeIds.UnionWith(ValueCollection.GetTypeIds(element));

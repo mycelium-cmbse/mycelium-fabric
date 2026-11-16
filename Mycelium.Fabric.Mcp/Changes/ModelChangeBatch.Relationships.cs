@@ -65,15 +65,27 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException($"The {Describe(element)} cannot specialize itself.");
             }
 
-            var generalInterface = "I" + general.GetType().Name;
-
-            if (general is IConjugatedPortDefinition || element.GetType().GetInterfaces().All(type => type.Name != generalInterface))
+            if (general is IConjugatedPortDefinition || !HasMetaclassOf(element, general))
             {
                 throw new InvalidChangeException(
                     $"The {Describe(element)} cannot specialize the {Describe(general)}: a definition or a usage specializes an element of the same metaclass or of a more general one, for example a PartDefinition can specialize an ItemDefinition.");
             }
 
             return general;
+        }
+
+        /// <summary>
+        /// Tells whether an element has the metaclass of another one, or a more specific one: a part definition has the
+        /// metaclass of an item definition, a part the one of an item.
+        /// </summary>
+        /// <param name="element">The element, for example the one that specializes or redefines the other.</param>
+        /// <param name="general">The other element.</param>
+        /// <returns><c>true</c> when the DTO class of the element implements the interface of the class of the other one.</returns>
+        private static bool HasMetaclassOf(IElement element, IElement general)
+        {
+            var generalInterface = "I" + general.GetType().Name;
+
+            return element.GetType().GetInterfaces().Any(type => type.Name == generalInterface);
         }
 
         /// <summary>

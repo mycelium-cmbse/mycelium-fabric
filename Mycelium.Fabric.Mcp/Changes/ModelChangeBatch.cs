@@ -352,7 +352,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Creates an element of the metaclass given by the payload, as a member of its owner, or of the root namespace of the
-        /// model when the payload gives no owner, with its documentation, definition and value.
+        /// model when the payload gives no owner, with its documentation, definition and value. An element that redefines a
+        /// feature that its owner inherits, given by <c>redefines</c> or by its name, is a redefinition (<c>:&gt;&gt; mass</c>).
         /// </summary>
         /// <param name="change">The change that creates the element, whose identity is an optional temporary name.</param>
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
@@ -363,6 +364,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             this.CheckTemporaryName(change.Identity);
 
             var member = CreateElement(payload.Type);
+            CheckRedefinitionProperties(member, payload);
 
             if (payload.StateAction != null)
             {
@@ -399,12 +401,19 @@ namespace Mycelium.Fabric.Mcp.Changes
                 return;
             }
 
-            CheckName(payload.Name);
-            member.DeclaredName = payload.Name;
+            if (payload.Redefines == null || payload.Name != null)
+            {
+                CheckName(payload.Name);
+            }
 
             var owner = string.IsNullOrWhiteSpace(payload.Owner) ? this.GetOrCreateRootNamespace() : this.Resolve(payload.Owner, OwnerRole);
             CheckKind(owner, owner is INamespace, OwnerRole, "a namespace, for example a package, a definition or a usage");
-            this.CheckNameIsFree(owner, payload.Name);
+
+            // A redefinition takes the name of the feature that it redefines, as :>> mass does, unless it is given another one.
+            var redefined = this.ResolveRedefinedFeature(member, owner, payload);
+            var redefinedName = redefined == null ? null : this.GetEffectiveName(redefined);
+            member.DeclaredName = payload.Name == redefinedName ? null : payload.Name;
+            this.CheckNameIsFree(owner, payload.Name ?? redefinedName);
 
             if (member is IRequirementUsage && string.IsNullOrWhiteSpace(payload.Text))
             {
@@ -426,6 +435,11 @@ namespace Mycelium.Fabric.Mcp.Changes
                 CheckCanHaveValue(member);
             }
 
+            if (redefined != null && payload.Value != null)
+            {
+                this.CheckValueCanBeRedefined(redefined);
+            }
+
             this.CheckRequirementProperties(member, payload);
             CheckFeatureProperties(member, owner, payload);
             CheckBehaviourProperties(member, payload);
@@ -436,6 +450,11 @@ namespace Mycelium.Fabric.Mcp.Changes
             SetFeatureFlags(member, owner, payload);
             SetVariation(member, payload);
             this.AddOwnedMember(owner, member, change.Identity);
+
+            if (redefined != null)
+            {
+                this.AddOwnedRelationship(member, new Redefinition { RedefiningFeature = member.Id, RedefinedFeature = redefined.Id });
+            }
 
             if (!string.IsNullOrWhiteSpace(payload.Text))
             {
@@ -456,7 +475,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (payload.Value != null)
             {
-                this.AddValue(member, payload.Value.Value, payload.Unit);
+                // A value of a definition is the typical value of its usages, which they can redefine.
+                this.AddValue(member, payload.Value.Value, payload.Unit, payload.IsDefault ?? owner is IDefinition);
             }
 
             if (variant != null)
@@ -478,9 +498,10 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Updates the properties of an element given by the payload: its name, its definition, its value, its documentation,
-        /// its direction, its multiplicity, the conjugation of a port and, for a requirement, its <c>ReqId</c> and its
-        /// constraints. A new definition, value, documentation, multiplicity or constraint replaces the current one.
+        /// Updates the properties of an element given by the payload: its name, its definition, its value and the kind of its
+        /// value (default or fixed), its documentation, its direction, its multiplicity, the conjugation of a port and, for a
+        /// requirement, its <c>ReqId</c> and its constraints. A new definition, value, documentation, multiplicity or
+        /// constraint replaces the current one; a new value keeps the kind of the current one unless the payload gives it.
         /// </summary>
         /// <param name="change">The change that updates the element designated by its identity.</param>
         /// <exception cref="InvalidChangeException">Thrown when the change cannot be applied.</exception>
@@ -525,8 +546,13 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             if (payload.Value != null)
             {
+                var isDefault = payload.IsDefault ?? this.GetValueKind(element) ?? this.GetOwner(element) is IDefinition;
                 this.RemoveOwnedRelationships<IFeatureValue>(element);
-                this.AddValue(element, payload.Value.Value, payload.Unit);
+                this.AddValue(element, payload.Value.Value, payload.Unit, isDefault);
+            }
+            else if (payload.IsDefault != null)
+            {
+                this.SetValueKind(element, payload.IsDefault.Value);
             }
 
             if (variant != null)
@@ -579,14 +605,21 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException("isVariation only applies to the creation of a PartDefinition: delete the definition and create it again.");
             }
 
-            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Constraints: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
-                && payload.Multiplicity == null && payload.Variant == null && string.IsNullOrWhiteSpace(payload.ReqId))
+            if (payload.Redefines != null)
             {
-                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, variant, text, direction, conjugated, multiplicity, reqId or constraint to change, "
+                throw new InvalidChangeException("redefines only applies to the creation of a feature: to give a usage its own value, definition or multiplicity, "
+                    + "create a new element under it that redefines the inherited feature.");
+            }
+
+            if (payload is { Name: null, Definition: null, Value: null, Text: null, Constraint: null, Constraints: null, Direction: null, Conjugated: null, Ends: null, IsEnd: null, Specializes: null }
+                && payload is { Multiplicity: null, Variant: null, IsDefault: null } && string.IsNullOrWhiteSpace(payload.ReqId))
+            {
+                throw new InvalidChangeException("The payload changes nothing: give the name, definition, specializes, value, isDefault, variant, text, direction, conjugated, multiplicity, reqId or constraint to change, "
                     + "or no payload to delete the element.");
             }
 
             this.CheckFeatureUpdate(element, payload);
+            this.CheckValueKindUpdate(element, payload);
 
             if (payload.Name != null)
             {
@@ -778,7 +811,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Checks that no other member of the owner, except the elements marked for deletion, has the given name.
+        /// Checks that no other member of the owner, except the elements marked for deletion, has the given name: its declared
+        /// name, or the name of the feature that it redefines when it declares none (<c>:&gt;&gt; mass</c> is named <c>mass</c>).
         /// </summary>
         /// <param name="owner">The owner of the named element, or <c>null</c> for a root element.</param>
         /// <param name="name">The name of the element.</param>
@@ -792,7 +826,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             var existingMember = this.GetOwnedMembers(owner)
-                .FirstOrDefault(member => member != renamedElement && member.DeclaredName == name && !this.IsMarkedForDeletion(member));
+                .FirstOrDefault(member => member != renamedElement && this.GetEffectiveName(member) == name && !this.IsMarkedForDeletion(member));
 
             if (existingMember != null)
             {

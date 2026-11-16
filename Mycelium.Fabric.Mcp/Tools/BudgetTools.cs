@@ -70,18 +70,18 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             var attributes = element.GetAttributeUsages()
                 .Select(attribute => (Attribute: attribute, Value: attribute.GetConstantValue()))
-                .Select(attribute => new AttributeValue(attribute.Attribute.DeclaredName, (attribute.Value as NumberValue)?.Number, (attribute.Value as NumberValue)?.Unit,
-                    attribute.Value is null or NumberValue ? null : attribute.Value.ToString(), attribute.Attribute.GetDocumentationBodies()))
+                .Select(attribute => new AttributeValue(attribute.Attribute.name, (attribute.Value as NumberValue)?.Number, (attribute.Value as NumberValue)?.Unit,
+                    attribute.Value is null or NumberValue ? null : attribute.Value.ToString(), attribute.Attribute.GetOwnOrRedefinedDocumentation()))
                 .ToList();
 
-            return new AttributeValues(element.Id, element.DeclaredName, element.GetTypeNames(), attributes);
+            return new AttributeValues(element.Id, element.name, element.GetTypeNames(), attributes);
         }
 
         /// <summary>
         /// Computes the sum of a numeric attribute over the element that has the given identifier and its sub-parts.
         /// </summary>
         /// <param name="elementId">The <c>Id</c> of the root element of the sum.</param>
-        /// <param name="attributeName">The declared name of the attribute to add up.</param>
+        /// <param name="attributeName">The name of the attribute to add up.</param>
         /// <returns>
         /// The <see cref="SumResult"/> that gives the total, the contribution of each part, the total with the margins of the
         /// model, and the parts whose value is missing.
@@ -114,7 +114,7 @@ namespace Mycelium.Fabric.Mcp.Tools
             {
                 var missingValues = values.MissingValues.Count == 0 ? string.Empty : $" These parts have no value yet: {MissingValue.Describe(values.MissingValues)}.";
 
-                throw new McpException($"No part under '{element.DeclaredName}' has a numeric value for '{attributeName}'.{missingValues} Use get_attribute_values to get the attribute names.");
+                throw new McpException($"No part under '{element.name}' has a numeric value for '{attributeName}'.{missingValues} Use get_attribute_values to get the attribute names.");
             }
 
             var total = SumContributions(contributions);
@@ -128,7 +128,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// this attribute over a root element.
         /// </summary>
         /// <param name="rootElementId">The <c>Id</c> of the root element of the sum.</param>
-        /// <param name="attributeName">The declared name of the attribute.</param>
+        /// <param name="attributeName">The name of the attribute.</param>
         /// <param name="elementId">The <c>Id</c> of the part whose value changes.</param>
         /// <param name="newValue">The simulated value of the attribute for the part.</param>
         /// <returns>The <see cref="WhatIfResult"/> that compares the current and new totals.</returns>

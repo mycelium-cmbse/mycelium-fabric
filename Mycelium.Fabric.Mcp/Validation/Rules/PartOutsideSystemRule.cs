@@ -59,7 +59,7 @@ namespace Mycelium.Fabric.Mcp.Validation.Rules
                 return null;
             }
 
-            var names = string.Join(", ", satisfyingParts.Take(NamedPartCount).Select(satisfyingPart => $"'{satisfyingPart.DeclaredName}'"));
+            var names = string.Join(", ", satisfyingParts.Take(NamedPartCount).Select(satisfyingPart => $"'{satisfyingPart.name}'"));
             names = satisfyingParts.Count > NamedPartCount ? $"{names} and {satisfyingParts.Count - NamedPartCount} more" : names;
 
             return $"The part is next to {names}, which {(satisfyingParts.Count == 1 ? "satisfies" : "satisfy")} requirements, in the same package instead of inside the part that "

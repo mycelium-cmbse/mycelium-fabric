@@ -115,7 +115,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (unknownAttribute != null)
             {
-                throw new McpException($"No part under '{root.DeclaredName}' and no variant has a value for '{unknownAttribute}'. Use get_attribute_values to get the attribute names.");
+                throw new McpException($"No part under '{root.name}' and no variant has a value for '{unknownAttribute}'. Use get_attribute_values to get the attribute names.");
             }
 
             var libraryUnits = LibraryUnits.Read(modelProvider.Elements);
@@ -511,7 +511,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (part is not IPartUsage || part.Id == root.Id || owners.Count == 0 || owners[^1].Id != root.Id)
             {
-                throw new McpException($"'{part.DeclaredName}' is not a part under '{root.DeclaredName}': the totals under '{root.DeclaredName}' do not include it. "
+                throw new McpException($"'{part.name}' is not a part under '{root.name}': the totals under '{root.name}' do not include it. "
                     + "Use list_children to find the parts, or give the equipment a name instead of a partId to add it.");
             }
 
@@ -520,7 +520,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (uncountedPart != null)
             {
-                throw new McpException($"The number of units of '{uncountedPart.DeclaredName}' is not fixed ({uncountedPart.DescribeMultiplicity()}), so '{part.DeclaredName}' cannot be counted: "
+                throw new McpException($"The number of units of '{uncountedPart.name}' is not fixed ({uncountedPart.DescribeMultiplicity()}), so '{part.name}' cannot be counted: "
                     + "give it a single number as multiplicity first.");
             }
 
@@ -538,7 +538,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// </exception>
         private static string ReadName(TradeOffChoice choice, IElement part)
         {
-            var name = string.IsNullOrWhiteSpace(choice.Name) ? part?.DeclaredName : choice.Name.Trim();
+            var name = string.IsNullOrWhiteSpace(choice.Name) ? part?.name : choice.Name.Trim();
 
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -578,7 +578,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
                 if (outer != null)
                 {
-                    throw new McpException($"The choices on '{inner.Part.DeclaredName}' and '{outer.Part.DeclaredName}' overlap: a part may only be in one choice, "
+                    throw new McpException($"The choices on '{inner.Part.name}' and '{outer.Part.name}' overlap: a part may only be in one choice, "
                         + "and a variant of a part replaces the values of its sub-parts.");
                 }
             }
@@ -616,7 +616,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             }
 
             var duplicateVariant = variants.Select(variant => variant.Name.Trim())
-                .Concat(catalogueVariants.Select(variant => variant.DeclaredName))
+                .Concat(catalogueVariants.Select(variant => variant.name))
                 .GroupBy(variantName => variantName)
                 .FirstOrDefault(group => group.Count() > 1);
 
@@ -764,7 +764,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (hidingOwner != null)
             {
-                throw new McpException($"The choice '{choiceName}' cannot change '{attribute}': '{hidingOwner.DeclaredName}' gives its own '{attribute}', "
+                throw new McpException($"The choice '{choiceName}' cannot change '{attribute}': '{hidingOwner.name}' gives its own '{attribute}', "
                     + "which replaces the values of its parts in the total. Make the choice on it instead.");
             }
         }
@@ -778,7 +778,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <returns><c>true</c> when the element has its own value.</returns>
         private static bool HasOwnValue(IElement element, string attribute)
         {
-            return element.GetAttributeUsages().FirstOrDefault(attributeUsage => attributeUsage.DeclaredName == attribute)?.GetNumericValue() != null;
+            return element.GetAttributeUsage(attribute)?.GetNumericValue() != null;
         }
 
         /// <summary>

@@ -127,7 +127,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
             if (this.GetOpenOwner(part) is { } owner)
             {
-                return Error.Validation(description: $"'{part.DeclaredName}' belongs to '{owner.DeclaredName}', whose content is a choice.");
+                return Error.Validation(description: $"'{part.name}' belongs to '{owner.name}', whose content is a choice.");
             }
 
             if (this.indexes.TryGetValue(part.Id, out var partIndex))
@@ -437,7 +437,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
             /// <returns>The error.</returns>
             private static Error NotTaken(IFeature part)
             {
-                return Error.Validation(description: $"'{part.DeclaredName}' is not taken in this combination.");
+                return Error.Validation(description: $"'{part.name}' is not taken in this combination.");
             }
 
             /// <summary>
@@ -468,7 +468,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
 
                 return this.GetContent(this.space.indexes[owner.Id]).IsCurrent
                     ? null
-                    : Error.Validation(description: $"'{part.DeclaredName}' belongs to '{owner.DeclaredName}', which this combination replaces or removes.");
+                    : Error.Validation(description: $"'{part.name}' belongs to '{owner.name}', which this combination replaces or removes.");
             }
         }
     }

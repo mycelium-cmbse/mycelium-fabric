@@ -159,6 +159,10 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "the identity is then an optional temporary name, that later changes of this batch and of the next batches use instead of an identifier. "
             + "A SatisfyRequirementUsage (satisfy link) takes a satisfiedRequirement and a satisfyingPart (a part, an action or an interface) instead of a name; one per element that satisfies the requirement. "
             + "A definition or a usage takes specializes for :> (part def Camera :> Equipment). A PerformActionUsage takes an owner (the performer) and a performed action usage. "
+            + "Values: a value created under a definition is a default value, the typical value of every usage of the definition; a value created under a usage is its own. "
+            + "To give one usage its own value, definition or multiplicity, do not update the definition, which all its usages share: create under the usage an element of the metaclass "
+            + "of the inherited feature with redefines (the inherited feature) and the new value, definition or multiplicity (part camera : Camera { :>> mass = 35 [kg]; }); "
+            + "an element named as an inherited feature redefines it too. Only a default value can be redefined: update a fixed one with isDefault true first. "
             + "Ports: a PortDefinition, which has no direction itself, owns the attributes or items that cross the port, with a direction (In, Out, Inout); a PortUsage (not a PartUsage) takes it as definition, "
             + "with conjugated true on the receiving side. "
             + "Connectors: a ConnectionUsage, an InterfaceUsage (between two ports, definition: an InterfaceDefinition whose ends are ports created with isEnd true), a BindingConnectorAsUsage, "
@@ -170,16 +174,18 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "and optionally a trigger (the definition of the event it accepts), a guard (an attribute compared with a limit) and an effect (an action usage it performs); "
             + "an ActionUsage owned by a state takes stateAction Entry, Do or Exit to be its entry, do or exit action (or a PerformActionUsage with performed for an existing action); "
             + "a parameter of an action is a ReferenceUsage, an ItemUsage or an AttributeUsage of the action with a direction (In, Out, Inout) and a definition. "
-            + "Update: the identity of the element and a payload with only the properties to change (name, definition, specializes, multiplicity, value, text, direction, conjugated, reqId, constraint or constraints). "
+            + "Update: the identity of the element and a payload with only the properties to change (name, definition, specializes, multiplicity, value, isDefault, text, direction, conjugated, reqId, constraint or constraints). "
             + "Delete: the identity of the element and no payload; refused while another element references it, for example a port connected by an interface. Existing elements are designated by their identifier (Id). "
             + "Once a batch is applied, the result also lists the errors and warnings that it has introduced (newIssues, at most 20, and newIssueCount) and the number of issues it has resolved: "
             + "correct the errors in the next batch; a warning can wait when a later batch of your plan resolves it. "
+            + "Its notes tell what the batch changes beyond its elements, for example the usages that share a new value of a definition: check that it is what was meant. "
             + "Plan: for a work of several batches, give its plan with the first batch: its sections, each with the elements it creates (name and type). "
             + "The server keeps it until a new plan replaces it, and the result of each applied batch then lists the sections done and the ones left, with their missing elements: go on until none is left. "
             + "When the host shows the batch to the user, a valid batch is not applied at once: it waits for the decision of the user. "
             + "Then send no other batch and wait for the user's message, which tells whether it has been applied, with the identifiers, or rejected, with a comment.")]
         [return: Description("Whether the batch has been applied; if so, the identifier, qualified name and type of each created package, definition and usage, the errors and warnings that the batch has introduced, "
-            + "the number of issues it has resolved and, when a plan has been given, the sections of the plan that are done and left; if not, the problems, each with the number of its change. "
+            + "the number of issues it has resolved, the notes on what the batch changes beyond its elements and, when a plan has been given, the sections of the plan that are done and left; "
+            + "if not, the problems, each with the number of its change. "
             + "Or a message telling that the batch waits for the decision of the user.")]
         public CallToolResult ApplyChanges([Description("The changes to apply, in order.")] IReadOnlyList<ModelChange> changes,
             [Description("Optional: the plan of the work, given with its first batch, as sections that each list the elements they create. It replaces the plan given before.")] IReadOnlyList<PlanSection> plan = null,

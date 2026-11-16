@@ -163,6 +163,30 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         }
 
         [Test]
+        public void CheckRequirements_OnAValueRedefinedWithoutName_ChecksTheRedefinedValue()
+        {
+            // The camera weighs 35 instead of the 38 of OpticalCamera: it meets a limit of 36.
+            var model = RedefinedValueHelper.CreateDtos();
+
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            [
+                new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId, Name = "cameraMass", ReqId = "REQ-PL-001", Text = "The camera shall weigh at most 36 kg." } },
+                new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 36 } } },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "cameraMass", SatisfyingPart = CameraId.ToString() } }
+            ], new Dictionary<string, Guid>());
+
+            var checks = new RequirementChecker(ModelDtoHelper.Assemble(CommitRequestHelper.Apply(model, result.Value))).CheckRequirements();
+            var cameraMass = checks.Single(check => check.ReqId == "REQ-PL-001");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(cameraMass.Status, Is.EqualTo(RequirementStatus.Satisfied));
+                Assert.That(cameraMass.Value, Is.EqualTo(RedefinedValueHelper.CameraMass));
+            }
+        }
+
+        [Test]
         public void CheckRequirements_WithoutText_GivesNoText()
         {
             var builder = new DtoModelBuilder();

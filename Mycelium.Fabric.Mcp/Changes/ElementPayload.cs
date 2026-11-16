@@ -95,6 +95,23 @@ namespace Mycelium.Fabric.Mcp.Changes
         public string Multiplicity { get; init; }
 
         /// <summary>
+        /// Gets the inherited feature that the created feature redefines, as <c>:&gt;&gt; mass = 35 [kg];</c> does.
+        /// </summary>
+        [Description("Create, for a usage owned by a definition or a usage: the feature that the owner inherits and that the new element redefines (:>>), as an identifier (Id), a temporary name or its name, "
+            + "to give the owner its own value, definition or multiplicity (part camera : Camera { :>> mass = 35 [kg]; }), without changing the definition. "
+            + "The new element has the metaclass of the redefined feature (AttributeUsage for an attribute) and takes its name: give it a value and a unit, a definition or a multiplicity. "
+            + "A new element named as a feature that its owner inherits redefines it too. Only a default value (isDefault) can be redefined.")]
+        public string Redefines { get; init; }
+
+        /// <summary>
+        /// Gets a value indicating whether the value of the attribute is a default value, which a usage can redefine.
+        /// </summary>
+        [Description("Create or update, for an attribute with a value: true makes it a default value (attribute mass default = 38 [kg]), the typical value that each usage of the definition takes "
+            + "unless it redefines it with its own value; false makes it fixed, and no usage can redefine it. Without it, a value created under a definition is a default value, "
+            + "a value created under a usage is fixed, and an update keeps the kind of the current value. An update can give isDefault alone.")]
+        public bool? IsDefault { get; init; }
+
+        /// <summary>
         /// Gets a value indicating whether the created part definition is a catalogue of variants (a variation definition).
         /// </summary>
         [Description("Create, for a PartDefinition: true makes it a catalogue of variants (variation part def BatteryOptions :> Battery). A catalogue only owns its variants: "

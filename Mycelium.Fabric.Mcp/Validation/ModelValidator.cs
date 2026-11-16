@@ -111,7 +111,7 @@ namespace Mycelium.Fabric.Mcp.Validation
         /// <returns>The description of the element.</returns>
         private static string Describe(IElement element)
         {
-            var name = ValidationContext.GetQualifiedName(element) ?? element.DeclaredName;
+            var name = ValidationContext.GetQualifiedName(element) ?? element.name;
 
             if (!string.IsNullOrEmpty(name))
             {
@@ -126,7 +126,7 @@ namespace Mycelium.Fabric.Mcp.Validation
                 return $"{metaclass} in {Describe(owner)}";
             }
 
-            var ownedElementName = element is IRelationship { OwnedRelatedElement: [var ownedElement, ..] } ? ownedElement?.DeclaredName : null;
+            var ownedElementName = element is IRelationship { OwnedRelatedElement: [var ownedElement, ..] } ? ownedElement?.name : null;
 
             return ownedElementName == null ? metaclass : $"{metaclass} of {ownedElementName}";
         }

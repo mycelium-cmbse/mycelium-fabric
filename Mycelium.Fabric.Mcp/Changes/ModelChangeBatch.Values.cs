@@ -110,16 +110,17 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Binds an attribute to a value, as <c>mass = 38 [kg]</c> does: a <c>FeatureValue</c> that owns the expression of the
-        /// value.
+        /// Binds an attribute to a value, as <c>mass = 38 [kg]</c> or <c>mass default = 38 [kg]</c> does: a <c>FeatureValue</c>
+        /// that owns the expression of the value.
         /// </summary>
         /// <param name="attribute">The attribute.</param>
         /// <param name="value">The value, already checked by <see cref="CheckValue"/>.</param>
         /// <param name="unit">The unit of a numeric value, or <c>null</c>.</param>
+        /// <param name="isDefault">Whether the value is a default value, which a usage can redefine.</param>
         /// <exception cref="InvalidChangeException">Thrown when a text value names several enumeration values.</exception>
-        private void AddValue(IElement attribute, PayloadValue value, string unit)
+        private void AddValue(IElement attribute, PayloadValue value, string unit, bool isDefault)
         {
-            this.AddOwnedRelationship(attribute, new FeatureValue { Visibility = VisibilityKind.Public }, this.CreateValueExpression(value, unit));
+            this.AddOwnedRelationship(attribute, new FeatureValue { Visibility = VisibilityKind.Public, IsDefault = isDefault }, this.CreateValueExpression(value, unit));
         }
 
         /// <summary>
