@@ -347,12 +347,9 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 var redefinitions = this.GetElements(pending.Pop().OwnedRelationship).OfType<IRedefinition>();
 
-                foreach (var redefined in this.GetElements(redefinitions.Select(redefinition => redefinition.RedefinedFeature)))
+                foreach (var redefined in this.GetElements(redefinitions.Select(redefinition => redefinition.RedefinedFeature)).Where(redefinedFeatures.Add))
                 {
-                    if (redefinedFeatures.Add(redefined))
-                    {
-                        pending.Push(redefined);
-                    }
+                    pending.Push(redefined);
                 }
             }
 
