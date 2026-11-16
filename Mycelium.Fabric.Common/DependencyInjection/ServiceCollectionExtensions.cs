@@ -46,7 +46,7 @@ namespace Mycelium.Fabric.Common.DependencyInjection
 
                 if (!marker.IsInterface)
                 {
-                    throw new ArgumentException($"{marker.Name} is not an interface.", nameof(TMarker));
+                    throw new ArgumentException($"The marker {marker.Name} is not an interface.");
                 }
 
                 var scannedAssemblies = assemblies is { Length: > 0 } ? assemblies : [marker.Assembly];

@@ -900,7 +900,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// Systems Modeling API and Services 1.0 §7.1.2 requires a commit to resolve all conflicts in its parent commits; the merged
         /// versions the requested change does not name are added, as <see cref="MergeIntoBranchAsync"/> adds them.
         /// </remarks>
-        private async Task<ErrorOr<List<DataVersion>>> IncludeParentChangesAsync(IDataStoreTransaction transaction, Guid projectId, Guid headId, IReadOnlyList<Guid> otherParentIds,
+        private async Task<ErrorOr<List<DataVersion>>> IncludeParentChangesAsync(IDataStoreTransaction transaction, Guid projectId, Guid headId, List<Guid> otherParentIds,
             IReadOnlyList<DataVersion> change, CancellationToken cancellationToken)
         {
             List<DataVersion> fullChange = [.. change];
@@ -1218,7 +1218,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// commit so that a merge also drops those only one parent holds; §7.1.2 keeps the identity of a version unique within a change.
         /// </remarks>
         private async Task<ErrorOr<List<DataVersion>>> ResolveChangeAsync(IDataStoreTransaction transaction, IReadOnlyList<Guid> previousIds,
-            IReadOnlyList<DataVersion> change, IReadOnlyDictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
+            IReadOnlyList<DataVersion> change, Dictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
         {
             List<DataVersion> versions = [];
             var identityIds = new HashSet<Guid>();
@@ -1307,13 +1307,13 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// deleted earlier, or created on another branch of the project, keeps its identity.
         /// </remarks>
         private async Task<ErrorOr<HashSet<Guid>>> VerifyNewIdentitiesAsync(IDataStoreTransaction transaction, Guid projectId, IEnumerable<DataVersion> versions,
-            IReadOnlyDictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
+            Dictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
         {
             var heldIdentityIds = new HashSet<Guid>();
 
-            foreach (var version in versions.Where(version => version.Payload != null && !previousState.ContainsKey(version.Identity.Id)))
+            foreach (var identity in versions.Where(version => version.Payload != null && !previousState.ContainsKey(version.Identity.Id)).Select(version => version.Identity))
             {
-                var owner = await this.DataRepository.ReadIdentityOwnerAsync(transaction, version.Identity.Id, cancellationToken);
+                var owner = await this.DataRepository.ReadIdentityOwnerAsync(transaction, identity.Id, cancellationToken);
 
                 if (owner.IsError && owner.FirstError.Type == ErrorType.NotFound)
                 {
@@ -1327,10 +1327,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
 
                 if (owner.Value != projectId)
                 {
-                    return Error.Validation("change.identity.taken", $"The identity {version.Identity.Id} belongs to another project, so it cannot identify created data.");
+                    return Error.Validation("change.identity.taken", $"The identity {identity.Id} belongs to another project, so it cannot identify created data.");
                 }
 
-                heldIdentityIds.Add(version.Identity.Id);
+                heldIdentityIds.Add(identity.Id);
             }
 
             return heldIdentityIds;
@@ -1347,7 +1347,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
         /// <returns>Success, or the errors that prevented writing.</returns>
         private async Task<ErrorOr<Success>> WriteVersionsAsync(IDataStoreTransaction transaction, Guid commitId, IEnumerable<DataVersion> versions,
-            IReadOnlyDictionary<Guid, DataVersion> previousState, IReadOnlySet<Guid> heldIdentityIds, CancellationToken cancellationToken)
+            Dictionary<Guid, DataVersion> previousState, HashSet<Guid> heldIdentityIds, CancellationToken cancellationToken)
         {
             foreach (var version in versions)
             {
