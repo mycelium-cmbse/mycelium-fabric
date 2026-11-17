@@ -13,7 +13,6 @@ namespace Mycelium.Fabric.Mcp.Changes
     using System.Collections.Generic;
     using System.Linq;
 
-    using SysML2.NET.Core.DTO.Core.Classifiers;
     using SysML2.NET.Core.DTO.Core.Features;
     using SysML2.NET.Core.DTO.Core.Types;
     using SysML2.NET.Core.DTO.Kernel.FeatureValues;
@@ -23,16 +22,19 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Systems.DefinitionAndUsage;
     using SysML2.NET.Core.DTO.Systems.Enumerations;
     using SysML2.NET.Core.DTO.Systems.Parts;
-    using SysML2.NET.Core.DTO.Systems.Ports;
     using SysML2.NET.Core.DTO.Systems.Requirements;
     using SysML2.NET.Core.DTO.Systems.States;
+
+    using PocoFeature = SysML2.NET.Core.POCO.Core.Features.IFeature;
+    using PocoType = SysML2.NET.Core.POCO.Core.Types.IType;
 
     /// <content>
     /// The redefinitions, which give a usage its own value, definition or multiplicity without changing its definition, as
     /// the textual notation writes <c>part camera : Camera { :&gt;&gt; mass = 35 [kg]; }</c>: a feature owned by the usage,
     /// without declared name, whose <c>Redefinition</c> designates the feature that the usage inherits. Also the features
-    /// that a type has, owned or inherited, and their name, which the changes look up, and the kind of a value: only a
-    /// <c>default</c> value can be redefined (SysML rule <c>validateFeatureValueOverriding</c>).
+    /// that a type has, owned or inherited, and their name, which the changes look up, read on the POCOs that SysML2.NET
+    /// builds from the working copy, and the kind of a value: only a <c>default</c> value can be redefined (SysML rule
+    /// <c>validateFeatureValueOverriding</c>).
     /// </content>
     internal sealed partial class ModelChangeBatch
     {
@@ -117,13 +119,12 @@ namespace Mycelium.Fabric.Mcp.Changes
                 throw new InvalidChangeException($"Only an element owned by a definition or a usage redefines a feature that its owner inherits, and the {Describe(owner)} inherits none.");
             }
 
-            var features = this.GetFeatures(owner);
-            var ownedFeatures = this.GetOwnedMembers(owner).OfType<IFeature>().ToHashSet();
+            var inheritedFeatures = this.GetInheritedFeatures(owner);
 
             // The name of an inherited feature comes before a temporary name, which can designate an element anywhere.
             IElement redefined = Guid.TryParse(reference, out _)
                 ? null
-                : features.FirstOrDefault(feature => !ownedFeatures.Contains(feature) && this.GetEffectiveName(feature) == reference && !this.IsMarkedForDeletion(feature));
+                : inheritedFeatures.FirstOrDefault(feature => this.GetEffectiveName(feature) == reference && !this.IsMarkedForDeletion(feature));
 
             if (redefined == null)
             {
@@ -136,14 +137,14 @@ namespace Mycelium.Fabric.Mcp.Changes
                 CheckKind(redefined, redefined is IFeature, RedefinedRole, "a feature, for example an attribute or a part");
             }
 
-            if (ownedFeatures.Contains(redefined))
+            if (this.GetOwner(redefined) == owner)
             {
                 throw new InvalidChangeException($"The {this.DescribeFeature(redefined)} belongs to the {Describe(owner)} itself: update it instead of redefining it.");
             }
 
-            if (!features.Contains(redefined))
+            if (!inheritedFeatures.Contains(redefined))
             {
-                redefined = this.FindRedefiningFeature(owner, features, ownedFeatures, redefined);
+                redefined = this.FindRedefiningFeature(owner, redefined);
             }
 
             if (!HasMetaclassOf(member, redefined))
@@ -161,20 +162,18 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <c>Instrument</c>, which <c>Camera</c> specializes.
         /// </summary>
         /// <param name="owner">The owner of the created element.</param>
-        /// <param name="features">The features of the owner, owned and inherited.</param>
-        /// <param name="ownedFeatures">The features that the owner owns.</param>
-        /// <param name="redefined">The feature to redefine, which is not among the features of the owner.</param>
+        /// <param name="redefined">The feature to redefine, which the owner does not inherit as it is.</param>
         /// <returns>The inherited feature that redefines it, directly or not.</returns>
         /// <exception cref="InvalidChangeException">
         /// Thrown when the owner does not inherit the feature, or when one of its own features already redefines it.
         /// </exception>
-        private IElement FindRedefiningFeature(IElement owner, List<IFeature> features, HashSet<IFeature> ownedFeatures, IElement redefined)
+        private IElement FindRedefiningFeature(IElement owner, IElement redefined)
         {
-            var redefining = features.FirstOrDefault(feature => this.GetRedefinedFeatures(feature).Contains(redefined))
+            var redefining = this.GetFeatures(owner).FirstOrDefault(feature => this.GetAllRedefinedFeatures(feature).Contains(redefined))
                 ?? throw new InvalidChangeException($"The {Describe(owner)} does not inherit the {this.DescribeFeature(redefined)}: a usage redefines a feature of its definition or of what it specializes."
                     + this.DescribeInheritedFeatures(owner));
 
-            return ownedFeatures.Contains(redefining)
+            return this.GetOwner(redefining) == owner
                 ? throw new InvalidChangeException($"The {Describe(owner)} already redefines the {this.DescribeFeature(redefined)}, with the element whose identifier is {redefining.Id}: update it instead.")
                 : redefining;
         }
@@ -187,7 +186,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <exception cref="InvalidChangeException">Thrown when one of these values is fixed.</exception>
         private void CheckValueCanBeRedefined(IElement redefined)
         {
-            var fixedFeature = this.GetRedefinedFeatures(redefined).Prepend(redefined).FirstOrDefault(feature => this.GetValueKind(feature) == false);
+            var fixedFeature = this.GetAllRedefinedFeatures(redefined).FirstOrDefault(feature => this.GetValueKind(feature) == false);
 
             if (fixedFeature != null)
             {
@@ -263,130 +262,58 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Gets the features of a type, as SysML defines them: the features that it owns, then the ones that it inherits from
-        /// its definitions, from the definitions they specialize, and from the features that it subsets or redefines, except
-        /// the features that another of these features redefines, directly or not (<c>:&gt;&gt; mass</c> replaces the
-        /// inherited <c>mass</c>), as <c>removeRedefinedFeatures</c> does.
+        /// Gets the features of a type, as SysML2.NET computes them (<c>feature</c>): the features that it owns, then the ones
+        /// that it inherits, except the features that another feature redefines (<c>:&gt;&gt; mass</c> replaces the inherited
+        /// <c>mass</c>).
         /// </summary>
         /// <param name="type">The type, for example a part or a part definition.</param>
-        /// <returns>The features of the type, its own first.</returns>
+        /// <returns>The features of the type, its own first, or none when the element is not a type.</returns>
         private List<IFeature> GetFeatures(IElement type)
         {
-            return this.GetFeatures(type, []);
+            return this.GetAssembledElement(type.Id) is PocoType assembledType ? this.GetFeatureElements(assembledType.feature) : [];
         }
 
         /// <summary>
-        /// Gets the features of a type, as <see cref="GetFeatures(IElement)"/> does, without going round a cycle of
-        /// specializations.
+        /// Gets the features that a type inherits and does not redefine, as SysML2.NET computes them (<c>inheritedFeature</c>).
         /// </summary>
         /// <param name="type">The type.</param>
-        /// <param name="path">The identifiers of the types between the first type and this one.</param>
-        /// <returns>The features of the type, its own first.</returns>
-        private List<IFeature> GetFeatures(IElement type, HashSet<Guid> path)
+        /// <returns>The inherited features, or none when the element is not a type.</returns>
+        private List<IFeature> GetInheritedFeatures(IElement type)
         {
-            if (!path.Add(type.Id))
-            {
-                return [];
-            }
-
-            var inheritedFeatures = this.GetGeneralTypes(type).SelectMany(general => this.GetFeatures(general, path)).ToList();
-            var features = this.GetOwnedMembers(type).OfType<IFeature>().Concat(inheritedFeatures).Distinct().ToList();
-            var redefinedIds = features.SelectMany(this.GetRedefinedFeatures).Select(feature => feature.Id).ToHashSet();
-
-            path.Remove(type.Id);
-
-            return [.. features.Where(feature => !redefinedIds.Contains(feature.Id))];
+            return this.GetAssembledElement(type.Id) is PocoType assembledType ? this.GetFeatureElements(assembledType.inheritedFeature) : [];
         }
 
         /// <summary>
-        /// Gets the features that a type inherits and does not redefine.
-        /// </summary>
-        /// <param name="type">The type.</param>
-        /// <returns>The inherited features.</returns>
-        private IEnumerable<IFeature> GetInheritedFeatures(IElement type)
-        {
-            var ownedFeatures = this.GetOwnedMembers(type).OfType<IFeature>().ToHashSet();
-
-            return this.GetFeatures(type).Where(feature => !ownedFeatures.Contains(feature));
-        }
-
-        /// <summary>
-        /// Gets the types from which a type inherits its features: the definitions of a feature (except the conjugate of a
-        /// port definition, whose features are the ones of the port definition), the definitions that a definition
-        /// specializes, and the features that a feature subsets, redefines or references.
-        /// </summary>
-        /// <param name="type">The type.</param>
-        /// <returns>The general types of the type that are in the model.</returns>
-        private IEnumerable<IElement> GetGeneralTypes(IElement type)
-        {
-            var generalIds = this.GetElements(type.OwnedRelationship).Select(relationship => relationship switch
-            {
-                IConjugatedPortTyping => (Guid?)null,
-                IFeatureTyping typing => typing.Type,
-                ISubclassification subclassification => subclassification.Superclassifier,
-                IRedefinition redefinition => redefinition.RedefinedFeature,
-                IReferenceSubsetting referenceSubsetting => referenceSubsetting.ReferencedFeature,
-                ISubsetting subsetting => subsetting.SubsettedFeature,
-                _ => null
-            });
-
-            return this.GetElements(generalIds.OfType<Guid>());
-        }
-
-        /// <summary>
-        /// Gets the features that a feature redefines, directly or not.
+        /// Gets a feature and the features that it redefines, directly or not, as SysML2.NET computes them
+        /// (<c>allRedefinedFeatures()</c>).
         /// </summary>
         /// <param name="feature">The feature.</param>
-        /// <returns>The redefined features.</returns>
-        private HashSet<IElement> GetRedefinedFeatures(IElement feature)
+        /// <returns>The feature, then the features that it redefines, or none when the element is not a feature.</returns>
+        private List<IFeature> GetAllRedefinedFeatures(IElement feature)
         {
-            var redefinedFeatures = new HashSet<IElement>();
-            var pending = new Stack<IElement>([feature]);
-
-            while (pending.Count > 0)
-            {
-                var redefinitions = this.GetElements(pending.Pop().OwnedRelationship).OfType<IRedefinition>();
-
-                foreach (var redefined in this.GetElements(redefinitions.Select(redefinition => redefinition.RedefinedFeature)).Where(redefinedFeatures.Add))
-                {
-                    pending.Push(redefined);
-                }
-            }
-
-            return redefinedFeatures;
+            return this.GetAssembledElement(feature.Id) is PocoFeature assembledFeature ? this.GetFeatureElements(assembledFeature.AllRedefinedFeatures()) : [];
         }
 
         /// <summary>
-        /// Gets the name of an element as SysML gives it (<c>effectiveName</c>): its declared name or, for a feature that
-        /// declares none, the name of the first feature that it redefines (<c>:&gt;&gt; mass</c> is named <c>mass</c>).
+        /// Gets the features of the working copy that the given POCOs stand for.
+        /// </summary>
+        /// <param name="assembledFeatures">The POCOs of the features.</param>
+        /// <returns>The features, in the same order.</returns>
+        private List<IFeature> GetFeatureElements(IEnumerable<PocoFeature> assembledFeatures)
+        {
+            return [.. this.GetElements(assembledFeatures.Select(feature => feature.Id)).OfType<IFeature>()];
+        }
+
+        /// <summary>
+        /// Gets the name of an element as SysML2.NET computes it (<c>name</c>, the <c>effectiveName</c>): its declared name or,
+        /// for a feature that declares none, the name of the feature that it redefines (<c>:&gt;&gt; mass</c> is named
+        /// <c>mass</c>).
         /// </summary>
         /// <param name="element">The element.</param>
         /// <returns>The name, or <c>null</c> when the element has none.</returns>
         private string GetEffectiveName(IElement element)
         {
-            var visitedIds = new HashSet<Guid>();
-
-            for (var current = element; current != null && visitedIds.Add(current.Id); current = this.GetFirstRedefinedFeature(current))
-            {
-                if (current.DeclaredName != null)
-                {
-                    return current.DeclaredName;
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Gets the first feature that a feature redefines, which gives it its name when it declares none.
-        /// </summary>
-        /// <param name="feature">The feature.</param>
-        /// <returns>The redefined feature, or <c>null</c> when the feature redefines none.</returns>
-        private IElement GetFirstRedefinedFeature(IElement feature)
-        {
-            var redefinition = this.GetElements(feature.OwnedRelationship).OfType<IRedefinition>().FirstOrDefault();
-
-            return redefinition == null ? null : this.elementsById.GetValueOrDefault(redefinition.RedefinedFeature);
+            return this.GetAssembledElement(element.Id)?.name ?? element.DeclaredName;
         }
 
         /// <summary>

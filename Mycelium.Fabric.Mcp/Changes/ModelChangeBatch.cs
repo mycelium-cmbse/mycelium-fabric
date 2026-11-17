@@ -149,6 +149,17 @@ namespace Mycelium.Fabric.Mcp.Changes
         private readonly List<(int ChangeNumber, IElement Element)> deletions = [];
 
         /// <summary>
+        /// The <c>Id</c> of the elements added or modified since the POCOs of the working copy were last brought up to date.
+        /// </summary>
+        private readonly HashSet<Guid> unassembledIds = [];
+
+        /// <summary>
+        /// The SysML2.NET <see cref="Assembler"/> that holds the POCOs of the working copy, or <c>null</c> until they are first
+        /// read and after a removal.
+        /// </summary>
+        private Assembler assembler;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ModelChangeBatch"/> class.
         /// </summary>
         /// <param name="workingCopy">The DTOs of the model to modify, which must not be shared with the current model.</param>
@@ -710,29 +721,57 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Builds the POCOs of the working copy with SysML2.NET, which computes their derived properties, such as
-        /// <c>qualifiedName</c>, from the whole working copy.
+        /// Gets the POCOs of the working copy, built by SysML2.NET, which computes their derived properties, such as
+        /// <c>qualifiedName</c> or the <c>feature</c> of a type, from the whole working copy.
         /// </summary>
         /// <returns>The POCOs of the working copy.</returns>
         private IEnumerable<PocoElement> AssembleElements()
         {
-            var assembler = new Assembler();
-            assembler.Synchronize(this.elementsById.Values);
-
-            return assembler.Cache.Values.Select(lazyElement => lazyElement.Value);
+            return this.GetAssembler().Cache.Values.Select(lazyElement => lazyElement.Value);
         }
 
         /// <summary>
         /// Gets the POCOs of some elements of the working copy, to read the derived properties that SysML2.NET computes, such
-        /// as <c>qualifiedName</c>. The working copy is built only when there is an element.
+        /// as <c>qualifiedName</c>.
         /// </summary>
         /// <param name="elements">The elements of the working copy.</param>
-        /// <returns>The POCOs of these elements.</returns>
+        /// <returns>The POCOs of these elements, in their order, without duplicates.</returns>
         private List<PocoElement> AssembleElements(IEnumerable<IElement> elements)
         {
-            var elementIds = elements.Select(element => element.Id).ToHashSet();
+            return [.. elements.Select(element => element.Id).Distinct().Select(this.GetAssembledElement).Where(element => element != null)];
+        }
 
-            return elementIds.Count == 0 ? [] : [.. this.AssembleElements().Where(element => elementIds.Contains(element.Id))];
+        /// <summary>
+        /// Gets the POCO of an element of the working copy, to read the derived properties that SysML2.NET computes.
+        /// </summary>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
+        /// <returns>The POCO of the element, or <c>null</c> when the element is not in the working copy.</returns>
+        private PocoElement GetAssembledElement(Guid elementId)
+        {
+            return this.GetAssembler().Cache.TryGetValue(elementId, out var lazyElement) ? lazyElement.Value : null;
+        }
+
+        /// <summary>
+        /// Gets the SysML2.NET <see cref="Assembler"/> that holds the POCOs of the working copy. It builds them all the first
+        /// time and after a removal, and otherwise only brings up to date the POCOs of the elements that the batch has added or
+        /// modified since, which is much faster on a large model.
+        /// </summary>
+        /// <returns>The assembler, whose cache holds the POCOs of the working copy.</returns>
+        private Assembler GetAssembler()
+        {
+            if (this.assembler == null)
+            {
+                this.assembler = new Assembler();
+                this.assembler.Synchronize(this.elementsById.Values);
+            }
+            else if (this.unassembledIds.Count > 0)
+            {
+                this.assembler.Synchronize([.. this.GetElements(this.unassembledIds)]);
+            }
+
+            this.unassembledIds.Clear();
+
+            return this.assembler;
         }
 
         /// <summary>
@@ -1034,17 +1073,20 @@ namespace Mycelium.Fabric.Mcp.Changes
             element.ElementId = element.Id.ToString();
             this.elementsById.Add(element.Id, element);
             this.addedIds.Add(element.Id);
+            this.unassembledIds.Add(element.Id);
 
             return element;
         }
 
         /// <summary>
-        /// Records that the DTO of an element has been modified, so that the change of the commit holds its new version.
+        /// Records that the DTO of an element has been modified, so that the change of the commit holds its new version and
+        /// its POCO is brought up to date before it is read again.
         /// </summary>
         /// <param name="element">The modified element.</param>
         private void MarkModified(IElement element)
         {
             this.modifiedIds.Add(element.Id);
+            this.unassembledIds.Add(element.Id);
         }
 
         /// <summary>
@@ -1095,6 +1137,10 @@ namespace Mycelium.Fabric.Mcp.Changes
             {
                 this.elementsById.Remove(element.Id);
             }
+
+            // The POCOs are built again: brought up to date, SysML2.NET would drop the POCO of the removed relationship but keep
+            // the ones of the elements that it owns, such as the literal of a removed value.
+            this.assembler = null;
         }
 
         /// <summary>

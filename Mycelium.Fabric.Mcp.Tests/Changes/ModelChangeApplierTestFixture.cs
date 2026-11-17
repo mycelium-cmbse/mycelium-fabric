@@ -1835,24 +1835,31 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         }
 
         [Test]
-        public void Apply_WithAFixedValueMadeDefaultFirst_RedefinesIt()
+        public void Apply_WithAValueChangedEarlierInTheBatch_RedefinesIt()
         {
             var temporaryNames = new Dictionary<string, Guid>();
             var model = CommitRequestHelper.Apply([], this.applier.Apply([], RedefinitionChangesHelper.CreateChanges(), temporaryNames).Value);
 
+            // A fixed value made default first, and a value replaced first, which removes the former one from the working copy.
             var result = this.applier.Apply(model,
             [
                 new ModelChange { Identity = "batteryCapacity", Payload = new ElementPayload { IsDefault = true } },
-                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "battery", Redefines = "capacity", Value = 90 } }
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "battery", Redefines = "capacity", Value = 90 } },
+                new ModelChange { Identity = "cameraPower", Payload = new ElementPayload { Value = 6, Unit = "W" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Name = "power", Value = 7, Unit = "W" } }
             ], temporaryNames);
 
             var elements = Assemble(CommitRequestHelper.Apply(model, result.Value));
+            var cameraPower = ((IPartUsage)elements[temporaryNames["camera"]]).GetAttributeUsage("power");
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(result.IsError, Is.False);
                 Assert.That(GetFeatureValue(elements, temporaryNames["batteryCapacity"]).IsDefault, Is.True);
                 Assert.That(((IPartUsage)elements[temporaryNames["battery"]]).GetAttributeUsage("capacity").GetNumericValue().Number, Is.EqualTo(90));
+                Assert.That(cameraPower.ownedRedefinition.Single().RedefinedFeature, Is.SameAs(elements[temporaryNames["cameraPower"]]));
+                Assert.That(cameraPower.GetNumericValue().Number, Is.EqualTo(7));
+                Assert.That(((IPartUsage)elements[temporaryNames["spareCamera"]]).GetAttributeUsage("power").GetNumericValue().Number, Is.EqualTo(6));
             }
         }
 

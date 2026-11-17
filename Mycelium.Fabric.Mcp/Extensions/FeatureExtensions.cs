@@ -66,17 +66,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
             {
                 ArgumentNullException.ThrowIfNull(feature);
 
-                var visitedIds = new HashSet<Guid>();
-
-                for (var current = feature; current != null && visitedIds.Add(current.Id); current = current.ownedRedefinition?.FirstOrDefault()?.RedefinedFeature)
-                {
-                    if (current.GetDocumentationBodies() is { } documentation)
-                    {
-                        return documentation;
-                    }
-                }
-
-                return null;
+                return feature.AllRedefinedFeatures()
+                    .Select(redefinedFeature => redefinedFeature.GetDocumentationBodies())
+                    .FirstOrDefault(documentation => documentation != null);
             }
 
             /// <summary>
@@ -99,24 +91,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return [];
                 }
 
-                // A specialization of a type, a typing by it or a subsetting of it makes the specific type inherit its features.
-                var types = elements.OfType<IType>().ToList();
-                var generalIds = types.ToDictionary(type => type.Id, type => (type.ownedSpecialization ?? []).Where(specialization => specialization.General != null).Select(specialization => specialization.General.Id).ToList());
-                var specificIds = new HashSet<Guid> { owningType.Id };
-                bool isGrowing;
-
-                do
-                {
-                    isGrowing = false;
-
-                    foreach (var type in types.Where(type => !specificIds.Contains(type.Id) && generalIds[type.Id].Exists(specificIds.Contains)))
-                    {
-                        isGrowing |= specificIds.Add(type.Id);
-                    }
-                }
-                while (isGrowing);
-
-                return [.. types.OfType<IUsage>().Where(usage => usage.Id != owningType.Id && specificIds.Contains(usage.Id) && (usage.feature ?? []).Any(candidate => candidate.Id == feature.Id))];
+                return [.. elements.OfType<IUsage>().Where(usage => usage.Id != owningType.Id && usage.Specializes(owningType) && (usage.feature ?? []).Any(candidate => candidate.Id == feature.Id))];
             }
 
             /// <summary>
