@@ -25,4 +25,8 @@
         <PackageReference Include="Npgsql" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="../Mycelium.Fabric.Common/Mycelium.Fabric.Common.csproj" />
+    </ItemGroup>
+
 </Project>

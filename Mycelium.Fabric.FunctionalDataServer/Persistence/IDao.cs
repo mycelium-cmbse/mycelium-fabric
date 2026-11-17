@@ -22,7 +22,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     /// Stores the objects of one concrete model class in the Functional Data database, inside the caller's transaction.
     /// </summary>
     /// <typeparam name="TDto">The DTO interface of the concrete model class.</typeparam>
-    public interface IDao<TDto> where TDto : class, IThing
+    public interface IDao<TDto> : IBaseDao where TDto : class, IThing
     {
         /// <summary>
         /// Reads every stored object of the exact concrete class, ordered by identifier.
