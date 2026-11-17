@@ -16,11 +16,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 {
     using System;
     using System.CodeDom.Compiler;
-    using System.Collections.Generic;
-    using System.IO;
     using System.Linq;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -33,16 +29,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
     /// <summary>
     /// Stores <see cref="IUser" /> objects of the exact concrete class <c>User</c> in the PostgreSQL
-    /// schema delivered in <c>0001_initial.sql</c>.
+    /// schema delivered in <c>0001_initial.sql</c>. The operations are implemented once by <see cref="DaoBase{TDto}" />; this class supplies the
+    /// statements of its class and binds all their parameters.
     /// </summary>
     [GeneratedCode("Mycelium.SDK", "latest")]
-    public partial class UserDao : IDao<IUser>
+    public partial class UserDao : DaoBase<IUser>
     {
-        /// <summary>
-        /// The <c>class_kind</c> discriminator of the objects this data access object stores.
-        /// </summary>
-        private const string ClassKind = "User";
-
         /// <summary>
         /// The query that rebuilds the complete JSON document of the stored objects of this class: the stored non-reference values, merged with
         /// every reference read from the class-table column, link table or opposite column that stores it.
@@ -63,80 +55,16 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             """;
 
         /// <summary>
-        /// The query that reads every stored object of this class, ordered by identifier.
+        /// The statements that write the relational state of a stored object that differs from its new state: each class row whose scalar reference
+        /// columns changed, and the link-table rows of each collection that are no longer listed or are new.
         /// </summary>
-        private const string ReadAllSql = $"""
-            {ReadSql}
-            ORDER BY thing.id;
-            """;
-
-        /// <summary>
-        /// The query that reads one stored object of this class.
-        /// </summary>
-        private const string ReadByIdSql = $"""
-            {ReadSql}
-                AND thing.id = @id;
-            """;
-
-        /// <summary>
-        /// The statement that replaces the JSON document of one stored object of this class, without its reference members.
-        /// </summary>
-        private const string UpdateDataSql = """
-            UPDATE fabric.thing
-            SET data = @data - ARRAY['createdBy', 'updatedBy', 'isPartOfOrganizations', 'isPartOfProjects']
-            WHERE id = @id AND class_kind = @class_kind;
-            """;
-
-        /// <summary>
-        /// The statement that deletes one stored object of this class; the database's cascades and triggers remove its other rows.
-        /// </summary>
-        private const string DeleteSql = """
-            DELETE FROM fabric.thing
-            WHERE id = @id AND class_kind = @class_kind;
-            """;
-
-        /// <summary>
-        /// The statements that store a new object: the root row with its JSON document without reference members, one row per class from the
-        /// root down to this class with the scalar reference columns declared there, and the rows of every link-table collection.
-        /// </summary>
-        private static readonly string[] CreateStatements =
-        [
-            """
-            INSERT INTO fabric.thing (id, class_kind, data)
-            VALUES (@id, @class_kind, @data - ARRAY['createdBy', 'updatedBy', 'isPartOfOrganizations', 'isPartOfProjects']);
-            """,
-            """
-            INSERT INTO fabric.auditable_thing (id, created_by, updated_by)
-            VALUES (@id, @auditable_thing_created_by, @auditable_thing_updated_by);
-            """,
-            """
-            INSERT INTO fabric.model_user (id)
-            VALUES (@id);
-            """,
-        ];
-
-        /// <summary>
-        /// The statements that replace the scalar reference columns and the link-table rows of a stored object.
-        /// </summary>
-        private static readonly string[] UpdateRelationStatements =
-        [
-            """
+        private const string UpdateRelationSql = """
             UPDATE fabric.auditable_thing SET
                 created_by = @auditable_thing_created_by,
                 updated_by = @auditable_thing_updated_by
-            WHERE id = @id;
-            """,
-        ];
-
-        /// <summary>
-        /// The serializer that produces the JSON document stored in the <c>data</c> column.
-        /// </summary>
-        private readonly ISerializer serializer;
-
-        /// <summary>
-        /// The deserializer that turns a stored JSON document back into a DTO.
-        /// </summary>
-        private readonly IDeSerializer deSerializer;
+            WHERE id = @id
+                AND (created_by, updated_by) IS DISTINCT FROM (@auditable_thing_created_by, @auditable_thing_updated_by);
+            """;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="UserDao" /> class.
@@ -151,131 +79,58 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// Thrown when <paramref name="serializer" /> or <paramref name="deSerializer" /> is <see langword="null" />.
         /// </exception>
         public UserDao(ISerializer serializer, IDeSerializer deSerializer)
+            : base(serializer, deSerializer)
         {
-            this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-            this.deSerializer = deSerializer ?? throw new ArgumentNullException(nameof(deSerializer));
         }
 
         /// <summary>
-        /// Reads every stored object of the exact concrete class <c>User</c>, ordered by identifier.
+        /// Gets the query that reads every stored object of this class, ordered by identifier.
         /// </summary>
-        /// <param name="transaction">
-        /// The caller's open transaction, whose connection executes the query.
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The token that cancels the operation.
-        /// </param>
-        /// <returns>
-        /// The stored objects, or an empty list when none exist.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="transaction" /> is <see langword="null" />.
-        /// </exception>
-        public async Task<IReadOnlyList<IUser>> ReadAllAsync(NpgsqlTransaction transaction, CancellationToken cancellationToken)
-        {
-            if (transaction == null)
-            {
-                throw new ArgumentNullException(nameof(transaction));
-            }
-
-            using var command = CreateCommand(transaction, ReadAllSql);
-
-            command.Parameters.Add(new NpgsqlParameter("class_kind", NpgsqlDbType.Text)
-            {
-                Value = ClassKind
-            });
-
-            var dtos = new List<IUser>();
-
-            using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                dtos.Add(this.DeSerialize(reader.GetString(0)));
-            }
-
-            return dtos;
-        }
+        protected override string ReadAllSql => $"""
+            {ReadSql}
+            ORDER BY thing.id;
+            """;
 
         /// <summary>
-        /// Reads the stored object of the exact concrete class <c>User</c> that has the specified identifier.
+        /// Gets the query that reads one stored object of this class.
         /// </summary>
-        /// <param name="transaction">
-        /// The caller's open transaction, whose connection executes the query.
-        /// </param>
-        /// <param name="id">
-        /// The identifier of the object to read.
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The token that cancels the operation.
-        /// </param>
-        /// <returns>
-        /// The stored object, or <see langword="null" /> when no object of this class has <paramref name="id" />.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="transaction" /> is <see langword="null" />.
-        /// </exception>
-        public async Task<IUser> ReadByIdAsync(NpgsqlTransaction transaction, Guid id, CancellationToken cancellationToken)
-        {
-            if (transaction == null)
-            {
-                throw new ArgumentNullException(nameof(transaction));
-            }
-
-            using var command = CreateCommand(transaction, ReadByIdSql);
-
-            AddIdentityParameters(command, id);
-
-            using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            return await reader.ReadAsync(cancellationToken) ? this.DeSerialize(reader.GetString(0)) : null;
-        }
+        protected override string ReadByIdSql => $"""
+            {ReadSql}
+                AND thing.id = @id;
+            """;
 
         /// <summary>
-        /// Stores a new object: its serialized JSON document, one row per class in its inheritance chain with the scalar reference columns
-        /// declared there, and the link-table rows of its stored collections.
+        /// Gets the statements that store a new object: the root row with its JSON document without reference members, one row per class from
+        /// the root down to this class with the scalar reference columns declared there, and the rows of every link-table collection.
         /// </summary>
-        /// <param name="transaction">
-        /// The caller's open transaction, whose connection executes the statements.
-        /// </param>
-        /// <param name="dto">
-        /// The object to store, identified by its application-supplied <see cref="IThing.Id" />.
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The token that cancels the operation.
-        /// </param>
-        /// <returns>
-        /// A task that completes when every statement has been executed.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="transaction" /> or <paramref name="dto" /> is <see langword="null" />.
-        /// </exception>
-        public async Task CreateAsync(NpgsqlTransaction transaction, IUser dto, CancellationToken cancellationToken)
-        {
-            if (transaction == null)
-            {
-                throw new ArgumentNullException(nameof(transaction));
-            }
-
-            if (dto == null)
-            {
-                throw new ArgumentNullException(nameof(dto));
-            }
-
-            var data = await this.SerializeAsync(dto, cancellationToken);
-
-            using var command = CreateCommand(transaction, string.Join(" ", CreateStatements));
-
-            AddIdentityParameters(command, dto.Id);
-            AddDataParameter(command, data);
-            AddReferenceParameters(command, dto);
-
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
+        protected override string CreateSql => """
+            INSERT INTO fabric.thing (id, class_kind, data)
+            VALUES (@id, @class_kind, @data - ARRAY['createdBy', 'updatedBy', 'isPartOfOrganizations', 'isPartOfProjects']);
+            INSERT INTO fabric.auditable_thing (id, created_by, updated_by)
+            VALUES (@id, @auditable_thing_created_by, @auditable_thing_updated_by);
+            INSERT INTO fabric.model_user (id)
+            VALUES (@id);
+            """;
 
         /// <summary>
-        /// Replaces a stored object's JSON document, scalar reference columns and link-table rows with the values of
-        /// <paramref name="dto" />.
+        /// Gets the statement that replaces the JSON document of one stored object of this class, without its reference members.
+        /// </summary>
+        protected override string UpdateDataSql => """
+            UPDATE fabric.thing
+            SET data = @data - ARRAY['createdBy', 'updatedBy', 'isPartOfOrganizations', 'isPartOfProjects']
+            WHERE id = @id AND class_kind = @class_kind;
+            """;
+
+        /// <summary>
+        /// Gets the statement that deletes one stored object of this class; the database's cascades and triggers remove its other rows.
+        /// </summary>
+        protected override string DeleteSql => """
+            DELETE FROM fabric.thing
+            WHERE id = @id AND class_kind = @class_kind;
+            """;
+
+        /// <summary>
+        /// Writes the scalar reference columns and link-table rows of a stored object that differ from <paramref name="dto" />.
         /// </summary>
         /// <param name="transaction">
         /// The caller's open transaction, whose connection executes the statements.
@@ -287,123 +142,41 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// The token that cancels the operation.
         /// </param>
         /// <returns>
-        /// <see langword="true" /> when the object was updated; <see langword="false" /> when no object of this class has the identifier,
-        /// in which case nothing is written.
+        /// A task that completes when every statement has been executed.
         /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="transaction" /> or <paramref name="dto" /> is <see langword="null" />.
-        /// </exception>
-        public async Task<bool> UpdateAsync(NpgsqlTransaction transaction, IUser dto, CancellationToken cancellationToken)
+        protected override Task UpdateRelationsAsync(NpgsqlTransaction transaction, IUser dto, CancellationToken cancellationToken)
         {
-            if (transaction == null)
-            {
-                throw new ArgumentNullException(nameof(transaction));
-            }
-
-            if (dto == null)
-            {
-                throw new ArgumentNullException(nameof(dto));
-            }
-
-            var data = await this.SerializeAsync(dto, cancellationToken);
-
-            using (var command = CreateCommand(transaction, UpdateDataSql))
-            {
-                AddIdentityParameters(command, dto.Id);
-                AddDataParameter(command, data);
-
-                if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
-                {
-                    return false;
-                }
-            }
-
-            if (UpdateRelationStatements.Length > 0)
-            {
-                using var command = CreateCommand(transaction, string.Join(" ", UpdateRelationStatements));
-
-                command.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid)
-                {
-                    Value = dto.Id
-                });
-
-                AddReferenceParameters(command, dto);
-
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
-
-            return true;
+            return this.ExecuteRelationStatementsAsync(transaction, UpdateRelationSql, dto, cancellationToken);
         }
 
         /// <summary>
-        /// Deletes a stored object; the database's cascades and triggers remove its inheritance rows, link rows and contained objects.
-        /// </summary>
-        /// <param name="transaction">
-        /// The caller's open transaction, whose connection executes the statement.
-        /// </param>
-        /// <param name="id">
-        /// The identifier of the object to delete.
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The token that cancels the operation.
-        /// </param>
-        /// <returns>
-        /// <see langword="true" /> when the object was deleted; <see langword="false" /> when no object of this class has
-        /// <paramref name="id" />.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="transaction" /> is <see langword="null" />.
-        /// </exception>
-        public async Task<bool> DeleteAsync(NpgsqlTransaction transaction, Guid id, CancellationToken cancellationToken)
-        {
-            if (transaction == null)
-            {
-                throw new ArgumentNullException(nameof(transaction));
-            }
-
-            using var command = CreateCommand(transaction, DeleteSql);
-
-            AddIdentityParameters(command, id);
-
-            return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
-        }
-
-        /// <summary>
-        /// Creates a command that runs on the connection of the caller's transaction.
-        /// </summary>
-        /// <param name="transaction">
-        /// The caller's open transaction.
-        /// </param>
-        /// <param name="commandText">
-        /// The parameterized SQL to execute.
-        /// </param>
-        /// <returns>
-        /// The command, enlisted in <paramref name="transaction" />.
-        /// </returns>
-        private static NpgsqlCommand CreateCommand(NpgsqlTransaction transaction, string commandText)
-        {
-            return new NpgsqlCommand(commandText, transaction.Connection, transaction);
-        }
-
-        /// <summary>
-        /// Adds the identifier and the <c>class_kind</c> discriminator that select one stored object of this class.
+        /// Adds the identifier that selects one stored object.
         /// </summary>
         /// <param name="command">
-        /// The command that receives the parameters.
+        /// The command that receives the parameter.
         /// </param>
         /// <param name="id">
         /// The identifier of the object.
         /// </param>
-        private static void AddIdentityParameters(NpgsqlCommand command, Guid id)
+        protected override void AddIdentityParameter(NpgsqlCommand command, Guid id)
         {
             command.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid)
             {
                 Value = id
             });
+        }
 
+        /// <summary>
+        /// Adds the <c>class_kind</c> discriminator that restricts the statements to objects of the exact concrete class <c>User</c>.
+        /// </summary>
+        /// <param name="command">
+        /// The command that receives the parameter.
+        /// </param>
+        protected override void AddClassKindParameter(NpgsqlCommand command)
+        {
             command.Parameters.Add(new NpgsqlParameter("class_kind", NpgsqlDbType.Text)
             {
-                Value = ClassKind
+                Value = "User"
             });
         }
 
@@ -414,9 +187,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// The command that receives the parameter.
         /// </param>
         /// <param name="data">
-        /// The serialized JSON document.
+        /// The UTF-8 bytes of the serialized JSON document.
         /// </param>
-        private static void AddDataParameter(NpgsqlCommand command, string data)
+        protected override void AddDataParameter(NpgsqlCommand command, ReadOnlyMemory<byte> data)
         {
             command.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Jsonb)
             {
@@ -433,7 +206,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <param name="dto">
         /// The object whose references are stored.
         /// </param>
-        private static void AddReferenceParameters(NpgsqlCommand command, IUser dto)
+        protected override void AddReferenceParameters(NpgsqlCommand command, IUser dto)
         {
             command.Parameters.Add(new NpgsqlParameter("auditable_thing_created_by", NpgsqlDbType.Uuid)
             {
@@ -443,43 +216,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             {
                 Value = dto.UpdatedBy
             });
-        }
-
-        /// <summary>
-        /// Serializes a DTO into the JSON document stored in the <c>data</c> column.
-        /// </summary>
-        /// <param name="dto">
-        /// The DTO to serialize.
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The token that cancels the operation.
-        /// </param>
-        /// <returns>
-        /// The JSON document as text.
-        /// </returns>
-        private async Task<string> SerializeAsync(IUser dto, CancellationToken cancellationToken)
-        {
-            using var stream = new MemoryStream();
-
-            await this.serializer.SerializeAsync(dto, stream, new JsonWriterOptions(), cancellationToken);
-
-            return Encoding.UTF8.GetString(stream.ToArray());
-        }
-
-        /// <summary>
-        /// Deserializes a stored JSON document into a DTO of this class.
-        /// </summary>
-        /// <param name="data">
-        /// The stored JSON document.
-        /// </param>
-        /// <returns>
-        /// The deserialized DTO.
-        /// </returns>
-        private IUser DeSerialize(string data)
-        {
-            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(data));
-
-            return (IUser)this.deSerializer.DeSerialize(stream).Single();
         }
     }
 }
