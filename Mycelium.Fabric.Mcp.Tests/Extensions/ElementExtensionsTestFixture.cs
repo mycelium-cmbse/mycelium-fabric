@@ -106,6 +106,42 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         }
 
         [Test]
+        public void VerifyGetAttributeUsage()
+        {
+            // The camera redefines the mass of OpticalCamera without a declared name: its attribute takes the name of the
+            // redefined one, and hides it.
+            var modelProvider = RedefinedValueHelper.CreateModel();
+            var redefiningCamera = modelProvider.GetElementById(CameraId);
+            var cameraMass = redefiningCamera.GetAttributeUsage("mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IElement)null).GetAttributeUsage("mass"), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(new Package().GetAttributeUsage("mass"), Is.Null);
+                Assert.That(this.camera.GetAttributeUsage("mass").GetNumericValue().Number, Is.EqualTo(RedefinedValueHelper.DefinitionMass));
+                Assert.That(this.camera.GetAttributeUsage("temperature"), Is.Null);
+                Assert.That(cameraMass.DeclaredName, Is.Null);
+                Assert.That(cameraMass.GetNumericValue().Number, Is.EqualTo(RedefinedValueHelper.CameraMass));
+                Assert.That(redefiningCamera.GetAttributeUsages().Select(attribute => attribute.name), Is.EquivalentTo(["mass", "power"]));
+            }
+        }
+
+        [Test]
+        public void CollectContributions_OfAValueRedefinedWithoutName_CountsTheRedefinedValue()
+        {
+            var modelProvider = RedefinedValueHelper.CreateModel();
+
+            var payloadMass = modelProvider.GetElementById(PayloadSubsystemId).CollectContributions("mass");
+            var opticalCamera = modelProvider.Elements.Single(element => element.DeclaredName == "OpticalCamera");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(payloadMass.Select(contribution => contribution.Value), Is.EquivalentTo([RedefinedValueHelper.CameraMass, 1.5]));
+                Assert.That(opticalCamera.GetAttributeUsage("mass").GetNumericValue().Number, Is.EqualTo(RedefinedValueHelper.DefinitionMass));
+            }
+        }
+
+        [Test]
         public void VerifyCollectContributions()
         {
             var payloadMass = this.payloadSubsystem.CollectContributions("mass");

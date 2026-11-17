@@ -125,7 +125,7 @@ namespace Mycelium.Fabric.Mcp.Requirements
                         .Select(feature => new SatisfiedRequirement(pair.Requirement, feature, pair.Constraints.Subject, pair.Constraints.Assumptions, pair.Constraints.Required)))
                     .OrderBy(requirement => requirement.Requirement.ReqId == null)
                     .ThenBy(requirement => requirement.Requirement.ReqId, StringComparer.Ordinal)
-                    .ThenBy(requirement => requirement.Requirement.DeclaredName, StringComparer.Ordinal)
+                    .ThenBy(requirement => requirement.Requirement.name, StringComparer.Ordinal)
                     .ThenBy(requirement => requirement.SatisfyingFeature.qualifiedName, StringComparer.Ordinal)
             ];
         }
@@ -265,7 +265,7 @@ namespace Mycelium.Fabric.Mcp.Requirements
             {
                 Id = requirement.Id,
                 ReqId = requirement.ReqId,
-                Name = requirement.DeclaredName,
+                Name = requirement.name,
                 Text = requirement.text is { Count: > 0 } texts ? string.Join("\n", texts) : null,
                 Constraint = JoinExpressions(constraints.Required),
                 Assumption = JoinExpressions(constraints.Assumptions)
@@ -341,10 +341,10 @@ namespace Mycelium.Fabric.Mcp.Requirements
             var total = NumberValue.Sum(parts.SelectMany(part => part.Contributions).Select(contribution => contribution.GetTotalWithMargin()));
             var amount = total.IsError ? string.Empty : $" ({total.Value})";
 
-            var names = string.Join(", ", parts.Take(NamedPartCount).Select(part => $"'{part.Part.DeclaredName}'"));
+            var names = string.Join(", ", parts.Take(NamedPartCount).Select(part => $"'{part.Part.name}'"));
             names = parts.Count > NamedPartCount ? $"{names} and {parts.Count - NamedPartCount} more" : names;
 
-            var satisfyingPart = rollUp.Part.DeclaredName;
+            var satisfyingPart = rollUp.Part.name;
 
             return parts.Count == 1
                 ? $"{names} is next to '{satisfyingPart}' in the same package, not inside it, and carries {rollUp.Attribute}{amount}, which this check does not count. "

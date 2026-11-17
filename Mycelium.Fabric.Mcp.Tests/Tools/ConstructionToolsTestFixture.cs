@@ -87,7 +87,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         {
             IReadOnlyList<ModelChange> changes = [new ModelChange { Payload = new ElementPayload { Type = "Package", Name = "Spacecraft" } }];
             var createdElement = new CreatedElement(Guid.NewGuid(), "Spacecraft", "Package");
-            this.modelProvider.Setup(provider => provider.ApplyChanges(changes)).Returns(new ApplyChangesResult([createdElement], []));
+            this.modelProvider.Setup(provider => provider.ApplyChanges(changes)).Returns(new ApplyChangesResult([createdElement], []) { Notes = ["The value is shared."] });
 
             var tools = this.CreateTools();
             var toolResult = tools.ApplyChanges(changes);
@@ -97,6 +97,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(() => tools.ApplyChanges(null), Throws.TypeOf<McpException>());
                 Assert.That(() => tools.ApplyChanges([]), Throws.TypeOf<McpException>().With.Message.Contains("no change"));
                 Assert.That(ReadResult(toolResult).CreatedElements, Is.EqualTo(new[] { createdElement }));
+                Assert.That(ReadResult(toolResult).Notes, Is.EqualTo(["The value is shared."]));
                 Assert.That(ReadResult(toolResult).Plan, Is.Null);
                 Assert.That(toolResult.Content.OfType<TextContentBlock>().Single().Text, Does.Not.Contain("\"plan\""));
                 Assert.That(toolResult.StructuredContent, Is.Null);

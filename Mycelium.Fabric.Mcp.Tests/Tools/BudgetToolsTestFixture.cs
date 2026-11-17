@@ -154,6 +154,23 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         }
 
         [Test]
+        public void SumAttribute_OfAValueRedefinedWithoutName_CountsTheRedefinedValue()
+        {
+            var tools = new BudgetTools(RedefinedValueHelper.CreateModel());
+
+            var payloadMass = tools.SumAttribute(PayloadSubsystemId, "mass");
+            var camera = tools.GetAttributeValues(CameraId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(payloadMass.Total, Is.EqualTo(RedefinedValueHelper.CameraMass + 1.5));
+                Assert.That(payloadMass.Contributions.Single(contribution => contribution.Id == CameraId).Value, Is.EqualTo(RedefinedValueHelper.CameraMass));
+                Assert.That(camera.Attributes.Select(attribute => attribute.Name), Is.EquivalentTo(["mass", "power"]));
+                Assert.That(camera.Attributes.Single(attribute => attribute.Name == "mass").Value, Is.EqualTo(RedefinedValueHelper.CameraMass));
+            }
+        }
+
+        [Test]
         public void SumAttribute_WithMarginsAndMissingValues_GivesTheTotalWithMarginsAndListsTheMissingValues()
         {
             var complete = BudgetChangesHelper.CreateModel(withMissingValues: false, withPartOutside: false);

@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 {
     using System;
 
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
 
     using SysML2.NET.Core.POCO.Kernel.Expressions;
@@ -40,6 +41,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(PreviewElement.Create(id, "spares", "PartUsage", spares, null).Multiplicity, Is.EqualTo("0..*"));
                 Assert.That(PreviewElement.Create(id, "radiator", "PartUsage", null, new PartUsage { DeclaredName = "radiator" }).Multiplicity, Is.Null);
             }
+        }
+
+        [Test]
+        public void Create_OfAPartThatRedefinesItsMass_GivesTheRedefinedValueWithTheUnitOfTheDefinition()
+        {
+            // The camera weighs 35 instead of the 38 of OpticalCamera, whose mass documents its unit.
+            var camera = RedefinedValueHelper.CreateModel().GetElementById(RedefinedValueHelper.CameraId);
+
+            var preview = PreviewElement.Create(camera.Id, camera.qualifiedName, "PartUsage", null, camera);
+
+            Assert.That(preview.Value, Does.StartWith("35 kg · "));
         }
 
         /// <summary>

@@ -39,6 +39,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Systems.Connections;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
+    using SysML2.NET.Core.POCO.Kernel.FeatureValues;
     using SysML2.NET.Core.POCO.Kernel.Interactions;
     using SysML2.NET.Core.POCO.Kernel.Multiplicities;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
@@ -1711,6 +1712,235 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                     "Change 13 (update): isVariation only applies to the creation of a PartDefinition: delete the definition and create it again."
                 ]));
             }
+        }
+
+        [Test]
+        public void Apply_WithValuesOfDefinitionsAndUsages_MakesTheValuesOfDefinitionsDefault()
+        {
+            var temporaryNames = new Dictionary<string, Guid>();
+            var creation = this.applier.Apply([], RedefinitionChangesHelper.CreateChanges(), temporaryNames);
+            var model = CommitRequestHelper.Apply([], creation.Value);
+            var elements = Assemble(model);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(creation.IsError, Is.False);
+                Assert.That(GetFeatureValue(elements, temporaryNames["instrumentMass"]).IsDefault, Is.True);
+                Assert.That(GetFeatureValue(elements, temporaryNames["batteryCapacity"]).IsDefault, Is.False);
+                Assert.That(GetFeatureValue(elements, temporaryNames["length"]).IsDefault, Is.False);
+            }
+
+            // An update can change the kind of a value alone; a new value keeps the kind of the current one, unless isDefault is given.
+            var update = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = "instrumentMass", Payload = new ElementPayload { IsDefault = false } },
+                new ModelChange { Identity = "batteryCapacity", Payload = new ElementPayload { Value = 120 } },
+                new ModelChange { Identity = "length", Payload = new ElementPayload { Value = 4, Unit = "m", IsDefault = true } },
+                new ModelChange { Identity = "height", Payload = new ElementPayload { Value = 1, Unit = "m" } }
+            ], temporaryNames);
+
+            elements = Assemble(CommitRequestHelper.Apply(model, update.Value));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(update.IsError, Is.False);
+                Assert.That(GetFeatureValue(elements, temporaryNames["instrumentMass"]).IsDefault, Is.False);
+                Assert.That(((IAttributeUsage)elements[temporaryNames["instrumentMass"]]).GetNumericValue().Number, Is.EqualTo(10));
+                Assert.That(GetFeatureValue(elements, temporaryNames["batteryCapacity"]).IsDefault, Is.False);
+                Assert.That(((IAttributeUsage)elements[temporaryNames["batteryCapacity"]]).GetNumericValue().Number, Is.EqualTo(120));
+                Assert.That(GetFeatureValue(elements, temporaryNames["length"]).IsDefault, Is.True);
+                Assert.That(GetFeatureValue(elements, temporaryNames["height"]).IsDefault, Is.True);
+            }
+        }
+
+        [Test]
+        public void Apply_WithRedefinitions_GivesAUsageItsOwnValueDefinitionAndMultiplicity()
+        {
+            var temporaryNames = new Dictionary<string, Guid>();
+            var model = CommitRequestHelper.Apply([], this.applier.Apply([], RedefinitionChangesHelper.CreateChanges(), temporaryNames).Value);
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Redefines = temporaryNames["instrumentMass"].ToString(), Value = 38, Unit = "kg" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Redefines = "power", Value = 7, Unit = "W" } },
+                new ModelChange { Identity = "sixWheels", Payload = new ElementPayload { Type = "PartUsage", Owner = "rover", Redefines = "wheels", Multiplicity = "6" } },
+                new ModelChange { Identity = "bigEngine", Payload = new ElementPayload { Type = "PartUsage", Owner = "rover", Name = "engine", Definition = "BigEngine" } },
+                new ModelChange { Identity = "ownEngineMass", Payload = new ElementPayload { Type = "AttributeUsage", Owner = "bigEngine", Redefines = temporaryNames["engineMass"].ToString(), Value = 55, Unit = "kg" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "battery", Name = "mass", Value = 9, Unit = "kg" } },
+                new ModelChange { Identity = "speed", Payload = new ElementPayload { Type = "AttributeUsage", Owner = "rover", Name = "speed", Value = 2 } },
+                new ModelChange { Identity = "massLink", Payload = new ElementPayload { Type = "BindingConnectorAsUsage", Owner = "rover", Name = "massLink", Ends = ["camera.mass", "spareCamera.mass"] } },
+                new ModelChange
+                {
+                    Identity = "cameraLimit",
+                    Payload = new ElementPayload
+                    {
+                        Type = "RequirementUsage", Owner = "Garage", Name = "cameraLimit", ReqId = "REQ-ROV-002", Text = "The camera of the rover shall weigh at most 39 kg.",
+                        Constraint = new ConstraintPayload { Attribute = "camera.mass", Operator = "<=", Limit = 39, Unit = "kg" }
+                    }
+                },
+                new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = "cameraLimit", SatisfyingPart = "rover" } }
+            ], temporaryNames);
+
+            var dtos = CommitRequestHelper.Apply(model, result.Value);
+            var elements = Assemble(dtos);
+            var camera = (IPartUsage)elements[temporaryNames["camera"]];
+            var cameraMass = (IAttributeUsage)elements[temporaryNames["cameraMass"]];
+            var sixWheels = (IPartUsage)elements[temporaryNames["sixWheels"]];
+            var bigEngine = (IPartUsage)elements[temporaryNames["bigEngine"]];
+            var bigEngineMass = (IAttributeUsage)elements[temporaryNames["bigEngineMass"]];
+            var speed = (IAttributeUsage)elements[temporaryNames["speed"]];
+            var massLink = (IBindingConnectorAsUsage)elements[temporaryNames["massLink"]];
+            var cameraLimit = new RequirementChecker(ModelDtoHelper.Assemble(dtos)).CheckRequirements().Single(check => check.ReqId == "REQ-ROV-002");
+            IValidationRule[] rules = [new BrokenReferenceRule(), new OrphanElementRule(), new DuplicateQualifiedNameRule()];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(new ModelValidator(rules).Validate([.. elements.Values]), Is.Empty);
+
+                // :>> mass = 38 [kg]; in the camera, whose definition keeps its own value.
+                Assert.That(cameraMass.DeclaredName, Is.Null);
+                Assert.That(cameraMass.name, Is.EqualTo("mass"));
+                Assert.That(cameraMass.ownedRedefinition.Single().RedefinedFeature, Is.SameAs(elements[temporaryNames["instrumentMass"]]));
+                Assert.That(GetFeatureValue(elements, cameraMass.Id).IsDefault, Is.False);
+                Assert.That(camera.GetAttributeUsage("mass"), Is.SameAs(cameraMass));
+                Assert.That(camera.GetAttributeUsage("power").GetNumericValue().Number, Is.EqualTo(7));
+                Assert.That(((IPartUsage)elements[temporaryNames["spareCamera"]]).GetAttributeUsage("mass").GetNumericValue().Number, Is.EqualTo(10));
+                Assert.That(((IAttributeUsage)elements[temporaryNames["instrumentMass"]]).GetNumericValue().Number, Is.EqualTo(10));
+
+                // part :>> wheels[6]; and part :>> engine : BigEngine;, the second one found by its name.
+                Assert.That(sixWheels.name, Is.EqualTo("wheels"));
+                Assert.That(sixWheels.DescribeMultiplicity(), Is.EqualTo("6"));
+                Assert.That(bigEngine.DeclaredName, Is.Null);
+                Assert.That(bigEngine.ownedRedefinition.Single().RedefinedFeature, Is.SameAs(elements[temporaryNames["engine"]]));
+                Assert.That(bigEngine.GetTypeNames(), Does.Contain("BigEngine"));
+
+                // A definition redefines what it specializes in the same way, and an inherited feature redefined on the way is
+                // redefined through its redefinition.
+                Assert.That(bigEngineMass.DeclaredName, Is.Null);
+                Assert.That(bigEngineMass.ownedRedefinition.Single().RedefinedFeature, Is.SameAs(elements[temporaryNames["engineMass"]]));
+                Assert.That(GetFeatureValue(elements, bigEngineMass.Id).IsDefault, Is.True);
+                Assert.That(((IFeature)elements[temporaryNames["ownEngineMass"]]).ownedRedefinition.Single().RedefinedFeature, Is.SameAs(bigEngineMass));
+
+                // A name that is not inherited creates a new feature, and the paths of the batch find the redefinitions.
+                Assert.That(speed.DeclaredName, Is.EqualTo("speed"));
+                Assert.That(speed.ownedRedefinition, Is.Empty);
+                Assert.That(massLink.relatedFeature[0].chainingFeature[1], Is.SameAs(cameraMass));
+                Assert.That(cameraLimit.Status, Is.EqualTo(RequirementStatus.Satisfied));
+                Assert.That(cameraLimit.Value, Is.EqualTo(38));
+
+                // 6 wheels of 2 kg, the big engine of 55 kg, the cameras of 38 and 10 kg, the battery of 9 kg.
+                Assert.That(((IPartUsage)elements[temporaryNames["rover"]]).CollectContributions("mass").Sum(contribution => contribution.GetTotal().Number), Is.EqualTo(124));
+            }
+        }
+
+        [Test]
+        public void Apply_WithAValueChangedEarlierInTheBatch_RedefinesIt()
+        {
+            var temporaryNames = new Dictionary<string, Guid>();
+            var model = CommitRequestHelper.Apply([], this.applier.Apply([], RedefinitionChangesHelper.CreateChanges(), temporaryNames).Value);
+
+            // A fixed value made default first, and a value replaced first, which removes the former one from the working copy.
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Identity = "batteryCapacity", Payload = new ElementPayload { IsDefault = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "battery", Redefines = "capacity", Value = 90 } },
+                new ModelChange { Identity = "cameraPower", Payload = new ElementPayload { Value = 6, Unit = "W" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Name = "power", Value = 7, Unit = "W" } }
+            ], temporaryNames);
+
+            var elements = Assemble(CommitRequestHelper.Apply(model, result.Value));
+            var cameraPower = ((IPartUsage)elements[temporaryNames["camera"]]).GetAttributeUsage("power");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(GetFeatureValue(elements, temporaryNames["batteryCapacity"]).IsDefault, Is.True);
+                Assert.That(((IPartUsage)elements[temporaryNames["battery"]]).GetAttributeUsage("capacity").GetNumericValue().Number, Is.EqualTo(90));
+                Assert.That(cameraPower.ownedRedefinition.Single().RedefinedFeature, Is.SameAs(elements[temporaryNames["cameraPower"]]));
+                Assert.That(cameraPower.GetNumericValue().Number, Is.EqualTo(7));
+                Assert.That(((IPartUsage)elements[temporaryNames["spareCamera"]]).GetAttributeUsage("power").GetNumericValue().Number, Is.EqualTo(6));
+            }
+        }
+
+        [Test]
+        public void Apply_WithInvalidRedefinitionsAndValueKinds_ReturnsEveryProblem()
+        {
+            var temporaryNames = new Dictionary<string, Guid>();
+            var model = CommitRequestHelper.Apply([], this.applier.Apply([], RedefinitionChangesHelper.CreateChanges(), temporaryNames).Value);
+            var batteryCapacityId = temporaryNames["batteryCapacity"];
+
+            var result = this.applier.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "battery", Redefines = "capacity", Value = 90 } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "battery", Name = "capacity", Value = 90 } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Redefines = batteryCapacityId.ToString(), Value = 1 } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "rover", Redefines = "size", Value = 4 } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "rover", Redefines = temporaryNames["length"].ToString(), Value = 4 } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "camera", Redefines = "mass" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "camera", Name = "mass" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "Garage", Redefines = "mass", Value = 1 } },
+                new ModelChange { Payload = new ElementPayload { Type = "SuccessionAsUsage", Owner = "rover", Redefines = "wheels", Ends = ["camera", "battery"] } },
+                new ModelChange { Identity = "camera", Payload = new ElementPayload { Redefines = "mass" } },
+                new ModelChange { Identity = "ownPower", Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Redefines = "power", Value = 6, Unit = "W" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Name = "power", Value = 8, Unit = "W" } },
+                new ModelChange { Identity = "cameraPower", Payload = new ElementPayload { IsDefault = false } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "rover", Name = "width", IsDefault = true } },
+                new ModelChange { Identity = "camera", Payload = new ElementPayload { IsDefault = true } },
+                new ModelChange { Identity = "height", Payload = new ElementPayload { IsDefault = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Redefines = temporaryNames["cameraPower"].ToString(), Value = 9, Unit = "W" } }
+            ], temporaryNames);
+
+            var fixedCapacity = $"The value of the AttributeUsage 'Battery::capacity' is fixed, and only a default value can be redefined. If each usage may have its own value, "
+                + $"make it a default value first, in this batch: a change before this one with the identity {batteryCapacityId} and the payload {{\"isDefault\": true}}.";
+
+            string[] expectedProblems =
+            [
+                $"Change 1 (create): {fixedCapacity}",
+                $"Change 2 (create): {fixedCapacity}",
+                "Change 3 (create): The PartUsage 'camera' does not inherit the AttributeUsage 'Battery::capacity': a usage redefines a feature of its definition or of what it specializes. "
+                    + "It inherits 'power', 'mass'.",
+                "Change 4 (create): The PartUsage 'rover' inherits no feature named 'size'. It inherits 'wheels', 'engine', 'height'.",
+                "Change 5 (create): The AttributeUsage 'rover::length' belongs to the PartUsage 'rover' itself: update it instead of redefining it.",
+                "Change 6 (create): A PartUsage cannot redefine the AttributeUsage 'Instrument::mass': a feature redefines a feature of the same metaclass or of a more general one, "
+                    + "for example a PartUsage can redefine an ItemUsage. Create it with the type AttributeUsage.",
+                "Change 7 (create): The PartUsage 'camera' inherits the AttributeUsage 'Instrument::mass', so a new element named 'mass' under it redefines it, "
+                    + "and must have the type AttributeUsage, not PartUsage. Give it another name for a new feature.",
+                "Change 8 (create): Only an element owned by a definition or a usage redefines a feature that its owner inherits, and the Package 'Garage' inherits none.",
+                "Change 9 (create): Only a usage, for example an attribute, a part, a port or an item, redefines a feature that its owner inherits, not a SuccessionAsUsage.",
+                "Change 10 (update): redefines only applies to the creation of a feature: to give a usage its own value, definition or multiplicity, "
+                    + "create a new element under it that redefines the inherited feature.",
+                "Change 12 (create): The PartUsage 'camera' already has a member named 'power', created by change 11 of this batch: give one of them another name.",
+                "Change 13 (update): The value of the AttributeUsage 'power' cannot become fixed: only a default value can be redefined, "
+                    + "and the AttributeUsage 'camera::power' redefines it with a value of its own.",
+                "Change 14 (create): isDefault only applies with a value: give the value of the attribute.",
+                "Change 15 (update): Only an attribute has a value, not the PartUsage 'camera'.",
+                "Change 16 (update): The AttributeUsage 'height' has no value: give its value with isDefault."
+            ];
+
+            var problems = result.Errors.Select(error => error.Description).ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.True);
+                Assert.That(problems.Take(expectedProblems.Length), Is.EqualTo(expectedProblems));
+
+                // The redefinition of change 11 has no identifier outside its refused batch.
+                Assert.That(problems, Has.Count.EqualTo(expectedProblems.Length + 1));
+                Assert.That(problems[^1], Does.StartWith("Change 17 (create): The PartUsage 'camera' already redefines the AttributeUsage 'Camera::power', with the element whose identifier is "));
+                Assert.That(problems[^1], Does.EndWith(": update it instead."));
+            }
+        }
+
+        /// <summary>
+        /// Gets the value of an attribute: its <c>FeatureValue</c>.
+        /// </summary>
+        /// <param name="elements">The POCOs of the model, indexed by their <c>Id</c>.</param>
+        /// <param name="attributeId">The <c>Id</c> of the attribute.</param>
+        /// <returns>The <see cref="IFeatureValue"/> of the attribute.</returns>
+        private static IFeatureValue GetFeatureValue(Dictionary<Guid, IElement> elements, Guid attributeId)
+        {
+            return elements[attributeId].OwnedRelationship.OfType<IFeatureValue>().Single();
         }
     }
 }

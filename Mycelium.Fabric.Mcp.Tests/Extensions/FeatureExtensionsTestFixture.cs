@@ -10,12 +10,15 @@
 namespace Mycelium.Fabric.Mcp.Tests.Extensions
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Kernel.Multiplicities;
     using SysML2.NET.Core.POCO.Root.Elements;
@@ -44,6 +47,73 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(Get(BudgetChangesHelper.SolarArrayName).GetPartsBeside().Select(part => part.DeclaredName), Is.EqualTo([BudgetChangesHelper.SpacecraftName]));
                 Assert.That(Get("wheel1").GetPartsBeside(), Is.Empty);
                 Assert.That(new PartUsage().GetPartsBeside(), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void VerifyGetOwnOrRedefinedDocumentation()
+        {
+            // The mass of the camera redefines the one of OpticalCamera, which is documented, without documentation of its own.
+            var cameraMass = RedefinedValueHelper.CreateModel().GetElementById(RedefinedValueHelper.CameraId).GetAttributeUsage("mass");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IFeature)null).GetOwnOrRedefinedDocumentation(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(new PartUsage().GetOwnOrRedefinedDocumentation(), Is.Null);
+                Assert.That(cameraMass.GetDocumentationBodies(), Is.Null);
+                Assert.That(cameraMass.GetOwnOrRedefinedDocumentation(), Is.EqualTo("Dry mass of the unit [kg]."));
+            }
+        }
+
+        [Test]
+        public void VerifyGetInheritingUsages()
+        {
+            // Both cameras take the mass of Instrument, which Camera specializes, until one of them redefines it.
+            var modelProvider = RedefinitionChangesHelper.CreateModel();
+
+            IFeature Get(string qualifiedName) => modelProvider.Elements.OfType<IFeature>().Single(feature => feature.qualifiedName == qualifiedName);
+            List<string> GetInheritingUsages(string qualifiedName) => [.. Get(qualifiedName).GetInheritingUsages(modelProvider.Elements).Select(usage => usage.qualifiedName)];
+
+            var before = GetInheritingUsages("Garage::Instrument::mass");
+            var redefinition = modelProvider.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = "camera", Name = "mass", Value = 38, Unit = "kg" } }]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IFeature)null).GetInheritingUsages([]), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new AttributeUsage().GetInheritingUsages(null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(new AttributeUsage().GetInheritingUsages(modelProvider.Elements), Is.Empty);
+                Assert.That(redefinition.Applied, Is.True);
+                Assert.That(before, Is.EquivalentTo(["Garage::rover::camera", "Garage::rover::spareCamera"]));
+                Assert.That(GetInheritingUsages("Garage::Instrument::mass"), Is.EqualTo(["Garage::rover::spareCamera"]));
+                Assert.That(GetInheritingUsages("Garage::Rover::wheels"), Is.EqualTo(["Garage::rover"]));
+                Assert.That(GetInheritingUsages("Garage::rover::length"), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void VerifyGetTypesAddedByRedefinition()
+        {
+            // A Battery is not an Engine; a BigEngine is.
+            var modelProvider = RedefinitionChangesHelper.CreateModel();
+
+            var result = modelProvider.ApplyChanges(
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "rover", Redefines = "engine", Definition = "Battery" } },
+                new ModelChange { Identity = "BigRover", Payload = new ElementPayload { Type = "PartDefinition", Owner = "Garage", Name = "BigRover", Specializes = "Rover" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "BigRover", Name = "engine", Definition = "BigEngine" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "BigRover", Redefines = "wheels", Multiplicity = "6" } }
+            ]);
+
+            IFeature Get(string qualifiedName) => modelProvider.Elements.OfType<IFeature>().Single(feature => feature.qualifiedName == qualifiedName);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => ((IFeature)null).GetTypesAddedByRedefinition(), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(result.Applied, Is.True);
+                Assert.That(Get("Garage::rover::engine").GetTypesAddedByRedefinition().Select(types => (types.Added.name, types.Redefined.name)), Is.EqualTo([("Battery", "Engine")]));
+                Assert.That(Get("Garage::BigRover::engine").GetTypesAddedByRedefinition(), Is.Empty);
+                Assert.That(Get("Garage::BigRover::wheels").GetTypesAddedByRedefinition(), Is.Empty);
+                Assert.That(Get("Garage::Rover::engine").GetTypesAddedByRedefinition(), Is.Empty);
             }
         }
 

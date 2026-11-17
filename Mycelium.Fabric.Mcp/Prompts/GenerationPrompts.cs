@@ -112,6 +112,10 @@ namespace Mycelium.Fabric.Mcp.Prompts
               one unit: sum_attribute and check_requirements count it four times. Put the numeric values on the units or
               on their part definitions, never on a subsystem or on the system when its units carry the same quantity:
               sum_attribute computes the totals, and a value on a part hides the values of its sub-parts.
+            - A value on a part definition is the typical value of all its parts. When one part differs from its definition
+              (this camera weighs 35 kg, the other cameras 38 kg), keep the value of the definition and give the part its
+              own: an AttributeUsage under the part with redefines 'mass' and the value. Likewise for a part that inherits a
+              part with another definition or another number of units (redefines with a definition or a multiplicity).
             - Every numeric property that the specification gives to a unit or to a vehicle becomes an attribute with its
               value, whatever the quantity (a pressure, a duration, a payload capacity), not only mass and power.
             - Use the same attribute name for the same quantity everywhere (mass, power), and give every numeric value the

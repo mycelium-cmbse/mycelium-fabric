@@ -489,7 +489,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         private IElement GetOrCreateSubjectMember(IElement owner, string name, bool isAttribute)
         {
             var member = this.GetFeatures(owner)
-                .FirstOrDefault(candidate => candidate.DeclaredName == name && (!isAttribute || candidate is IAttributeUsage));
+                .FirstOrDefault(candidate => this.GetEffectiveName(candidate) == name && (!isAttribute || candidate is IAttributeUsage));
 
             if (member != null)
             {

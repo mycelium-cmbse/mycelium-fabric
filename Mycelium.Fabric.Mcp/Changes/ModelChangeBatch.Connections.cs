@@ -403,7 +403,7 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var candidates = this.elementsById.Values
                 .OfType<IFeature>()
-                .Where(candidate => candidate.DeclaredName == shortName && !this.IsMarkedForDeletion(candidate));
+                .Where(candidate => this.GetEffectiveName(candidate) == shortName && !this.IsMarkedForDeletion(candidate));
 
             var features = this.AssembleElements(candidates)
                 .Where(candidate => candidate.qualifiedName != null && NormalizeQualifiedName(candidate.qualifiedName) == qualifiedName)
@@ -439,7 +439,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var candidates = this.elementsById.Values
                 .OfType<IFeature>()
-                .Where(candidate => candidate.DeclaredName == name && !this.IsMarkedForDeletion(candidate));
+                .Where(candidate => this.GetEffectiveName(candidate) == name && !this.IsMarkedForDeletion(candidate));
 
             var features = this.AssembleElements(candidates)
                 .Where(feature => feature.qualifiedName != null)
@@ -469,8 +469,9 @@ namespace Mycelium.Fabric.Mcp.Changes
 
             var ports = this.GetFeatures(connectedFeature)
                 .OfType<IPortUsage>()
-                .Where(port => port.DeclaredName != null && !this.IsMarkedForDeletion(port))
-                .Select(port => $"'{path}.{port.DeclaredName}'")
+                .Select(port => (Port: port, Name: this.GetEffectiveName(port)))
+                .Where(port => port.Name != null && !this.IsMarkedForDeletion(port.Port))
+                .Select(port => $"'{path}.{port.Name}'")
                 .ToList();
 
             var hint = ports.Count == 0
@@ -570,25 +571,6 @@ namespace Mycelium.Fabric.Mcp.Changes
             var definitions = typings.Where(typing => typing is not IConjugatedPortTyping).Select(typing => typing.Type);
 
             return this.GetElements(definitions.Concat(conjugatedPortDefinitions)).FirstOrDefault(definition => definition is IPortDefinition);
-        }
-
-        /// <summary>
-        /// Gets the features of an element: the features it owns and the features owned by its definitions.
-        /// </summary>
-        /// <param name="element">The element.</param>
-        /// <returns>The features of the element, then the ones of its definitions.</returns>
-        private IEnumerable<IFeature> GetFeatures(IElement element)
-        {
-            var definitions = this.GetElements(element.OwnedRelationship)
-                .OfType<IFeatureTyping>()
-                .Where(typing => typing is not IConjugatedPortTyping)
-                .Select(typing => this.elementsById.GetValueOrDefault(typing.Type))
-                .Where(definition => definition != null);
-
-            return definitions
-                .Prepend(element)
-                .SelectMany(this.GetOwnedMembers)
-                .OfType<IFeature>();
         }
     }
 }

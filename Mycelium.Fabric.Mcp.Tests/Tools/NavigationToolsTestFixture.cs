@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
@@ -266,6 +267,25 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(camera.Type, Is.EqualTo("PartUsage : OpticalCamera"));
                 Assert.That(camera.QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera"));
                 Assert.That(tools.ListChildren(CameraId), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void NavigationTools_OnAValueRedefinedWithoutName_GiveItTheNameOfTheRedefinedValue()
+        {
+            // The camera owns an attribute without declared name that redefines the mass of OpticalCamera.
+            var modelProvider = RedefinedValueHelper.CreateModel();
+            var tools = new NavigationTools(modelProvider);
+            var massId = modelProvider.GetElementById(CameraId).GetAttributeUsage("mass").Id;
+
+            var children = tools.ListChildren(CameraId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(children.Select(child => (child.Id, child.Name)), Is.EqualTo([(massId, "mass")]));
+                Assert.That(children[0].QualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::camera::mass"));
+                Assert.That(tools.GetElementDetails(massId).Name, Is.EqualTo("mass"));
+                Assert.That(tools.FindElementsByName("mass").TotalFound, Is.EqualTo(CreateSatelliteTools().FindElementsByName("mass").TotalFound + 1));
             }
         }
 

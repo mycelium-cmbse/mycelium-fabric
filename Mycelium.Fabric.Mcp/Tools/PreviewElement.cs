@@ -164,11 +164,11 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// Finds the unit documented on an attribute of an element or, when the element has no such attribute, of its sub-parts.
         /// </summary>
         /// <param name="element">The element.</param>
-        /// <param name="attributeName">The declared name of the attribute.</param>
+        /// <param name="attributeName">The name of the attribute.</param>
         /// <returns>The first documented unit found, or <c>null</c>.</returns>
         private static string FindDocumentedUnit(IElement element, string attributeName)
         {
-            var attribute = element.GetAttributeUsages().FirstOrDefault(candidate => candidate.DeclaredName == attributeName);
+            var attribute = element.GetAttributeUsage(attributeName);
 
             if (attribute != null)
             {
@@ -189,7 +189,7 @@ namespace Mycelium.Fabric.Mcp.Tools
         /// <returns>The documented unit, for example <c>kg</c>, or <c>null</c>.</returns>
         private static string ReadDocumentedUnit(IAttributeUsage attribute)
         {
-            var match = DocumentedUnit().Match(attribute.GetDocumentationBodies() ?? string.Empty);
+            var match = DocumentedUnit().Match(attribute.GetOwnOrRedefinedDocumentation() ?? string.Empty);
 
             return match.Success ? match.Groups["unit"].Value.Trim() : null;
         }
@@ -262,7 +262,7 @@ namespace Mycelium.Fabric.Mcp.Tools
                 return null;
             }
 
-            var name = parts[systemIndex + 1].DeclaredName ?? string.Empty;
+            var name = parts[systemIndex + 1].name ?? string.Empty;
 
             if (name.Length > "Subsystem".Length && name.EndsWith("Subsystem", StringComparison.OrdinalIgnoreCase))
             {

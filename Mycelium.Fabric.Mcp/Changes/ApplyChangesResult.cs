@@ -44,6 +44,13 @@ namespace Mycelium.Fabric.Mcp.Changes
         public int ResolvedIssueCount { get; init; }
 
         /// <summary>
+        /// Gets what the AI assistant should know about the applied batch, which does not prevent it from being applied: a
+        /// changed value of a definition that usages share, or a redefinition that adds a type; empty when there is none or
+        /// when the batch has not been applied.
+        /// </summary>
+        public IReadOnlyList<string> Notes { get; init; } = [];
+
+        /// <summary>
         /// Gets what the model holds of the plan that the AI assistant has given, after the applied batch; <c>null</c> when
         /// no plan has been given or the batch has not been applied.
         /// </summary>

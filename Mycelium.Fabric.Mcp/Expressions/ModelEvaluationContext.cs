@@ -135,15 +135,18 @@ namespace Mycelium.Fabric.Mcp.Expressions
             }
 
             // An attribute without value, such as the mass of a part, is the sum over the sub-parts of its owner; the owner is
-            // the satisfying part when it is the subject.
-            if (feature.owningType is not IFeature owner || feature.DeclaredName == null)
+            // the satisfying part when it is the subject. An attribute that redefines another one without a declared name
+            // (:>> mass;) has the name of the redefined attribute.
+            var name = feature.name;
+
+            if (feature.owningType is not IFeature owner || name == null)
             {
-                return Error.Validation(description: $"'{feature.DeclaredName}' has no value.");
+                return Error.Validation(description: $"'{name}' has no value.");
             }
 
             return this.subject != null && owner.Id == this.subject.Id
-                ? this.GetValue(this.subject).Then(subjectValue => this.RollUp(((PartValue)subjectValue).Feature, feature.DeclaredName))
-                : this.RollUp(owner, feature.DeclaredName);
+                ? this.GetValue(this.subject).Then(subjectValue => this.RollUp(((PartValue)subjectValue).Feature, name))
+                : this.RollUp(owner, name);
         }
 
         /// <summary>
@@ -171,7 +174,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 return holder.Errors;
             }
 
-            var candidates = (holder.Value.feature ?? []).Where(candidate => candidate.DeclaredName == featureName).ToList();
+            var candidates = (holder.Value.feature ?? []).Where(candidate => candidate.name == featureName).ToList();
 
             var members = candidates
                 .Where(candidate => !candidates.Exists(other => (other.ownedRedefinition ?? []).Any(redefinition => redefinition.RedefinedFeature?.Id == candidate.Id)))
@@ -219,7 +222,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
         {
             if (!this.featuresBeingEvaluated.Add(feature.Id))
             {
-                return Error.Validation(description: $"The value of '{feature.DeclaredName}' depends on itself.");
+                return Error.Validation(description: $"The value of '{feature.name}' depends on itself.");
             }
 
             var value = TermReader.Read(valueExpression).Then(term => term.Evaluate(this));

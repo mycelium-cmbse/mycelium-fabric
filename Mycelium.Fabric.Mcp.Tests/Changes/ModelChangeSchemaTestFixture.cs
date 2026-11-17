@@ -86,6 +86,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
                 }
 
                 Assert.That(GetChoiceTypes(payload.GetProperty("properties").GetProperty("value")), Is.EqualTo(ValueTypes));
+                Assert.That(payload.GetProperty("properties").GetProperty("redefines").GetProperty("description").GetString(), Does.Contain("part camera : Camera { :>> mass = 35 [kg]; }"));
+                Assert.That(payload.GetProperty("properties").GetProperty("isDefault").GetProperty("description").GetString(), Does.Contain("attribute mass default = 38 [kg]"));
                 Assert.That(GetObjectSchemas(schema).Select(objectSchema => objectSchema.GetProperty("additionalProperties").ValueKind), Has.All.EqualTo(JsonValueKind.False));
                 Assert.That(GetPropertySchemas(schema).Where(property => !property.TryGetProperty("type", out _) && !property.TryGetProperty("anyOf", out _)), Is.Empty);
                 Assert.That(GetKeywords(schema).Except(StrictKeywords), Is.Empty);
@@ -107,7 +109,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             {
                 Assert.That(GetObjectSchemas(strictSchema).Select(objectSchema => objectSchema.GetProperty("required").GetArrayLength()),
                     Is.EqualTo(GetObjectSchemas(strictSchema).Select(objectSchema => objectSchema.GetProperty("properties").EnumerateObject().Count())));
-                Assert.That(optionalProperties, Has.Count.EqualTo(46));
+                Assert.That(optionalProperties, Has.Count.EqualTo(48));
                 Assert.That(optionalProperties.Where(property => !AcceptsNull(property)), Is.Empty);
             }
 
