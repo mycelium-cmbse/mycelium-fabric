@@ -16,6 +16,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
+    using Microsoft.Extensions.Logging;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
 
@@ -43,7 +44,8 @@ namespace Mycelium.Fabric.FunctionalDataServer
         }
 
         /// <summary>
-        /// Builds, without starting it, the host with the data source, the awaited database initialization and the Functional Data access registrations.
+        /// Builds, without starting it, the host with the data source, the awaited database initialization and the Functional Data access registrations,
+        /// then resolves the data source from a scope of the built host so that a rejected connection string is logged and stops startup.
         /// </summary>
         /// <param name="args">The command-line configuration arguments.</param>
         /// <returns>The built host.</returns>
@@ -55,31 +57,49 @@ namespace Mycelium.Fabric.FunctionalDataServer
 
             var builder = Host.CreateApplicationBuilder(args);
 
-            var connectionString = builder.Configuration.GetConnectionString(FunctionalDataInitializer.ConnectionStringName);
+            builder.Services.AddSingleton(serviceProvider => CreateDataSource(serviceProvider.GetRequiredService<IConfiguration>()));
+            builder.Services.AddSingleton<IFunctionalDataInitializer, FunctionalDataInitializer>();
+            builder.Services.AddHostedService<FunctionalDataInitializationService>();
+            builder.Services.AddFunctionalDataAccess();
+
+            var host = builder.Build();
+
+            using (var scope = host.Services.CreateScope())
+            {
+                var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
+
+                try
+                {
+                    scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+                }
+                catch (InvalidOperationException exception)
+                {
+                    logger.LogError(exception, "The Functional Data server cannot start because its connection string was rejected.");
+                    host.Dispose();
+                    throw;
+                }
+            }
+
+            return host;
+        }
+
+        /// <summary>
+        /// Creates the data source of the Functional Data database from the connection string in the host's configuration.
+        /// </summary>
+        /// <param name="configuration">The host's configuration.</param>
+        /// <returns>The data source, which the host's container owns and disposes with the host.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// The connection string is missing or blank, or it is malformed, in which case the Npgsql exception is the inner exception.
+        /// </exception>
+        private static NpgsqlDataSource CreateDataSource(IConfiguration configuration)
+        {
+            var connectionString = configuration.GetConnectionString(FunctionalDataInitializer.ConnectionStringName);
 
             if (string.IsNullOrWhiteSpace(connectionString))
             {
                 throw new InvalidOperationException($"The '{FunctionalDataInitializer.ConnectionStringName}' connection string is required.");
             }
 
-            var dataSource = CreateDataSource(connectionString);
-
-            builder.Services.AddSingleton(_ => dataSource);
-            builder.Services.AddSingleton<IFunctionalDataInitializer, FunctionalDataInitializer>();
-            builder.Services.AddHostedService<FunctionalDataInitializationService>();
-            builder.Services.AddFunctionalDataAccess();
-
-            return builder.Build();
-        }
-
-        /// <summary>
-        /// Creates the data source of the Functional Data database, so that a malformed connection string stops startup before the host is built.
-        /// </summary>
-        /// <param name="connectionString">The connection string to the Functional Data database.</param>
-        /// <returns>The data source, which the host's container owns once it is resolved and disposes with the host.</returns>
-        /// <exception cref="InvalidOperationException">The connection string is malformed; the Npgsql exception is the inner exception.</exception>
-        private static NpgsqlDataSource CreateDataSource(string connectionString)
-        {
             try
             {
                 return NpgsqlDataSource.Create(connectionString);
