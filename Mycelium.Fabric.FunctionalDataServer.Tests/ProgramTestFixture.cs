@@ -43,17 +43,25 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests
             }
 
             Assert.That(() => Program.CreateHost([$"{ConnectionStringArgument}Host=localhost;Password={Secret};UnknownOption=value"]),
-                Throws.ArgumentException.With.Message.Not.Contains(Secret).And.InnerException.Message.Not.Contains(Secret));
+                Throws.TypeOf<InvalidOperationException>().With.Message.Contains($"'{FunctionalDataInitializer.ConnectionStringName}' connection string is malformed")
+                    .And.InnerException.InstanceOf<ArgumentException>().And.InnerException.Message.Not.Contains(Secret));
 
-            using var host = Program.CreateHost([$"{ConnectionStringArgument}Host=localhost;Database=mycelium_functional_data;Password={Secret}"]);
+            NpgsqlDataSource dataSource;
 
-            using (Assert.EnterMultipleScope())
+            using (var host = Program.CreateHost([$"{ConnectionStringArgument}Host=localhost;Port=1;Database=mycelium_functional_data;Password={Secret}"]))
             {
-                Assert.That(host.Services.GetService<NpgsqlDataSource>(), Is.Not.Null);
-                Assert.That(host.Services.GetService<IFunctionalDataInitializer>(), Is.TypeOf<FunctionalDataInitializer>());
-                Assert.That(host.Services.GetServices<IHostedService>().OfType<FunctionalDataInitializationService>().ToList(), Has.Count.EqualTo(1));
-                Assert.That(host.Services.GetService<IDao<IUser>>(), Is.TypeOf<UserDao>());
+                dataSource = host.Services.GetService<NpgsqlDataSource>();
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(dataSource, Is.Not.Null);
+                    Assert.That(host.Services.GetService<IFunctionalDataInitializer>(), Is.TypeOf<FunctionalDataInitializer>());
+                    Assert.That(host.Services.GetServices<IHostedService>().OfType<FunctionalDataInitializationService>().ToList(), Has.Count.EqualTo(1));
+                    Assert.That(host.Services.GetService<IDao<IUser>>(), Is.TypeOf<UserDao>());
+                }
             }
+
+            Assert.That(dataSource.OpenConnection, Throws.TypeOf<ObjectDisposedException>());
         }
     }
 }

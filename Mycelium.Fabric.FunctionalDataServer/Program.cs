@@ -33,8 +33,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
         /// <param name="args">The command-line configuration arguments.</param>
         /// <returns>A task that completes when the host stops.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
-        /// <exception cref="ArgumentException">The connection string is malformed.</exception>
-        /// <exception cref="InvalidOperationException">The connection string is missing, or host construction or database initialization fails.</exception>
+        /// <exception cref="InvalidOperationException">The connection string is missing, blank or malformed, or host construction or database initialization fails.</exception>
         /// <exception cref="OperationCanceledException">Startup or execution is canceled.</exception>
         public static async Task Main(string[] args)
         {
@@ -49,8 +48,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
         /// <param name="args">The command-line configuration arguments.</param>
         /// <returns>The built host.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
-        /// <exception cref="ArgumentException">The connection string is malformed.</exception>
-        /// <exception cref="InvalidOperationException">The connection string is missing or blank, or host construction fails.</exception>
+        /// <exception cref="InvalidOperationException">The connection string is missing, blank or malformed, or host construction fails.</exception>
         internal static IHost CreateHost(string[] args)
         {
             ArgumentNullException.ThrowIfNull(args);
@@ -64,12 +62,32 @@ namespace Mycelium.Fabric.FunctionalDataServer
                 throw new InvalidOperationException($"The '{FunctionalDataInitializer.ConnectionStringName}' connection string is required.");
             }
 
-            builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+            var dataSource = CreateDataSource(connectionString);
+
+            builder.Services.AddSingleton(_ => dataSource);
             builder.Services.AddSingleton<IFunctionalDataInitializer, FunctionalDataInitializer>();
             builder.Services.AddHostedService<FunctionalDataInitializationService>();
             builder.Services.AddFunctionalDataAccess();
 
             return builder.Build();
+        }
+
+        /// <summary>
+        /// Creates the data source of the Functional Data database, so that a malformed connection string stops startup before the host is built.
+        /// </summary>
+        /// <param name="connectionString">The connection string to the Functional Data database.</param>
+        /// <returns>The data source, which the host's container owns once it is resolved and disposes with the host.</returns>
+        /// <exception cref="InvalidOperationException">The connection string is malformed; the Npgsql exception is the inner exception.</exception>
+        private static NpgsqlDataSource CreateDataSource(string connectionString)
+        {
+            try
+            {
+                return NpgsqlDataSource.Create(connectionString);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidOperationException($"The '{FunctionalDataInitializer.ConnectionStringName}' connection string is malformed.", exception);
+            }
         }
     }
 }
