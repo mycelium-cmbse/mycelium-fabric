@@ -28,14 +28,30 @@ namespace Mycelium.Fabric.FunctionalDataServer
     public static class Program
     {
         /// <summary>
-        /// Initializes the Functional Data database and runs the host until shutdown.
+        /// Builds the host, initializes the Functional Data database and runs the host until shutdown.
         /// </summary>
         /// <param name="args">The command-line configuration arguments.</param>
         /// <returns>A task that completes when the host stops.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
+        /// <exception cref="ArgumentException">The connection string is malformed.</exception>
         /// <exception cref="InvalidOperationException">The connection string is missing, or host construction or database initialization fails.</exception>
         /// <exception cref="OperationCanceledException">Startup or execution is canceled.</exception>
         public static async Task Main(string[] args)
+        {
+            using var host = CreateHost(args);
+
+            await host.RunAsync();
+        }
+
+        /// <summary>
+        /// Builds, without starting it, the host with the data source, the awaited database initialization and the Functional Data access registrations.
+        /// </summary>
+        /// <param name="args">The command-line configuration arguments.</param>
+        /// <returns>The built host.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
+        /// <exception cref="ArgumentException">The connection string is malformed.</exception>
+        /// <exception cref="InvalidOperationException">The connection string is missing or blank, or host construction fails.</exception>
+        internal static IHost CreateHost(string[] args)
         {
             ArgumentNullException.ThrowIfNull(args);
 
@@ -53,9 +69,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
             builder.Services.AddHostedService<FunctionalDataInitializationService>();
             builder.Services.AddFunctionalDataAccess();
 
-            using var host = builder.Build();
-
-            await host.RunAsync();
+            return builder.Build();
         }
     }
 }

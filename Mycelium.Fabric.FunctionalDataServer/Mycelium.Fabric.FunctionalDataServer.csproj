@@ -29,4 +29,8 @@
         <ProjectReference Include="../Mycelium.Fabric.Common/Mycelium.Fabric.Common.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="Mycelium.Fabric.FunctionalDataServer.Tests" />
+    </ItemGroup>
+
 </Project>
