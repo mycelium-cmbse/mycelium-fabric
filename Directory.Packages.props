@@ -15,6 +15,7 @@
         <PackageVersion Include="ErrorOr" Version="2.1.1" />
         <PackageVersion Include="Google.OrTools" Version="9.15.6755" />
         <PackageVersion Include="MessagePack" Version="3.1.12" />
+        <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
         <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
         <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
         <PackageVersion Include="ModelContextProtocol" Version="2.3.0" />

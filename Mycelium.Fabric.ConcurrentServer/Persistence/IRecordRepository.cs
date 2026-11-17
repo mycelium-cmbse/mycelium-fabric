@@ -47,6 +47,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         /// <returns>
         /// The outcome of the operation, or the errors that prevented it.
         /// </returns>
+        /// <remarks>
+        /// A record that breaks a uniqueness rule of the store, such as the name of a live branch, tag or query within its project, is an
+        /// <see cref="ErrorType.Conflict"/> error, so that two concurrent creations cannot both succeed.
+        /// </remarks>
         Task<ErrorOr<TRecord>> CreateAsync(IDataStoreTransaction transaction, TRecord record, CancellationToken cancellationToken);
 
         /// <summary>
