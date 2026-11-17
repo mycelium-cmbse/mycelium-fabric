@@ -29,7 +29,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     [TestFixture]
     public class FunctionalDataInitializerTestFixture
     {
-        private const string UnusedConnectionString = "Host=localhost;Database=mycelium_functional_data";
+        private const string Secret = "sensitive-test-value";
+
+        private const string UnusedConnectionString = $"Host=localhost;Database=mycelium_functional_data;Password={Secret}";
 
         private NpgsqlDataSource dataSource;
 
@@ -94,10 +96,16 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             var failingInitializer = new FunctionalDataInitializer(this.dataSource, CreateConfiguration(null), logger.Object);
 
             Assert.That(() => failingInitializer.InitializeAsync(CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.InnerException.InstanceOf<ObjectDisposedException>());
+                Throws.TypeOf<InvalidOperationException>().With.Message.Not.Contains(Secret)
+                    .And.InnerException.InstanceOf<ObjectDisposedException>().And.InnerException.Message.Not.Contains(Secret));
 
             logger.VerifyLogged(LogLevel.Debug, "opening the Functional Data database", Times.Once());
             logger.VerifyLogged(LogLevel.Error, "Functional Data initialization failed.", Times.Once());
+
+            foreach (var level in Enum.GetValues<LogLevel>())
+            {
+                logger.VerifyLogged(level, Secret, Times.Never());
+            }
         }
 
         private static IConfiguration CreateConfiguration(string timeout)
