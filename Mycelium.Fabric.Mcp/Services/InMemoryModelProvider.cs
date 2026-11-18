@@ -18,6 +18,8 @@ namespace Mycelium.Fabric.Mcp.Services
     using ModelContextProtocol;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Expressions;
+    using Mycelium.Fabric.Mcp.Extensions;
 
     using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Core.Types;
@@ -69,6 +71,11 @@ namespace Mycelium.Fabric.Mcp.Services
         private readonly IDeSerializer deSerializer;
 
         /// <summary>
+        /// The <see cref="IStandardLibrary"/> whose elements the model can reference.
+        /// </summary>
+        private readonly IStandardLibrary standardLibrary;
+
+        /// <summary>
         /// The lock that prevents two commits, or a commit and a load, from modifying the model at the same time.
         /// </summary>
         private readonly Lock modelLock = new();
@@ -91,20 +98,30 @@ namespace Mycelium.Fabric.Mcp.Services
         private Guid headCommitId = Guid.Empty;
 
         /// <summary>
+        /// The units of the loaded model, read the first time that they are used.
+        /// </summary>
+        private Lazy<LibraryUnits> units;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="InMemoryModelProvider"/> class.
         /// </summary>
         /// <param name="changeApplier">The <see cref="IModelChangeApplier"/> that turns a batch of changes into a commit.</param>
         /// <param name="deSerializer">The <see cref="IDeSerializer"/> that reads the DTOs of a model file.</param>
+        /// <param name="standardLibrary">The <see cref="IStandardLibrary"/> whose elements the model can reference.</param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="changeApplier"/> or <paramref name="deSerializer"/> is <c>null</c>.
+        /// Thrown when <paramref name="changeApplier"/>, <paramref name="deSerializer"/> or <paramref name="standardLibrary"/>
+        /// is <c>null</c>.
         /// </exception>
-        public InMemoryModelProvider(IModelChangeApplier changeApplier, IDeSerializer deSerializer)
+        public InMemoryModelProvider(IModelChangeApplier changeApplier, IDeSerializer deSerializer, IStandardLibrary standardLibrary)
         {
             ArgumentNullException.ThrowIfNull(changeApplier);
             ArgumentNullException.ThrowIfNull(deSerializer);
+            ArgumentNullException.ThrowIfNull(standardLibrary);
 
             this.changeApplier = changeApplier;
             this.deSerializer = deSerializer;
+            this.standardLibrary = standardLibrary;
+            this.units = new Lazy<LibraryUnits>(() => this.standardLibrary.Units);
         }
 
         /// <summary>
@@ -122,6 +139,13 @@ namespace Mycelium.Fabric.Mcp.Services
         /// list rather than modifying it, so that a reader keeps a consistent model.
         /// </summary>
         public IReadOnlyList<DtoElement> ElementDtos { get; private set; } = [];
+
+        /// <summary>
+        /// Gets the units of the loaded model: the units that its libraries declare, and the units of the standard library. A
+        /// name that a library of the model gives hides the standard library. Read once per version of the model, the first
+        /// time that they are used, which waits for the end of the loading of the standard library.
+        /// </summary>
+        public LibraryUnits Units => this.units.Value;
 
         /// <summary>
         /// Loads the model stored at the given location, replacing the model loaded before.
@@ -294,8 +318,23 @@ namespace Mycelium.Fabric.Mcp.Services
         /// </exception>
         public IElement GetRequiredElementById(Guid elementId)
         {
-            return this.GetElementById(elementId)
-                ?? throw new McpException($"No element has the identifier '{elementId}'. Use find_elements_by_name or list_children to get a valid identifier.");
+            return this.GetElementById(elementId) ?? throw CreateUnknownIdentifierException(elementId);
+        }
+
+        /// <summary>
+        /// Gets the element of the loaded model, or else of the standard library, that has the given identifier, or fails with
+        /// a message the AI assistant can act on. Only the tools that show an element use the library: the others work on the
+        /// model alone.
+        /// </summary>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
+        /// <returns>The <see cref="IElement"/> that has the given identifier.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when neither the loaded model nor the standard library contains such an element. Unlike other exceptions,
+        /// the message of an <see cref="McpException"/> is sent back to the AI assistant.
+        /// </exception>
+        public IElement GetRequiredModelOrLibraryElementById(Guid elementId)
+        {
+            return this.GetElementById(elementId) ?? this.standardLibrary.Elements.GetValueOrDefault(elementId) ?? throw CreateUnknownIdentifierException(elementId);
         }
 
         /// <summary>
@@ -309,6 +348,16 @@ namespace Mycelium.Fabric.Mcp.Services
             return new HashSet<string>(elements.OfType<IRequirementUsage>().Select(requirement => requirement.ReqId)
                 .Concat(elements.OfType<IRequirementDefinition>().Select(requirement => requirement.ReqId))
                 .Where(identifier => !string.IsNullOrWhiteSpace(identifier)), StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// Creates the exception that tells the AI assistant that no element has an identifier.
+        /// </summary>
+        /// <param name="elementId">The unknown <c>Id</c>.</param>
+        /// <returns>The <see cref="McpException"/>, whose message is sent back to the AI assistant.</returns>
+        private static McpException CreateUnknownIdentifierException(Guid elementId)
+        {
+            return new McpException($"No element has the identifier '{elementId}'. Use find_elements_by_name or list_children to get a valid identifier.");
         }
 
         /// <summary>
@@ -416,18 +465,19 @@ namespace Mycelium.Fabric.Mcp.Services
         }
 
         /// <summary>
-        /// Builds, with SysML2.NET, the POCOs of the elements of a model from their DTOs.
+        /// Builds, with SysML2.NET, the POCOs of the elements of a model from their DTOs. The named elements of the standard
+        /// library are given to the assembler first, so that the references of the model to the library are resolved, but
+        /// they are neither rebuilt nor returned.
         /// </summary>
         /// <param name="dtos">The DTOs of the model.</param>
-        /// <returns>The elements of the model.</returns>
-        private static List<IElement> BuildElements(List<DtoElement> dtos)
+        /// <returns>The elements of the model, in the order of their DTOs.</returns>
+        private List<IElement> BuildElements(List<DtoElement> dtos)
         {
             var assembler = new Assembler();
+            assembler.AddElements(this.standardLibrary.NamedElements.Values, dtos);
             assembler.Synchronize(dtos);
 
-            return assembler.Cache.Values
-                .Select(lazyElement => lazyElement.Value)
-                .ToList();
+            return [.. dtos.Select(dto => assembler.Cache[dto.Id].Value)];
         }
 
         /// <summary>
@@ -510,6 +560,9 @@ namespace Mycelium.Fabric.Mcp.Services
             this.Elements = loadedElements;
             this.RootElements = loadedRootElements;
             this.elementsById = loadedElementsById;
+
+            // Read on first use, once per version of the model, since most commits are followed by no conversion of units.
+            this.units = new Lazy<LibraryUnits>(() => LibraryUnits.Read(loadedElements, this.standardLibrary.Units));
         }
     }
 }

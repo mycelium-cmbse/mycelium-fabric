@@ -17,6 +17,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
 
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Options;
 
     using ModelContextProtocol.Extensions.Apps;
@@ -29,12 +30,16 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Documents;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.TradeOff;
     using Mycelium.Fabric.Mcp.Validation;
     using Mycelium.Fabric.Mcp.Validation.Rules;
 
     using SysML2.NET.Serializer.Json;
+
+    using IModelLibraryLoader = SysML2.NET.Serializer.Xmi.IModelLibraryLoader;
+    using ModelLibraryLoader = SysML2.NET.Serializer.Xmi.ModelLibraryLoader;
 
     /// <summary>
     /// Suite of tests for the <see cref="ServiceCollectionExtensions"/> class.
@@ -87,6 +92,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var planStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConstructionPlanStore)).ToList();
             var proposalStoreRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IRequirementProposalStore)).ToList();
             var appHostDetectorRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IAppHostDetector)).ToList();
+            var libraryOptionsRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IConfigureOptions<StandardLibraryOptions>)).ToList();
+            var libraryLoaderRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IModelLibraryLoader)).ToList();
+            var libraryRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IStandardLibrary)).ToList();
+            var warmUpRegistrations = services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(StandardLibraryWarmUp)).ToList();
 
             using (Assert.EnterMultipleScope())
             {
@@ -134,17 +143,31 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
                 Assert.That(proposalStoreRegistrations[0].ImplementationType, Is.EqualTo(typeof(RequirementProposalStore)));
                 Assert.That(appHostDetectorRegistrations, Has.Count.EqualTo(1));
                 Assert.That(appHostDetectorRegistrations[0].ImplementationType, Is.EqualTo(typeof(AppHostDetector)));
+                Assert.That(libraryOptionsRegistrations, Has.Count.EqualTo(1));
+                Assert.That(libraryLoaderRegistrations, Has.Count.EqualTo(1));
+                Assert.That(libraryLoaderRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(libraryRegistrations, Has.Count.EqualTo(1));
+                Assert.That(libraryRegistrations[0].Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(warmUpRegistrations, Has.Count.EqualTo(1));
             }
 
             var dataDirectory = Path.Combine(TestContext.CurrentContext.TestDirectory, "Data");
             var absoluteExportDirectory = Path.Combine(Path.GetTempPath(), "mycelium-exports");
             var absoluteDocumentDirectory = Path.Combine(Path.GetTempPath(), "mycelium-documents");
+            var absoluteLibraryDirectory = Path.Combine(Path.GetTempPath(), "mycelium-library");
 
             var serviceProvider = new Mock<IServiceProvider>();
             serviceProvider.Setup(provider => provider.GetService(typeof(IModelChangeApplier))).Returns(new Mock<IModelChangeApplier>().Object);
             serviceProvider.Setup(provider => provider.GetService(typeof(IDeSerializer))).Returns(new DeSerializer());
             serviceProvider.Setup(provider => provider.GetService(typeof(ISerializer))).Returns(new Mock<ISerializer>().Object);
             serviceProvider.Setup(provider => provider.GetService(typeof(IEnumerable<IDocumentParser>))).Returns(documentParsers);
+            serviceProvider.Setup(provider => provider.GetService(typeof(IStandardLibrary))).Returns(StandardLibraryHelper.Empty);
+            serviceProvider.Setup(provider => provider.GetService(typeof(IModelLibraryLoader))).Returns(new Mock<IModelLibraryLoader>().Object);
+
+            serviceProvider.SetupSequence(provider => provider.GetService(typeof(IOptions<StandardLibraryOptions>)))
+                .Returns(Options.Create(new StandardLibraryOptions()))
+                .Returns(Options.Create(new StandardLibraryOptions { LibraryDirectory = "Libraries" }))
+                .Returns(Options.Create(new StandardLibraryOptions { LibraryDirectory = absoluteLibraryDirectory }));
 
             serviceProvider.SetupSequence(provider => provider.GetService(typeof(IOptions<ModelExportOptions>)))
                 .Returns(Options.Create(new ModelExportOptions()))
@@ -163,9 +186,17 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
             var defaultReader = documentReaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
             var relativeReader = (DocumentReader)documentReaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
             var absoluteReader = (DocumentReader)documentReaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var libraryLoader = libraryLoaderRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var defaultLibrary = (StandardLibrary)libraryRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var relativeLibrary = (StandardLibrary)libraryRegistrations[0].ImplementationFactory(serviceProvider.Object);
+            var absoluteLibrary = (StandardLibrary)libraryRegistrations[0].ImplementationFactory(serviceProvider.Object);
 
             using (Assert.EnterMultipleScope())
             {
+                Assert.That(libraryLoader, Is.InstanceOf<ModelLibraryLoader>());
+                Assert.That(defaultLibrary.LibraryDirectory.LocalPath, Is.EqualTo(Path.Combine(AppContext.BaseDirectory, "StandardLibrary")));
+                Assert.That(relativeLibrary.LibraryDirectory.LocalPath, Is.EqualTo(Path.Combine(AppContext.BaseDirectory, "Libraries")));
+                Assert.That(absoluteLibrary.LibraryDirectory.LocalPath, Is.EqualTo(absoluteLibraryDirectory));
                 Assert.That(modelProvider, Is.InstanceOf<InMemoryModelProvider>());
                 Assert.That(((IModelProvider)modelProvider).Elements, Has.Count.EqualTo(548));
                 Assert.That(defaultExporter, Is.InstanceOf<JsonModelExporter>());

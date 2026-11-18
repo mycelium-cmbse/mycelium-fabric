@@ -41,7 +41,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         /// <exception cref="InvalidOperationException">Thrown when the changes are refused.</exception>
         public static InMemoryModelProvider CreateModel()
         {
-            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
             var result = modelProvider.ApplyChanges(CreateChanges());

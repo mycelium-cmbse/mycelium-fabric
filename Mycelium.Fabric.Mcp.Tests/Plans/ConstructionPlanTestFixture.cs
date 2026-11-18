@@ -17,6 +17,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Plans
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Plans;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Serializer.Json;
 
@@ -50,7 +51,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Plans
         [SetUp]
         public void SetUp()
         {
-            this.modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            this.modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             this.modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
             var result = this.modelProvider.ApplyChanges(

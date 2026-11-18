@@ -118,7 +118,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [SetUp]
         public void SetUp()
         {
-            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
+            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer(), StandardLibraryHelper.Empty);
             this.modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             this.solver = new Mock<ITradeOffSolver>();
             this.appHostDetector = new Mock<IAppHostDetector>();
@@ -183,7 +183,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void VerifySolveTradeOffWithUnits()
         {
-            var unitProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var unitProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             unitProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             var massMemoryId = unitProvider.Elements.Single(element => element.DeclaredName == "massMemory").Id;
             var payloadSubsystemId = Guid.Parse("95a8c184-a12e-1125-c0ee-bbe7a025de5b");

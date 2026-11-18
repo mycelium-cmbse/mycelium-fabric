@@ -22,6 +22,7 @@ namespace Mycelium.Fabric.Mcp.Tools
 
     using SysML2.NET.Core.POCO.Core.Types;
     using SysML2.NET.Core.POCO.Kernel.Connectors;
+    using SysML2.NET.Core.POCO.Root.Dependencies;
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Core.POCO.Systems.Actions;
     using SysML2.NET.Core.POCO.Systems.DefinitionAndUsage;
@@ -146,21 +147,22 @@ namespace Mycelium.Fabric.Mcp.Tools
         }
 
         /// <summary>
-        /// Gives the details of the element that has the given identifier.
+        /// Gives the details of the element of the model, or of the standard library, that has the given identifier.
         /// </summary>
         /// <param name="elementId">The <c>Id</c> of the element.</param>
         /// <returns>The <see cref="ElementDetails"/> of the element.</returns>
         /// <exception cref="McpException">
-        /// Thrown when no element of the model has the given identifier.
+        /// Thrown when no element of the model or of the standard library has the given identifier.
         /// </exception>
         [McpServerTool(Name = "get_element_details", ReadOnly = true)]
         [Description("Gives the details of an element from its identifier: type, name, short name, qualified name, owner, number of children, documentation, "
             + "the ends of a connector (connections, interfaces, bindings, allocations, successions, flows) or of a transition (source then target), the connectors that connect the element or one of its ports, "
-            + "the elements it specializes (:>), for a PerformActionUsage the performed action, and the multiplicity of a usage ([4]).")]
+            + "the elements it specializes (:>), for a PerformActionUsage the performed action, the multiplicity of a usage ([4]), "
+            + "the elements it refines and the elements that refine it (#refinement dependencies). An element of the standard library, such as ISQ::MassValue, opens by its identifier too.")]
         [return: Description("The details of the element, including the identifier of its owner to navigate up the model.")]
         public ElementDetails GetElementDetails([Description("The identifier (Id, a GUID) of the element, as returned by the other tools.")] Guid elementId)
         {
-            var element = this.modelProvider.GetRequiredElementById(elementId);
+            var element = this.modelProvider.GetRequiredModelOrLibraryElementById(elementId);
 
             var connections = this.modelProvider.Elements
                 .OfType<IConnector>()
@@ -170,10 +172,22 @@ namespace Mycelium.Fabric.Mcp.Tools
 
             var specializes = (element as IType)?.GetSpecializedElements().Select(general => general.qualifiedName).ToList();
 
+            var refinements = this.modelProvider.Elements
+                .OfType<IDependency>()
+                .Where(dependency => dependency.IsRefinement())
+                .ToList();
+
+            var refines = refinements.Where(refinement => refinement.Client.Contains(element)).SelectMany(refinement => refinement.Supplier).Select(supplier => supplier.qualifiedName).Distinct().ToList();
+            var refinedBy = refinements.Where(refinement => refinement.Supplier.Contains(element)).SelectMany(refinement => refinement.Client).Select(client => client.qualifiedName).Distinct().ToList();
+
             return new ElementDetails(element.Id, element.name, element.DeclaredShortName, element.DescribeType(), element.qualifiedName,
                 element.owner?.Id, element.owner?.name, element.ownedElement?.Count ?? 0, element.GetDocumentationBodies(),
                 (element as IConnector)?.GetEndPaths() ?? (element as ITransitionUsage)?.GetEndPaths(), connections.Count == 0 ? null : connections, specializes is { Count: > 0 } ? specializes : null,
-                (element as IPerformActionUsage)?.performedAction?.qualifiedName, (element as IUsage)?.DescribeMultiplicity());
+                (element as IPerformActionUsage)?.performedAction?.qualifiedName, (element as IUsage)?.DescribeMultiplicity())
+            {
+                Refines = refines.Count == 0 ? null : refines,
+                RefinedBy = refinedBy.Count == 0 ? null : refinedBy
+            };
         }
 
         /// <summary>

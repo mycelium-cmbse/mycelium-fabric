@@ -44,20 +44,29 @@ namespace Mycelium.Fabric.Mcp.Tools
         private readonly IModelValidator modelValidator;
 
         /// <summary>
+        /// The <see cref="IStandardLibrary"/> whose loading problems the report gives.
+        /// </summary>
+        private readonly IStandardLibrary standardLibrary;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ValidationTools"/> class.
         /// </summary>
         /// <param name="modelProvider">The <see cref="IModelProvider"/> that gives access to the model.</param>
         /// <param name="modelValidator">The <see cref="IModelValidator"/> that checks the model.</param>
+        /// <param name="standardLibrary">The <see cref="IStandardLibrary"/> whose loading problems the report gives.</param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="modelProvider"/> or <paramref name="modelValidator"/> is <c>null</c>.
+        /// Thrown when <paramref name="modelProvider"/>, <paramref name="modelValidator"/> or <paramref name="standardLibrary"/>
+        /// is <c>null</c>.
         /// </exception>
-        public ValidationTools(IModelProvider modelProvider, IModelValidator modelValidator)
+        public ValidationTools(IModelProvider modelProvider, IModelValidator modelValidator, IStandardLibrary standardLibrary)
         {
             ArgumentNullException.ThrowIfNull(modelProvider);
             ArgumentNullException.ThrowIfNull(modelValidator);
+            ArgumentNullException.ThrowIfNull(standardLibrary);
 
             this.modelProvider = modelProvider;
             this.modelValidator = modelValidator;
+            this.standardLibrary = standardLibrary;
         }
 
         /// <summary>
@@ -83,7 +92,8 @@ namespace Mycelium.Fabric.Mcp.Tools
             + "Choose the rules to check when the user asks about some points only, for example requirement-without-id and requirement-without-constraint for the requirements. "
             + "The result lists every rule checked with its description and number of issues. Call it after building or changing the model, or when the user asks whether the model is valid, instead of judging the model yourself. "
             + "For a general question about the model (is it ready, is it healthy, what is wrong with it), call check_requirements first, then this tool: when the host shows MCP Apps, the view of check_requirements shows the results of both. "
-            + "The results are paged: when nextOffset is not null, call the tool again with this offset to get the next page.")]
+            + "The results are paged: when nextOffset is not null, call the tool again with this offset to get the next page. "
+            + "When the SysML v2 standard library could not be loaded, libraryProblems tells why: the model cannot use its elements (quantities, units, the Refinement metadata) until the server is fixed.")]
         [return: Description("The number of checked elements and of issues of each severity, each checked rule with its severity, description and number of issues, the number of issues that match the filters, one page of them with their rule, severity, element identifier and name, and message, and the offset of the next page (null on the last page).")]
         public ValidationReport ValidateModel([Description("Optional: the identifier (Id, a GUID) of an element, for example a subsystem, to check only this element and the elements it owns. Without it, the whole model is checked.")] Guid? elementId = null,
             [Description("Optional: the least serious severity to return: Error for the errors only, Warning for the errors and the warnings. Without it, all the issues are returned.")] ValidationSeverity? severity = null,
@@ -137,8 +147,13 @@ namespace Mycelium.Fabric.Mcp.Tools
                 .Select(validationRule => new RuleSummary(validationRule.Name, validationRule.Severity, validationRule.Description, ruleCounts.GetValueOrDefault(validationRule.Name)))
                 .ToList();
 
+            var libraryProblems = this.standardLibrary.Problems;
+
             return new ValidationReport(checkedElementIds?.Count ?? elements.Count, severityCounts.GetValueOrDefault(ValidationSeverity.Error), severityCounts.GetValueOrDefault(ValidationSeverity.Warning),
-                severityCounts.GetValueOrDefault(ValidationSeverity.Information), ruleSummaries, matches.Count, page, nextOffset);
+                severityCounts.GetValueOrDefault(ValidationSeverity.Information), ruleSummaries, matches.Count, page, nextOffset)
+            {
+                LibraryProblems = libraryProblems.Count == 0 ? null : libraryProblems
+            };
         }
 
         /// <summary>

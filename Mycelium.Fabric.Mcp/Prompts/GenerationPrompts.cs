@@ -101,8 +101,10 @@ namespace Mycelium.Fabric.Mcp.Prompts
             - Analyses: an AnalysisCaseDefinition each; calculations: a CalculationDefinition each; with their description.
             - A requirement satisfied by an operation, a function or an interface: a SatisfyRequirementUsage whose
               satisfyingPart is the ActionUsage or the InterfaceUsage.
-            - A relation that apply_changes cannot create yet, such as a refinement, goes in the documentation of its source
-              element ('Refines: HLR-R001.'), so that it is not lost.
+            - A requirement that refines another one (the specification says "refines HLR-R001", or a lower-level
+              requirement details a higher-level one): a Dependency with isRefinement true, clients: the refining
+              requirement, suppliers: the refined one (clients ['FLR-R001'], suppliers ['HLR-R001']), in the batch that
+              creates them or a later one. Any other element that refines another one is linked the same way.
 
             Modelling rules:
             - Two members of a package cannot have the same name: name a usage differently from its definition

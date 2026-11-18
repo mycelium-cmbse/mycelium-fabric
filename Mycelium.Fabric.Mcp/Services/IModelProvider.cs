@@ -15,6 +15,7 @@ namespace Mycelium.Fabric.Mcp.Services
     using ModelContextProtocol;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Expressions;
 
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.PSM.DTO;
@@ -53,6 +54,13 @@ namespace Mycelium.Fabric.Mcp.Services
         IReadOnlyList<DtoElement> ElementDtos { get; }
 
         /// <summary>
+        /// Gets the units of the loaded model: the units that its libraries declare, and the units of the standard library
+        /// (see <see cref="IStandardLibrary.Units"/>). A name that a library of the model gives hides the standard library.
+        /// Waits for the end of the loading of the standard library.
+        /// </summary>
+        LibraryUnits Units { get; }
+
+        /// <summary>
         /// Loads the model stored at the given location, replacing the model loaded before.
         /// </summary>
         /// <param name="modelPath">The <see cref="Uri"/> of the JSON file that contains the model.</param>
@@ -85,6 +93,19 @@ namespace Mycelium.Fabric.Mcp.Services
         /// <see cref="McpException"/> is sent back to the AI assistant.
         /// </exception>
         IElement GetRequiredElementById(Guid elementId);
+
+        /// <summary>
+        /// Gets the element of the loaded model, or else of the standard library, that has the given identifier, or fails with
+        /// a message the AI assistant can act on. Only the tools that show an element use the library: the others work on the
+        /// model alone.
+        /// </summary>
+        /// <param name="elementId">The <c>Id</c> of the element.</param>
+        /// <returns>The <see cref="IElement"/> that has the given identifier.</returns>
+        /// <exception cref="McpException">
+        /// Thrown when neither the loaded model nor the standard library contains such an element. Unlike other exceptions,
+        /// the message of an <see cref="McpException"/> is sent back to the AI assistant.
+        /// </exception>
+        IElement GetRequiredModelOrLibraryElementById(Guid elementId);
 
         /// <summary>
         /// Gets the identifiers of the requirements of the loaded model: the <c>reqId</c> of its requirement definitions and usages.

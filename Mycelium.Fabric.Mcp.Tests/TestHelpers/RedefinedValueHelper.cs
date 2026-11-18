@@ -97,7 +97,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
                     new Serializer().Serialize(CreateDtos(), SerializationModeKind.JSON, false, stream, new JsonWriterOptions());
                 }
 
-                var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+                var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
                 modelProvider.LoadModel(new Uri(path));
 
                 return modelProvider;

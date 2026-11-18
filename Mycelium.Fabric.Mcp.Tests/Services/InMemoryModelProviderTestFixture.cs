@@ -13,6 +13,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
 
     using ErrorOr;
 
@@ -24,6 +25,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
+    using SysML2.NET.Core.POCO.Core.Features;
     using SysML2.NET.Core.POCO.Root.Namespaces;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -32,6 +34,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     using DtoDocumentation = SysML2.NET.Core.DTO.Root.Annotations.Documentation;
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
     using DtoFeatureMembership = SysML2.NET.Core.DTO.Core.Types.FeatureMembership;
+    using DtoFeatureTyping = SysML2.NET.Core.DTO.Core.Features.FeatureTyping;
     using DtoNamespace = SysML2.NET.Core.DTO.Root.Namespaces.Namespace;
     using DtoOwningMembership = SysML2.NET.Core.DTO.Root.Namespaces.OwningMembership;
     using DtoPartUsage = SysML2.NET.Core.DTO.Systems.Parts.PartUsage;
@@ -47,6 +50,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
     public class InMemoryModelProviderTestFixture
     {
         private static readonly string[] SatelliteRequirementIds = ["REQ-SYS-001", "REQ-SYS-002", "REQ-SYS-003", "REQ-SYS-004", "REQ-SYS-005", "REQ-SYS-006"];
+
+        private static readonly string[] MassValueQualifiedNames = ["ISQBase::MassValue"];
 
         /// <summary>
         /// The <c>Id</c> of the <c>payloadSubsystem</c> part in <c>Satellite.json</c>.
@@ -81,7 +86,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.emptyModelPath = new Uri(Path.Combine(this.dataDirectory, "Empty.json"));
 
             this.changeApplier = new Mock<IModelChangeApplier>();
-            this.modelProvider = new InMemoryModelProvider(this.changeApplier.Object, new DeSerializer());
+            this.modelProvider = new InMemoryModelProvider(this.changeApplier.Object, new DeSerializer(), StandardLibraryHelper.Empty);
         }
 
         [Test]
@@ -89,8 +94,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new InMemoryModelProvider(null, new DeSerializer()), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new InMemoryModelProvider(this.changeApplier.Object, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new InMemoryModelProvider(null, new DeSerializer(), StandardLibraryHelper.Empty), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new InMemoryModelProvider(this.changeApplier.Object, null, StandardLibraryHelper.Empty), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new InMemoryModelProvider(this.changeApplier.Object, new DeSerializer(), null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
                 Assert.That(this.modelProvider.RootElements, Has.Count.EqualTo(0));
                 Assert.That(this.modelProvider.ElementDtos, Has.Count.EqualTo(0));
@@ -123,6 +129,19 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.LoadModel(this.emptyModelPath);
 
             Assert.That(this.modelProvider.Elements, Has.Count.EqualTo(0));
+
+            // An attribute of the model typed by a quantity of the standard library: the type is resolved, but the elements
+            // of the library are not elements of the model.
+            var (libraryTypedModel, attributeId) = CreateLibraryTypedModel();
+            var attribute = (IFeature)libraryTypedModel.GetElementById(attributeId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(libraryTypedModel.Elements, Has.Count.EqualTo(libraryTypedModel.ElementDtos.Count));
+                Assert.That(libraryTypedModel.Elements.Select(element => element.Id), Does.Not.Contain(StandardLibraryHelper.RefinementId));
+                Assert.That(libraryTypedModel.RootElements, Has.Count.EqualTo(1));
+                Assert.That(attribute.type.Select(type => type.qualifiedName), Is.EqualTo(MassValueQualifiedNames));
+            }
         }
 
         [Test]
@@ -202,6 +221,11 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.LoadModel(this.emptyModelPath);
 
             Assert.That(this.modelProvider.GetElementById(PayloadSubsystemId), Is.Null);
+
+            // The tools that work on the model alone do not find an element of the standard library.
+            var (libraryTypedModel, _) = CreateLibraryTypedModel();
+
+            Assert.That(libraryTypedModel.GetElementById(StandardLibraryHelper.RefinementId), Is.Null);
         }
 
         [Test]
@@ -210,11 +234,32 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.LoadModel(this.satelliteModelPath);
 
             var unknownId = Guid.NewGuid();
+            var (libraryTypedModel, _) = CreateLibraryTypedModel();
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(() => this.modelProvider.GetRequiredElementById(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
                 Assert.That(this.modelProvider.GetRequiredElementById(PayloadSubsystemId).DeclaredName, Is.EqualTo("payloadSubsystem"));
+                Assert.That(() => libraryTypedModel.GetRequiredElementById(StandardLibraryHelper.MassValueId), Throws.TypeOf<McpException>());
+            }
+        }
+
+        [Test]
+        public void VerifyGetRequiredModelOrLibraryElementById()
+        {
+            this.modelProvider.LoadModel(this.satelliteModelPath);
+
+            var unknownId = Guid.NewGuid();
+            var (libraryTypedModel, _) = CreateLibraryTypedModel();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => libraryTypedModel.GetRequiredModelOrLibraryElementById(unknownId), Throws.TypeOf<McpException>().With.Message.Contains(unknownId.ToString()));
+                Assert.That(this.modelProvider.GetRequiredModelOrLibraryElementById(PayloadSubsystemId).DeclaredName, Is.EqualTo("payloadSubsystem"));
+
+                // An element of the standard library is found when the model has none with its identifier.
+                Assert.That(libraryTypedModel.GetRequiredModelOrLibraryElementById(StandardLibraryHelper.RefinementId).qualifiedName, Is.EqualTo("ModelingMetadata::Refinement"));
+                Assert.That(() => this.modelProvider.GetRequiredModelOrLibraryElementById(StandardLibraryHelper.RefinementId), Throws.TypeOf<McpException>());
             }
         }
 
@@ -280,7 +325,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             // connector; the ends of an interface definition are.
             this.modelProvider.LoadModel(this.satelliteModelPath);
             var connectionChanges = ConnectionChangesHelper.CreateChanges();
-            var connectionCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(this.modelProvider.ElementDtos, connectionChanges, new Dictionary<string, Guid>()).Value;
+            var connectionCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(this.modelProvider.ElementDtos, connectionChanges, new Dictionary<string, Guid>()).Value;
             this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), connectionChanges, It.IsAny<Dictionary<string, Guid>>())).Returns(connectionCommitRequest);
 
             var connectionResult = this.modelProvider.ApplyChanges(connectionChanges);
@@ -302,7 +347,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             // The states, transitions, actions of the states and flows are created elements, but not the triggers, guards and
             // effects of the transitions, nor the ends of the flows and their features.
             var behaviourChanges = BehaviourChangesHelper.CreateChanges();
-            var behaviourCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(this.modelProvider.ElementDtos, behaviourChanges, new Dictionary<string, Guid>()).Value;
+            var behaviourCommitRequest = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(this.modelProvider.ElementDtos, behaviourChanges, new Dictionary<string, Guid>()).Value;
             this.changeApplier.Setup(applier => applier.Apply(It.IsAny<IReadOnlyCollection<DtoElement>>(), behaviourChanges, It.IsAny<Dictionary<string, Guid>>())).Returns(behaviourCommitRequest);
 
             var behaviourResult = this.modelProvider.ApplyChanges(behaviourChanges);
@@ -369,12 +414,27 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             this.modelProvider.ApplyChanges(afterLoad);
 
             Assert.That(seenNames, Is.EqualTo(new[] { Array.Empty<string>(), ["pkg"], ["pkg"], Array.Empty<string>() }));
+
+            // A batch applied to a model that references the standard library: the reference stays resolved, and the library
+            // stays out of the model.
+            var (libraryTypedModel, attributeId) = CreateLibraryTypedModel();
+            var elementCount = libraryTypedModel.Elements.Count;
+            var libraryResult = libraryTypedModel.ApplyChanges([new ModelChange { Identity = CameraId.ToString(), Payload = new ElementPayload { Name = "mainCamera" } }]);
+            var attribute = (IFeature)libraryTypedModel.GetElementById(attributeId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(libraryResult.Applied, Is.True);
+                Assert.That(libraryTypedModel.Elements, Has.Count.EqualTo(elementCount));
+                Assert.That(attribute.qualifiedName, Is.EqualTo("EOSat1::Architecture::eosat1::payloadSubsystem::mainCamera::nominalMass"));
+                Assert.That(attribute.type.Select(type => type.qualifiedName), Is.EqualTo(MassValueQualifiedNames));
+            }
         }
 
         [Test]
         public void VerifyPreviewChanges()
         {
-            var provider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var provider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             Assert.That(() => provider.PreviewChanges(null), Throws.TypeOf<ArgumentNullException>());
 
             provider.LoadModel(this.satelliteModelPath);
@@ -534,6 +594,39 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
             camera.DeclaredName = "mainCamera";
 
             return camera;
+        }
+
+        /// <summary>
+        /// Loads, with the real standard library, EOSat-1 where the camera has an attribute <c>nominalMass</c> typed by the
+        /// <c>MassValue</c> quantity of the library.
+        /// </summary>
+        /// <returns>The <see cref="InMemoryModelProvider"/> that holds the model, and the <c>Id</c> of the attribute.</returns>
+        private static (InMemoryModelProvider ModelProvider, Guid AttributeId) CreateLibraryTypedModel()
+        {
+            var dtos = ModelDtoHelper.ReadSatelliteDtos();
+            var attribute = new ConstraintDtoBuilder(dtos).Attribute(CameraId, "nominalMass");
+            var typing = new DtoFeatureTyping { Id = Guid.NewGuid(), TypedFeature = attribute.Id, Type = StandardLibraryHelper.MassValueId, OwningRelatedElement = attribute.Id };
+            attribute.OwnedRelationship.Add(typing.Id);
+            dtos.Add(typing);
+
+            var path = Path.Combine(Path.GetTempPath(), $"library-typed-{Guid.NewGuid()}.json");
+
+            try
+            {
+                using (var stream = File.Create(path))
+                {
+                    new Serializer().Serialize(dtos, SerializationModeKind.JSON, false, stream, new JsonWriterOptions());
+                }
+
+                var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Loaded), new DeSerializer(), StandardLibraryHelper.Loaded);
+                modelProvider.LoadModel(new Uri(path));
+
+                return (modelProvider, attribute.Id);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
     }
 }

@@ -21,6 +21,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Tools;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Serializer.Json;
 
@@ -109,7 +110,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             {
                 Assert.That(GetObjectSchemas(strictSchema).Select(objectSchema => objectSchema.GetProperty("required").GetArrayLength()),
                     Is.EqualTo(GetObjectSchemas(strictSchema).Select(objectSchema => objectSchema.GetProperty("properties").EnumerateObject().Count())));
-                Assert.That(optionalProperties, Has.Count.EqualTo(48));
+                Assert.That(optionalProperties, Has.Count.EqualTo(51));
                 Assert.That(optionalProperties.Where(property => !AcceptsNull(property)), Is.Empty);
             }
 
@@ -120,7 +121,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             Assert.That(createdElementSchema.GetProperty("properties").GetProperty("type").TryGetProperty("enum", out _), Is.False);
 
             // Each listed metaclass is one that a change can create, and a relationship is not.
-            var applier = new ModelChangeApplier(new Serializer(), new DeSerializer());
+            var applier = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty);
 
             var notCreatableTypes = typeNames
                 .Where(typeName => HasMetaclassProblem(applier, typeName))

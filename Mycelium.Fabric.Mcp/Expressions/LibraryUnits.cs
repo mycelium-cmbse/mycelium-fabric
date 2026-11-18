@@ -29,26 +29,57 @@ namespace Mycelium.Fabric.Mcp.Expressions
     /// to another unit, as <c>attribute &lt;gr&gt; grain : MassUnit { :&gt;&gt; unitConversion: ConversionByConvention {
     /// :&gt;&gt; referenceUnit = g; :&gt;&gt; conversionFactor = 6.479891E-02; } }</c> or a <c>ConversionByPrefix</c> do,
     /// or whose value is a product, quotient or power of units (<c>= kg*m/s^2</c>). The units of the <c>SI</c> and
-    /// <c>USCustomaryUnits</c> packages that <see cref="UnitCatalog"/> knows keep the definition of the catalog. The units
-    /// are read from the elements given each time, so that a unit added to a library is known in the next batch.
+    /// <c>USCustomaryUnits</c> packages that <see cref="UnitCatalog"/> knows keep the definition of the catalog, since these
+    /// libraries give some of them another value (the tonne, the degree Celsius). The units are read from the elements given
+    /// each time, so that a unit added to a library is known in the next batch.
     /// </summary>
     public sealed class LibraryUnits
     {
         /// <summary>
+        /// The units read from the elements, each with the attribute that declares it, in the order of their qualified names.
+        /// </summary>
+        private readonly IReadOnlyList<(IAttributeUsage Declaration, Unit Unit)> declaredUnits;
+
+        /// <summary>
         /// The units by short name, name and qualified name, with the attribute that declares them. A name that two libraries
         /// give to different units is left out: their qualified names tell them apart. A name that they give to the same unit
-        /// designates the declaration that comes first by qualified name.
+        /// designates the declaration that comes first by qualified name. A name that a library of the model gives hides the
+        /// units of the other libraries.
         /// </summary>
         private readonly Dictionary<string, (Unit Unit, IAttributeUsage Declaration)> unitsByName;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LibraryUnits"/> class.
         /// </summary>
-        /// <param name="unitsByName">The units by short name, name and qualified name, with the attribute that declares them.</param>
-        private LibraryUnits(Dictionary<string, (Unit Unit, IAttributeUsage Declaration)> unitsByName)
+        /// <param name="declaredUnits">The units read from the elements, in the order of their qualified names.</param>
+        /// <param name="otherUnits">The units of other libraries, whose names come after the names of <paramref name="declaredUnits"/>, or <c>null</c>.</param>
+        private LibraryUnits(IReadOnlyList<(IAttributeUsage Declaration, Unit Unit)> declaredUnits, LibraryUnits otherUnits)
         {
-            this.unitsByName = unitsByName;
+            this.declaredUnits = declaredUnits;
+            this.unitsByName = new Dictionary<string, (Unit Unit, IAttributeUsage Declaration)>(StringComparer.Ordinal);
+            var takenNames = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var units in new[] { declaredUnits, otherUnits?.declaredUnits ?? [] })
+            {
+                var groups = units
+                    .SelectMany(entry => GetNames(entry.Declaration).Select(name => (Name: name, entry.Unit, entry.Declaration)))
+                    .GroupBy(entry => entry.Name, StringComparer.Ordinal)
+                    .Where(group => !takenNames.Contains(group.Key))
+                    .ToList();
+
+                foreach (var group in groups.Where(group => group.Select(entry => (entry.Unit.Dimension, entry.Unit.Factor, entry.Unit.Offset)).Distinct().Count() == 1))
+                {
+                    this.unitsByName[group.Key] = (group.First().Unit, group.First().Declaration);
+                }
+
+                takenNames.UnionWith(groups.Select(group => group.Key));
+            }
         }
+
+        /// <summary>
+        /// Gets the <see cref="LibraryUnits"/> that holds no unit, as the units of a standard library that could not be loaded.
+        /// </summary>
+        public static LibraryUnits None { get; } = new([], null);
 
         /// <summary>
         /// Reads the units that the libraries of a model declare. A declaration that cannot be read as a unit is left out.
@@ -58,20 +89,33 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="elements"/> is <c>null</c>.</exception>
         public static LibraryUnits Read(IEnumerable<IElement> elements)
         {
-            ArgumentNullException.ThrowIfNull(elements);
+            return Read(elements, None);
+        }
 
-            var unitsByName = elements
+        /// <summary>
+        /// Reads the units that the libraries of a model declare, and adds the units of other libraries, such as the units of
+        /// the standard library. A declaration that cannot be read as a unit is left out. A name that a library of the model
+        /// gives hides the units of the other libraries.
+        /// </summary>
+        /// <param name="elements">The elements of the model.</param>
+        /// <param name="otherUnits">The units of the other libraries.</param>
+        /// <returns>The <see cref="LibraryUnits"/>.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="elements"/> or <paramref name="otherUnits"/> is <c>null</c>.</exception>
+        public static LibraryUnits Read(IEnumerable<IElement> elements, LibraryUnits otherUnits)
+        {
+            ArgumentNullException.ThrowIfNull(elements);
+            ArgumentNullException.ThrowIfNull(otherUnits);
+
+            var declaredUnits = elements
                 .OfType<IAttributeUsage>()
                 .Where(IsDeclaredInLibrary)
                 .Select(declaration => (Declaration: declaration, Unit: ReadDeclaration(declaration, [])))
                 .Where(entry => !entry.Unit.IsError)
+                .Select(entry => (entry.Declaration, Unit: entry.Unit.Value))
                 .OrderBy(entry => entry.Declaration.qualifiedName, StringComparer.Ordinal)
-                .SelectMany(entry => GetNames(entry.Declaration).Select(name => (Name: name, Unit: entry.Unit.Value, entry.Declaration)))
-                .GroupBy(entry => entry.Name, StringComparer.Ordinal)
-                .Where(group => group.Select(entry => (entry.Unit.Dimension, entry.Unit.Factor, entry.Unit.Offset)).Distinct().Count() == 1)
-                .ToDictionary(group => group.Key, group => (group.First().Unit, group.First().Declaration), StringComparer.Ordinal);
+                .ToList();
 
-            return new LibraryUnits(unitsByName);
+            return new LibraryUnits(declaredUnits, otherUnits);
         }
 
         /// <summary>
@@ -87,7 +131,7 @@ namespace Mycelium.Fabric.Mcp.Expressions
 
         /// <summary>
         /// Finds a unit of the model from its symbol or name, simple or compound: a unit of <see cref="UnitCatalog"/> or a
-        /// unit of a library of the model, for example <c>kg</c>, <c>gr</c> or <c>gr/s</c>.
+        /// unit of a library, for example <c>kg</c>, <c>gr</c> or <c>gr/s</c>. The units of the catalog come first.
         /// </summary>
         /// <param name="text">The symbol or name.</param>
         /// <param name="unit">The unit, or <c>null</c> when it is not known.</param>
@@ -98,13 +142,23 @@ namespace Mycelium.Fabric.Mcp.Expressions
         }
 
         /// <summary>
-        /// Finds the attribute of a library that declares a simple unit.
+        /// Finds the attribute of a library that declares a simple unit, provided that it is the unit that
+        /// <see cref="TryParse"/> finds: <c>pt</c>, which the catalog reads as a picotonne, does not designate the point of
+        /// <c>USCustomaryUnits</c>.
         /// </summary>
         /// <param name="text">The short name, name or qualified name of the unit.</param>
-        /// <returns>The attribute, or <c>null</c> when no library of the model declares the unit.</returns>
+        /// <returns>The attribute, or <c>null</c> when no library declares the unit that the text designates.</returns>
         public IAttributeUsage FindDeclaration(string text)
         {
-            return text != null && this.unitsByName.TryGetValue(text.Trim(), out var entry) ? entry.Declaration : null;
+            if (text == null || !this.unitsByName.TryGetValue(text.Trim(), out var entry))
+            {
+                return null;
+            }
+
+            var isOtherCatalogUnit = UnitCatalog.TryParse(text, out var catalogUnit)
+                && (catalogUnit.Dimension, catalogUnit.Factor, catalogUnit.Offset) != (entry.Unit.Dimension, entry.Unit.Factor, entry.Unit.Offset);
+
+            return isOtherCatalogUnit ? null : entry.Declaration;
         }
 
         /// <summary>
@@ -125,18 +179,25 @@ namespace Mycelium.Fabric.Mcp.Expressions
                 return Error.Validation(description: $"'{unit.qualifiedName ?? symbol}' is not a unit: a unit is declared in a library package, such as SI.");
             }
 
-            if (IsDeclaredInCatalogPackage(unit) && UnitCatalog.TryParse(symbol, out var catalogUnit))
-            {
-                return catalogUnit;
-            }
+            // The catalog also knows some units of these packages by their name only, such as 'ua', the astronomical unit.
+            Unit catalogUnit = null;
+            var isCatalogUnit = IsDeclaredInCatalogPackage(unit) && (UnitCatalog.TryParse(symbol, out catalogUnit) || UnitCatalog.TryParse(unit.DeclaredName, out catalogUnit));
 
             if (!declarations.Add(unit.Id))
             {
-                return Error.Validation(description: $"The unit '{symbol}' is defined from itself.");
+                return isCatalogUnit ? catalogUnit with { Symbol = symbol } : Error.Validation(description: $"The unit '{symbol}' is defined from itself.");
             }
 
             var definition = TermReader.GetValueExpression(unit) is { } value ? TermReader.ReadUnit(value, declarations) : ReadConversion(unit, symbol, declarations);
             declarations.Remove(unit.Id);
+
+            // The catalog keeps its value, which the library sometimes contradicts (the tonne, the degree Celsius), and its
+            // dimension of an angle, which the library makes a dimension one (rad = m/m). But a symbol that the catalog reads as
+            // another quantity means something else: 'pt' of USCustomaryUnits is a point, a length, not a picotonne.
+            if (isCatalogUnit && (definition.IsError || definition.Value.Dimension == catalogUnit.Dimension || definition.Value.Dimension == Dimension.None))
+            {
+                return catalogUnit with { Symbol = symbol };
+            }
 
             return definition.Then(definedUnit => definedUnit with { Symbol = symbol ?? definedUnit.Symbol });
         }

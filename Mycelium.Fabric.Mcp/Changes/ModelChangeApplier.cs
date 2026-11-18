@@ -17,6 +17,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
     using ErrorOr;
 
+    using Mycelium.Fabric.Mcp.Services;
+
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -51,20 +53,29 @@ namespace Mycelium.Fabric.Mcp.Changes
         private readonly IDeSerializer deSerializer;
 
         /// <summary>
+        /// The <see cref="IStandardLibrary"/> whose elements the model can reference.
+        /// </summary>
+        private readonly IStandardLibrary standardLibrary;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ModelChangeApplier"/> class.
         /// </summary>
         /// <param name="serializer">The <see cref="ISerializer"/> that writes the DTOs to copy.</param>
         /// <param name="deSerializer">The <see cref="IDeSerializer"/> that reads the copied DTOs back.</param>
+        /// <param name="standardLibrary">The <see cref="IStandardLibrary"/> whose elements the model can reference.</param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="serializer"/> or <paramref name="deSerializer"/> is <c>null</c>.
+        /// Thrown when <paramref name="serializer"/>, <paramref name="deSerializer"/> or <paramref name="standardLibrary"/> is
+        /// <c>null</c>.
         /// </exception>
-        public ModelChangeApplier(ISerializer serializer, IDeSerializer deSerializer)
+        public ModelChangeApplier(ISerializer serializer, IDeSerializer deSerializer, IStandardLibrary standardLibrary)
         {
             ArgumentNullException.ThrowIfNull(serializer);
             ArgumentNullException.ThrowIfNull(deSerializer);
+            ArgumentNullException.ThrowIfNull(standardLibrary);
 
             this.serializer = serializer;
             this.deSerializer = deSerializer;
+            this.standardLibrary = standardLibrary;
         }
 
         /// <summary>
@@ -91,7 +102,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             ArgumentNullException.ThrowIfNull(changes);
             ArgumentNullException.ThrowIfNull(temporaryNames);
 
-            var batch = new ModelChangeBatch(this.CopyElements(model), new Dictionary<string, Guid>(temporaryNames));
+            var batch = new ModelChangeBatch(this.CopyElements(model), new Dictionary<string, Guid>(temporaryNames), this.standardLibrary);
             var problems = batch.Apply(changes);
 
             if (problems.Count > 0)

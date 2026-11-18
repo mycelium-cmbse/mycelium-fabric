@@ -65,9 +65,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new ValidationTools(null, this.modelValidator.Object), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ValidationTools(this.modelProvider.Object, null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ValidationTools(this.modelProvider.Object, this.modelValidator.Object), Throws.Nothing);
+                Assert.That(() => new ValidationTools(null, this.modelValidator.Object, StandardLibraryHelper.Empty), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ValidationTools(this.modelProvider.Object, null, StandardLibraryHelper.Empty), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ValidationTools(this.modelProvider.Object, this.modelValidator.Object, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ValidationTools(this.modelProvider.Object, this.modelValidator.Object, StandardLibraryHelper.Empty), Throws.Nothing);
             }
         }
 
@@ -93,7 +94,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             this.modelValidator.Setup(validator => validator.Validate(elements, It.Is<IReadOnlyCollection<string>>(names => names != null && names.SequenceEqual(UntypedUsageRuleNames))))
                 .Returns(issues.Skip(1).ToList());
 
-            var tools = new ValidationTools(this.modelProvider.Object, this.modelValidator.Object);
+            var tools = new ValidationTools(this.modelProvider.Object, this.modelValidator.Object, StandardLibraryHelper.Empty);
+            var missingLibrary = new Mock<IStandardLibrary>();
+            missingLibrary.Setup(library => library.Problems).Returns(["The standard library could not be loaded from 'StandardLibrary': the folder is missing."]);
 
             var firstPage = tools.ValidateModel();
             var errors = tools.ValidateModel(severity: ValidationSeverity.Error);
@@ -113,6 +116,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(firstPage.ErrorCount, Is.EqualTo(1));
                 Assert.That(firstPage.WarningCount, Is.EqualTo(22));
                 Assert.That(firstPage.InformationCount, Is.EqualTo(0));
+                Assert.That(firstPage.LibraryProblems, Is.Null);
+                Assert.That(new ValidationTools(this.modelProvider.Object, this.modelValidator.Object, missingLibrary.Object).ValidateModel().LibraryProblems, Is.EqualTo(new[] { "The standard library could not be loaded from 'StandardLibrary': the folder is missing." }));
                 Assert.That(firstPage.Rules, Is.EqualTo([new RuleSummary("broken-reference", ValidationSeverity.Error, "The broken-reference.", 1), new RuleSummary("untyped-usage", ValidationSeverity.Warning, "The untyped-usage.", 22)]));
                 Assert.That(firstPage.TotalFound, Is.EqualTo(23));
                 Assert.That(firstPage.Issues, Is.EqualTo(issues.Take(20)));
@@ -132,18 +137,18 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(cameraReport.Rules.Select(rule => rule.IssueCount), Is.EqualTo([1, 1]));
                 Assert.That(cameraReport.Issues, Is.EqualTo(issues.Take(1)));
                 Assert.That(cameraReport.NextOffset, Is.EqualTo(1));
-                this.modelValidator.Verify(validator => validator.Validate(elements, null), Times.Exactly(4));
+                this.modelValidator.Verify(validator => validator.Validate(elements, null), Times.Exactly(5));
                 this.modelValidator.Verify(validator => validator.Validate(elements, It.IsNotNull<IReadOnlyCollection<string>>()), Times.Once);
             }
 
             // EOSat-1 is well formed: its six requirements are only text, and no part satisfies them.
-            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
+            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer(), StandardLibraryHelper.Empty);
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             IValidationRule[] rules = [new BrokenReferenceRule(), new OrphanElementRule(), new DuplicateQualifiedNameRule(), new UntypedUsageRule(), new RequirementWithoutConstraintRule(),
                 new RequirementWithoutSatisfyRule(), new UnusedDefinitionRule(), new RequirementWithoutIdRule()];
 
-            var satelliteTools = new ValidationTools(satelliteModelProvider, new ModelValidator(rules));
+            var satelliteTools = new ValidationTools(satelliteModelProvider, new ModelValidator(rules), StandardLibraryHelper.Empty);
 
             var report = satelliteTools.ValidateModel();
             var requirementReport = satelliteTools.ValidateModel(rules: ["requirement-without-id", "requirement-without-constraint"]);

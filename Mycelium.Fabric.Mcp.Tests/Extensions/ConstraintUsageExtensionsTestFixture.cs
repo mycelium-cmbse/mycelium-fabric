@@ -47,7 +47,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
             [
                 new ModelChange { Identity = MassBudgetId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Identity = EclipseEnergyId.ToString(), Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "capacity", Operator = ">=", Limit = 300, Margin = 20 } } }
