@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics.CodeAnalysis;
     using System.IO;
     using System.Linq;
     using System.Text.Json;
@@ -27,6 +28,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     /// statements of its concrete class and binds all their parameters; this base decides which bindings each command uses and writes no SQL.
     /// </summary>
     /// <typeparam name="TDto">The DTO interface of the concrete model class.</typeparam>
+    [ExcludeFromCodeCoverage]
     public abstract class DaoBase<TDto> : IDao<TDto> where TDto : class, IThing
     {
         /// <summary>
