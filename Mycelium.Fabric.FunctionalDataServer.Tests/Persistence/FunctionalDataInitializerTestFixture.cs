@@ -11,6 +11,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 {
     using System;
     using System.Collections.Generic;
+    using System.Net;
+    using System.Net.Sockets;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -91,6 +93,20 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
 
             Assert.That(() => initializer.InitializeAsync(canceledToken), Throws.TypeOf<OperationCanceledException>());
 
+            using var silentListener = new TcpListener(IPAddress.Loopback, 0);
+
+            silentListener.Start();
+
+            var silentPort = ((IPEndPoint)silentListener.LocalEndpoint).Port;
+
+            await using (var silentDataSource = NpgsqlDataSource.Create($"Host=127.0.0.1;Port={silentPort};Timeout=5;Password={Secret}"))
+            {
+                var expiringInitializer = new FunctionalDataInitializer(silentDataSource, CreateConfiguration("1"), logger.Object);
+
+                Assert.That(() => expiringInitializer.InitializeAsync(CancellationToken.None),
+                    Throws.TypeOf<OperationCanceledException>().With.Message.Contains("exceeded its deadline").And.InnerException.Not.Null);
+            }
+
             await this.dataSource.DisposeAsync();
 
             var failingInitializer = new FunctionalDataInitializer(this.dataSource, CreateConfiguration(null), logger.Object);
@@ -99,7 +115,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Throws.TypeOf<InvalidOperationException>().With.Message.Not.Contains(Secret)
                     .And.InnerException.InstanceOf<ObjectDisposedException>().And.InnerException.Message.Not.Contains(Secret));
 
-            logger.VerifyLogged(LogLevel.Debug, "opening the Functional Data database", Times.Once());
+            logger.VerifyLogged(LogLevel.Debug, "opening the Functional Data database", Times.Exactly(2));
+            logger.VerifyLogged(LogLevel.Warning, "Functional Data initialization was canceled.", Times.Once());
+            logger.VerifyLogged(LogLevel.Warning, "exceeded its deadline", Times.Never());
+            logger.VerifyLogged(LogLevel.Error, "Functional Data initialization exceeded its deadline of 1 seconds.", Times.Once());
             logger.VerifyLogged(LogLevel.Error, "Functional Data initialization failed.", Times.Once());
 
             foreach (var level in Enum.GetValues<LogLevel>())
