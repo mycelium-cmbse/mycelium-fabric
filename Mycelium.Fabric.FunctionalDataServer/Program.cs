@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
 {
     using System;
     using System.Diagnostics.CodeAnalysis;
+    using System.Runtime.ExceptionServices;
     using System.Threading.Tasks;
 
     using Microsoft.Extensions.Configuration;
@@ -64,6 +65,8 @@ namespace Mycelium.Fabric.FunctionalDataServer
 
             var host = builder.Build();
 
+            ExceptionDispatchInfo rejection = null;
+
             using (var scope = host.Services.CreateScope())
             {
                 var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
@@ -74,10 +77,19 @@ namespace Mycelium.Fabric.FunctionalDataServer
                 }
                 catch (InvalidOperationException exception)
                 {
-                    logger.LogError(exception, "The Functional Data server cannot start because its connection string was rejected.");
-                    host.Dispose();
-                    throw;
+                    rejection = ExceptionDispatchInfo.Capture(exception);
                 }
+
+                if (rejection != null)
+                {
+                    logger.LogError(rejection.SourceException, "The Functional Data server cannot start because its connection string was rejected.");
+                }
+            }
+
+            if (rejection != null)
+            {
+                host.Dispose();
+                rejection.Throw();
             }
 
             return host;
