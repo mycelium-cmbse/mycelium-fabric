@@ -61,7 +61,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(elements, Has.Count.GreaterThan(100000));
+                // Every element of the library is indexed, the relationships included, from the root namespaces.
+                Assert.That(elements, Has.Count.EqualTo(StandardLibraryHelper.LoadedElementCount));
                 Assert.That(elements[StandardLibraryHelper.RefinementId].qualifiedName, Is.EqualTo("ModelingMetadata::Refinement"));
                 Assert.That(elements[StandardLibraryHelper.MassValueId].qualifiedName, Is.EqualTo("ISQBase::MassValue"));
                 Assert.That(new StandardLibrary(new ModelLibraryLoader(StandardLibraryHelper.CreateLoggerFactory().Object), this.missingDirectory).Elements, Is.Empty);
@@ -76,7 +77,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(namedElements, Has.Count.LessThan(library.Elements.Count / 10));
+                Assert.That(namedElements, Has.Count.LessThan(library.Elements.Count));
                 Assert.That(namedElements.Values, Has.All.Matches<SysML2.NET.Core.POCO.Root.Elements.IElement>(element => element.DeclaredName != null || element.DeclaredShortName != null));
                 Assert.That(namedElements[StandardLibraryHelper.RefinementId], Is.SameAs(library.Elements[StandardLibraryHelper.RefinementId]));
                 Assert.That(namedElements[StandardLibraryHelper.MassValueId], Is.SameAs(library.Elements[StandardLibraryHelper.MassValueId]));

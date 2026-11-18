@@ -34,9 +34,4 @@
       <EmbeddedResource Include="McpApp\**\*.html;McpApp\**\*.css;McpApp\**\*.js" LogicalName="Mycelium.Fabric.Mcp.McpApp.%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <ItemGroup>
-      <!-- The SysML v2 standard library, loaded read-only from the folder next to the binary. -->
-      <None Include="StandardLibrary\**\*" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
-
 </Project>

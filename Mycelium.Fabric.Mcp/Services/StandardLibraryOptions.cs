@@ -23,7 +23,8 @@ namespace Mycelium.Fabric.Mcp.Services
 
         /// <summary>
         /// Gets or sets the folder that holds the XMI files of the standard library: an absolute path, or a path relative to
-        /// the folder of the server. When it is <c>null</c>, the <c>StandardLibrary</c> folder next to the server is used.
+        /// the folder of the server. When it is <c>null</c>, the <c>StandardLibrary</c> folder next to the server is used. The
+        /// server does not come with the library: the <c>sysml.library.xmi</c> folder of the SysML v2 release of the OMG holds it.
         /// </summary>
         public string LibraryDirectory { get; set; }
     }

@@ -12,6 +12,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
 
     using Microsoft.Extensions.Logging;
 
@@ -21,11 +22,16 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
     using Mycelium.Fabric.Mcp.Services;
 
     using SysML2.NET.Core.POCO.Root.Elements;
-    using SysML2.NET.Serializer.Xmi;
+    using SysML2.NET.Core.POCO.Root.Namespaces;
+    using SysML2.NET.Serializer.Json;
+
+    using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
+    using IModelLibraryLoader = SysML2.NET.Serializer.Xmi.IModelLibraryLoader;
 
     /// <summary>
-    /// Gives the tests a standard library: an empty one, for the tests of a model that does not use it, or the real one, read
-    /// once from the <c>StandardLibrary</c> folder copied next to the tests, which takes several seconds.
+    /// Gives the tests a standard library: an empty one, for the tests of a model that does not use it, or a part of the real
+    /// one, which the <see cref="StandardLibrary"/> reads through a mock of its <see cref="IModelLibraryLoader"/>: the
+    /// elements of the library that the tests use, read once from <c>Data/StandardLibrary/StandardLibrarySubset.json</c>.
     /// </summary>
     internal static class StandardLibraryHelper
     {
@@ -40,9 +46,14 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         public static readonly Guid MassValueId = Guid.Parse("9cd0e404-efee-50e5-a59b-681065bd188c");
 
         /// <summary>
-        /// The real standard library, loaded the first time it is used.
+        /// The part of the real standard library, loaded the first time it is used.
         /// </summary>
         private static readonly Lazy<IStandardLibrary> LoadedLibrary = new(LoadLibrary);
+
+        /// <summary>
+        /// The DTOs of the part of the real standard library, read the first time they are used.
+        /// </summary>
+        private static readonly Lazy<List<DtoElement>> LibraryDtos = new(ReadLibraryDtos);
 
         /// <summary>
         /// Gets a standard library that holds no element and has no problem.
@@ -79,14 +90,19 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         }
 
         /// <summary>
-        /// Gets the real standard library, shared by the tests, which must not modify it.
+        /// Gets the part of the real standard library, shared by the tests, which must not modify it.
         /// </summary>
         public static IStandardLibrary Loaded => LoadedLibrary.Value;
 
         /// <summary>
-        /// Gets the folder that holds the XMI files of the real standard library.
+        /// Gets the number of elements of the part of the real standard library.
         /// </summary>
-        public static Uri LibraryDirectory => new(Path.Combine(AppContext.BaseDirectory, "StandardLibrary"));
+        public static int LoadedElementCount => LibraryDtos.Value.Count;
+
+        /// <summary>
+        /// Gets the folder that holds the part of the real standard library.
+        /// </summary>
+        public static Uri LibraryDirectory => new(Path.Combine(AppContext.BaseDirectory, "Data", "StandardLibrary"));
 
         /// <summary>
         /// Creates the factory of the loggers of the reader of the library, as a mock that gives mock loggers.
@@ -101,15 +117,37 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         }
 
         /// <summary>
-        /// Loads the real standard library.
+        /// Loads the part of the real standard library: the reader of the library gives its root namespaces, built by
+        /// SysML2.NET from the DTOs of the JSON file.
         /// </summary>
         /// <returns>The loaded library.</returns>
         private static IStandardLibrary LoadLibrary()
         {
-            var library = new StandardLibrary(new ModelLibraryLoader(CreateLoggerFactory().Object), LibraryDirectory);
+            List<INamespace> roots = [.. ModelDtoHelper.Assemble(LibraryDtos.Value).OfType<INamespace>().Where(element => element.OwningRelationship == null)];
+
+            var libraryLoader = new Mock<IModelLibraryLoader>();
+            libraryLoader.Setup(loader => loader.Load(LibraryDirectory.LocalPath)).Returns(roots);
+
+            var library = new StandardLibrary(libraryLoader.Object, LibraryDirectory);
             _ = library.Elements;
 
+            libraryLoader.Verify(loader => loader.Load(LibraryDirectory.LocalPath), Times.Once);
+
             return library;
+        }
+
+        /// <summary>
+        /// Reads the DTOs of the part of the real standard library.
+        /// </summary>
+        /// <returns>The DTOs.</returns>
+        private static List<DtoElement> ReadLibraryDtos()
+        {
+            using var stream = File.OpenRead(Path.Combine(LibraryDirectory.LocalPath, "StandardLibrarySubset.json"));
+
+            return new DeSerializer()
+                .DeSerialize(stream, SerializationModeKind.JSON, SerializationTargetKind.PSM, false)
+                .OfType<DtoElement>()
+                .ToList();
         }
     }
 }
