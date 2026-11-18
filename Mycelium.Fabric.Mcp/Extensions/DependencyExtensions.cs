@@ -31,8 +31,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
         {
             /// <summary>
             /// Tells whether the dependency is a refinement, as <c>#refinement dependency 'FLR-R001' to 'HLR-R001';</c>: it is
-            /// annotated by a metadata usage typed by <c>ModelingMetadata::Refinement</c>. The typing is read rather than the
-            /// metadata definition, which SysML2.NET cannot compute when the standard library is missing.
+            /// annotated by a metadata usage whose metadata definition is <c>ModelingMetadata::Refinement</c>. Without the
+            /// standard library, the metadata definition is unknown and the dependency is not taken for a refinement.
             /// </summary>
             /// <returns><c>true</c> when the dependency is a refinement.</returns>
             /// <exception cref="ArgumentNullException">Thrown when <paramref name="dependency"/> is <c>null</c>.</exception>
@@ -43,8 +43,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 return dependency.ownedAnnotation
                     .Select(annotation => annotation.annotatingElement)
                     .OfType<IMetadataUsage>()
-                    .SelectMany(metadata => metadata.ownedTyping)
-                    .Any(typing => typing.Type?.qualifiedName == RefinementName);
+                    .Any(metadata => metadata.metadataDefinition?.qualifiedName == RefinementName);
             }
         }
     }
