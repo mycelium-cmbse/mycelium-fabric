@@ -23,9 +23,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
     using Npgsql;
 
+    using NpgsqlTypes;
+
     /// <summary>
     /// Implements the <see cref="IDao{TDto}"/> operations once for the generated data access objects. Each generated data access object supplies the
-    /// statements of its concrete class and binds all their parameters; this base decides which bindings each command uses and writes no SQL.
+    /// class kind and statements of its concrete class and binds their reference parameters; this base binds the <c>id</c>, <c>class_kind</c> and
+    /// <c>data</c> parameters, decides which bindings each command uses and writes no SQL.
     /// </summary>
     /// <typeparam name="TDto">The DTO interface of the concrete model class.</typeparam>
     [ExcludeFromCodeCoverage]
@@ -52,6 +55,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             this.deSerializer = deSerializer ?? throw new ArgumentNullException(nameof(deSerializer));
         }
+
+        /// <summary>
+        /// Gets the <c>class_kind</c> discriminator, the modeled name of the concrete class, that restricts the statements to its objects.
+        /// </summary>
+        protected abstract string ClassKind { get; }
 
         /// <summary>
         /// Gets the query that reads the JSON document of every stored object of the concrete class, ordered by identifier.
@@ -225,24 +233,43 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Adds the identifier parameter that selects one stored object.
+        /// Adds the <c>id</c> parameter, bound as <see cref="NpgsqlDbType.Uuid"/>, that selects one stored object.
         /// </summary>
         /// <param name="command">The command that receives the parameter.</param>
         /// <param name="id">The identifier of the object.</param>
-        protected abstract void AddIdentityParameter(NpgsqlCommand command, Guid id);
+        protected virtual void AddIdentityParameter(NpgsqlCommand command, Guid id)
+        {
+            command.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid)
+            {
+                Value = id
+            });
+        }
 
         /// <summary>
-        /// Adds the <c>class_kind</c> parameter that restricts the statements to objects of the exact concrete class.
+        /// Adds the <c>class_kind</c> parameter, bound as <see cref="NpgsqlDbType.Text"/> with the value of <see cref="ClassKind"/>, that restricts
+        /// the statements to objects of the exact concrete class.
         /// </summary>
         /// <param name="command">The command that receives the parameter.</param>
-        protected abstract void AddClassKindParameter(NpgsqlCommand command);
+        protected virtual void AddClassKindParameter(NpgsqlCommand command)
+        {
+            command.Parameters.Add(new NpgsqlParameter("class_kind", NpgsqlDbType.Text)
+            {
+                Value = this.ClassKind
+            });
+        }
 
         /// <summary>
-        /// Adds the serialized JSON document stored in the <c>data</c> column.
+        /// Adds the <c>data</c> parameter, bound as <see cref="NpgsqlDbType.Jsonb"/>, holding the serialized JSON document.
         /// </summary>
         /// <param name="command">The command that receives the parameter.</param>
         /// <param name="data">The UTF-8 bytes of the serialized JSON document.</param>
-        protected abstract void AddDataParameter(NpgsqlCommand command, ReadOnlyMemory<byte> data);
+        protected virtual void AddDataParameter(NpgsqlCommand command, ReadOnlyMemory<byte> data)
+        {
+            command.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Jsonb)
+            {
+                Value = data
+            });
+        }
 
         /// <summary>
         /// Adds one parameter per scalar reference column and per link-table collection of the concrete class and its ancestors.
