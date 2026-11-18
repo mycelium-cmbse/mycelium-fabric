@@ -16,7 +16,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 {
     using System;
     using System.CodeDom.Compiler;
-    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -84,8 +83,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Gets the <c>class_kind</c> discriminator that restricts the statements to objects of the exact concrete class
-        /// <c>User</c>.
+        /// Gets the <c>class_kind</c> discriminator that restricts the statements to objects of the exact concrete class <c>User</c>.
         /// </summary>
         protected override string ClassKind => "User";
 
