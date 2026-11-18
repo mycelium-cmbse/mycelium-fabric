@@ -121,7 +121,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TestHelpers
         /// SysML2.NET from the DTOs of the JSON file.
         /// </summary>
         /// <returns>The loaded library.</returns>
-        private static IStandardLibrary LoadLibrary()
+        private static StandardLibrary LoadLibrary()
         {
             List<INamespace> roots = [.. ModelDtoHelper.Assemble(LibraryDtos.Value).OfType<INamespace>().Where(element => element.OwningRelationship == null)];
 

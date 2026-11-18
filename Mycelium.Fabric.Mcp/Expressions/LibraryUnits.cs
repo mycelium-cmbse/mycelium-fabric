@@ -36,11 +36,6 @@ namespace Mycelium.Fabric.Mcp.Expressions
     public sealed class LibraryUnits
     {
         /// <summary>
-        /// The units read from the elements, each with the attribute that declares it, in the order of their qualified names.
-        /// </summary>
-        private readonly IReadOnlyList<(IAttributeUsage Declaration, Unit Unit)> declaredUnits;
-
-        /// <summary>
         /// The units by short name, name and qualified name, with the attribute that declares them. A name that two libraries
         /// give to different units is left out: their qualified names tell them apart. A name that they give to the same unit
         /// designates the declaration that comes first by qualified name. A name that a library of the model gives hides the
@@ -55,25 +50,20 @@ namespace Mycelium.Fabric.Mcp.Expressions
         /// <param name="otherUnits">The units of other libraries, whose names come after the names of <paramref name="declaredUnits"/>, or <c>null</c>.</param>
         private LibraryUnits(IReadOnlyList<(IAttributeUsage Declaration, Unit Unit)> declaredUnits, LibraryUnits otherUnits)
         {
-            this.declaredUnits = declaredUnits;
-            this.unitsByName = new Dictionary<string, (Unit Unit, IAttributeUsage Declaration)>(StringComparer.Ordinal);
-            var takenNames = new HashSet<string>(StringComparer.Ordinal);
+            var groups = declaredUnits
+                .SelectMany(entry => GetNames(entry.Declaration).Select(name => (Name: name, entry.Unit, entry.Declaration)))
+                .GroupBy(entry => entry.Name, StringComparer.Ordinal)
+                .ToList();
 
-            foreach (var units in new[] { declaredUnits, otherUnits?.declaredUnits ?? [] })
-            {
-                var groups = units
-                    .SelectMany(entry => GetNames(entry.Declaration).Select(name => (Name: name, entry.Unit, entry.Declaration)))
-                    .GroupBy(entry => entry.Name, StringComparer.Ordinal)
-                    .Where(group => !takenNames.Contains(group.Key))
-                    .ToList();
+            // Every name of the elements is taken, even one that is left out as ambiguous: it hides the other libraries.
+            var takenNames = groups.Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
+            var otherEntries = otherUnits?.unitsByName.Where(pair => !takenNames.Contains(pair.Key)) ?? [];
 
-                foreach (var group in groups.Where(group => group.Select(entry => (entry.Unit.Dimension, entry.Unit.Factor, entry.Unit.Offset)).Distinct().Count() == 1))
-                {
-                    this.unitsByName[group.Key] = (group.First().Unit, group.First().Declaration);
-                }
-
-                takenNames.UnionWith(groups.Select(group => group.Key));
-            }
+            this.unitsByName = groups
+                .Where(group => group.Select(entry => (entry.Unit.Dimension, entry.Unit.Factor, entry.Unit.Offset)).Distinct().Count() == 1)
+                .Select(group => KeyValuePair.Create(group.Key, (group.First().Unit, group.First().Declaration)))
+                .Concat(otherEntries)
+                .ToDictionary(StringComparer.Ordinal);
         }
 
         /// <summary>

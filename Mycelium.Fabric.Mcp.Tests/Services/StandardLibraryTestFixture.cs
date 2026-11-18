@@ -110,7 +110,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
                 Assert.That(StandardLibraryHelper.Loaded.Problems, Is.Empty);
                 Assert.That(missingLibrary.Problems, Has.Count.EqualTo(1));
                 Assert.That(missingLibrary.Problems[0], Does.Contain(this.missingDirectory.LocalPath));
-                Assert.That(libraryWithoutUnits.Problems, Is.EqualTo(new[] { "The units of the standard library could not be read: The type cannot be computed." }));
+                Assert.That(libraryWithoutUnits.Problems, Is.EqualTo(["The units of the standard library could not be read: The type cannot be computed."]));
                 Assert.That(libraryWithoutUnits.Elements.Values, Is.EqualTo(new[] { root.Object }));
                 Assert.That(libraryWithoutUnits.Resolve("MeasurementReferences"), Is.SameAs(measurementReferences.Object));
                 Assert.That(libraryWithoutUnits.Units.FindDeclaration("kg"), Is.Null);

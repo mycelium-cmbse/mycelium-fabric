@@ -117,7 +117,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(firstPage.WarningCount, Is.EqualTo(22));
                 Assert.That(firstPage.InformationCount, Is.EqualTo(0));
                 Assert.That(firstPage.LibraryProblems, Is.Null);
-                Assert.That(new ValidationTools(this.modelProvider.Object, this.modelValidator.Object, missingLibrary.Object).ValidateModel().LibraryProblems, Is.EqualTo(new[] { "The standard library could not be loaded from 'StandardLibrary': the folder is missing." }));
+                Assert.That(new ValidationTools(this.modelProvider.Object, this.modelValidator.Object, missingLibrary.Object).ValidateModel().LibraryProblems, Is.EqualTo(["The standard library could not be loaded from 'StandardLibrary': the folder is missing."]));
                 Assert.That(firstPage.Rules, Is.EqualTo([new RuleSummary("broken-reference", ValidationSeverity.Error, "The broken-reference.", 1), new RuleSummary("untyped-usage", ValidationSeverity.Warning, "The untyped-usage.", 22)]));
                 Assert.That(firstPage.TotalFound, Is.EqualTo(23));
                 Assert.That(firstPage.Issues, Is.EqualTo(issues.Take(20)));
