@@ -65,26 +65,7 @@ namespace Mycelium.Fabric.FunctionalDataServer
 
             var host = builder.Build();
 
-            ExceptionDispatchInfo rejection = null;
-
-            using (var scope = host.Services.CreateScope())
-            {
-                var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
-
-                try
-                {
-                    scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
-                }
-                catch (InvalidOperationException exception)
-                {
-                    rejection = ExceptionDispatchInfo.Capture(exception);
-                }
-
-                if (rejection != null)
-                {
-                    logger.LogError(rejection.SourceException, "The Functional Data server cannot start because its connection string was rejected.");
-                }
-            }
+            var rejection = ResolveDataSource(host);
 
             if (rejection != null)
             {
@@ -93,6 +74,33 @@ namespace Mycelium.Fabric.FunctionalDataServer
             }
 
             return host;
+        }
+
+        /// <summary>
+        /// Resolves the data source from a scope of the built host and logs, through the host's logger, a connection string the data source rejects.
+        /// </summary>
+        /// <param name="host">The built host, not yet started.</param>
+        /// <returns>
+        /// <see langword="null"/> when the data source resolves; otherwise the captured rejection, to be rethrown unchanged once the host is disposed.
+        /// </returns>
+        private static ExceptionDispatchInfo ResolveDataSource(IHost host)
+        {
+            using var scope = host.Services.CreateScope();
+
+            try
+            {
+                scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+
+                return null;
+            }
+            catch (InvalidOperationException exception)
+            {
+                var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
+
+                logger.LogError(exception, "The Functional Data server cannot start because its connection string was rejected.");
+
+                return ExceptionDispatchInfo.Capture(exception);
+            }
         }
 
         /// <summary>
