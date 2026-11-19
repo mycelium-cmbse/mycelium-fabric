@@ -35,7 +35,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <summary>
         /// The name of the connection string to the Functional Data database.
         /// </summary>
-        private const string ConnectionStringName = "functionaldata";
+        public const string ConnectionStringName = "functionaldata";
 
         /// <summary>
         /// Serializes concurrent initializers on a transaction-scoped advisory lock, then ensures the applied-script history exists.
@@ -60,7 +60,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private const string RecordScriptSql = "INSERT INTO public.schema_migration (script_name) VALUES ($1)";
 
         /// <summary>
-        /// The configuration supplying the connection and initialization deadline.
+        /// The data source of the Functional Data database.
+        /// </summary>
+        private readonly NpgsqlDataSource dataSource;
+
+        /// <summary>
+        /// The configuration supplying the initialization deadline.
         /// </summary>
         private readonly IConfiguration configuration;
 
@@ -72,14 +77,17 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <summary>
         /// Initializes a new instance of the <see cref="FunctionalDataInitializer"/> class.
         /// </summary>
+        /// <param name="dataSource">The data source of the Functional Data database.</param>
         /// <param name="configuration">The service configuration.</param>
         /// <param name="logger">The initialization logger.</param>
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-        public FunctionalDataInitializer(IConfiguration configuration, ILogger<FunctionalDataInitializer> logger)
+        public FunctionalDataInitializer(NpgsqlDataSource dataSource, IConfiguration configuration, ILogger<FunctionalDataInitializer> logger)
         {
+            ArgumentNullException.ThrowIfNull(dataSource);
             ArgumentNullException.ThrowIfNull(configuration);
             ArgumentNullException.ThrowIfNull(logger);
 
+            this.dataSource = dataSource;
             this.configuration = configuration;
             this.logger = logger;
         }
@@ -106,27 +114,18 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             {
                 token.ThrowIfCancellationRequested();
 
-                this.LogStep("reading the connection configuration");
-
-                var connectionString = this.configuration.GetConnectionString(ConnectionStringName);
-
-                if (string.IsNullOrWhiteSpace(connectionString))
-                {
-                    throw new InvalidOperationException($"The '{ConnectionStringName}' connection string is not configured.");
-                }
-
                 this.LogStep("opening the Functional Data database");
 
-                await using var connection = new NpgsqlConnection(connectionString);
-
-                await connection.OpenAsync(token);
+                await using var connection = await this.dataSource.OpenConnectionAsync(token);
 
                 await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token);
 
                 this.LogStep("acquiring the initialization lock and preparing the script history");
 
-                await using (var prepare = new NpgsqlCommand(PrepareHistorySql, connection, transaction) { CommandTimeout = commandTimeout })
+                await using (var prepare = new NpgsqlCommand(PrepareHistorySql, connection, transaction))
                 {
+                    prepare.CommandTimeout = commandTimeout;
+
                     await prepare.ExecuteNonQueryAsync(token);
                 }
 
@@ -183,13 +182,16 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private static async Task ApplyScriptAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string name, string sql, int commandTimeout,
             CancellationToken cancellationToken)
         {
-            await using (var script = new NpgsqlCommand(sql, connection, transaction) { CommandTimeout = commandTimeout })
+            await using (var script = new NpgsqlCommand(sql, connection, transaction))
             {
+                script.CommandTimeout = commandTimeout;
+
                 await script.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await using var record = new NpgsqlCommand(RecordScriptSql, connection, transaction) { CommandTimeout = commandTimeout };
+            await using var record = new NpgsqlCommand(RecordScriptSql, connection, transaction);
 
+            record.CommandTimeout = commandTimeout;
             record.Parameters.Add(new NpgsqlParameter { Value = name });
 
             await record.ExecuteNonQueryAsync(cancellationToken);
@@ -208,7 +210,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private static async Task<HashSet<string>> ReadAppliedScriptsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int commandTimeout,
             CancellationToken cancellationToken)
         {
-            await using var command = new NpgsqlCommand(ReadHistorySql, connection, transaction) { CommandTimeout = commandTimeout };
+            await using var command = new NpgsqlCommand(ReadHistorySql, connection, transaction);
+
+            command.CommandTimeout = commandTimeout;
+
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
             var appliedScripts = new HashSet<string>(StringComparer.Ordinal);

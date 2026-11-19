@@ -11,12 +11,17 @@ namespace Mycelium.Fabric.FunctionalDataServer
 {
     using System;
     using System.Diagnostics.CodeAnalysis;
+    using System.Runtime.ExceptionServices;
     using System.Threading.Tasks;
 
+    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
+    using Microsoft.Extensions.Logging;
 
     using Mycelium.Fabric.FunctionalDataServer.Persistence;
+
+    using Npgsql;
 
     /// <summary>
     /// Hosts the Functional Data microservice and its awaited database initialization.
@@ -25,25 +30,104 @@ namespace Mycelium.Fabric.FunctionalDataServer
     public static class Program
     {
         /// <summary>
-        /// Initializes the Functional Data database and runs the host until shutdown.
+        /// Builds the host, initializes the Functional Data database and runs the host until shutdown.
         /// </summary>
         /// <param name="args">The command-line configuration arguments.</param>
         /// <returns>A task that completes when the host stops.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
-        /// <exception cref="InvalidOperationException">Host construction or database initialization fails.</exception>
+        /// <exception cref="InvalidOperationException">The connection string is missing, blank or malformed, or host construction or database initialization fails.</exception>
         /// <exception cref="OperationCanceledException">Startup or execution is canceled.</exception>
         public static async Task Main(string[] args)
+        {
+            using var host = CreateHost(args);
+
+            await host.RunAsync();
+        }
+
+        /// <summary>
+        /// Builds, without starting it, the host with the data source, the awaited database initialization and the Functional Data access registrations,
+        /// then resolves the data source from a scope of the built host so that a rejected connection string is logged and stops startup.
+        /// </summary>
+        /// <param name="args">The command-line configuration arguments.</param>
+        /// <returns>The built host.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="args"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">The connection string is missing, blank or malformed, or host construction fails.</exception>
+        internal static IHost CreateHost(string[] args)
         {
             ArgumentNullException.ThrowIfNull(args);
 
             var builder = Host.CreateApplicationBuilder(args);
 
+            builder.Services.AddSingleton(serviceProvider => CreateDataSource(serviceProvider.GetRequiredService<IConfiguration>()));
             builder.Services.AddSingleton<IFunctionalDataInitializer, FunctionalDataInitializer>();
             builder.Services.AddHostedService<FunctionalDataInitializationService>();
+            builder.Services.AddFunctionalDataAccess();
 
-            using var host = builder.Build();
+            var host = builder.Build();
 
-            await host.RunAsync();
+            var rejection = ResolveDataSource(host);
+
+            if (rejection != null)
+            {
+                host.Dispose();
+                rejection.Throw();
+            }
+
+            return host;
+        }
+
+        /// <summary>
+        /// Resolves the data source from a scope of the built host and logs, through the host's logger, a connection string the data source rejects.
+        /// </summary>
+        /// <param name="host">The built host, not yet started.</param>
+        /// <returns>
+        /// <see langword="null"/> when the data source resolves; otherwise the captured rejection, to be rethrown unchanged once the host is disposed.
+        /// </returns>
+        private static ExceptionDispatchInfo ResolveDataSource(IHost host)
+        {
+            using var scope = host.Services.CreateScope();
+
+            try
+            {
+                scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+
+                return null;
+            }
+            catch (InvalidOperationException exception)
+            {
+                var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
+
+                logger.LogError(exception, "The Functional Data server cannot start because its connection string was rejected.");
+
+                return ExceptionDispatchInfo.Capture(exception);
+            }
+        }
+
+        /// <summary>
+        /// Creates the data source of the Functional Data database from the connection string in the host's configuration.
+        /// </summary>
+        /// <param name="configuration">The host's configuration.</param>
+        /// <returns>The data source, which the host's container owns and disposes with the host.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// The connection string is missing or blank, or it is malformed, in which case the Npgsql exception is the inner exception.
+        /// </exception>
+        private static NpgsqlDataSource CreateDataSource(IConfiguration configuration)
+        {
+            var connectionString = configuration.GetConnectionString(FunctionalDataInitializer.ConnectionStringName);
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException($"The '{FunctionalDataInitializer.ConnectionStringName}' connection string is required.");
+            }
+
+            try
+            {
+                return NpgsqlDataSource.Create(connectionString);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidOperationException($"The '{FunctionalDataInitializer.ConnectionStringName}' connection string is malformed.", exception);
+            }
         }
     }
 }
