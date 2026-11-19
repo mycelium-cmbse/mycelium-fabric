@@ -98,7 +98,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <param name="cancellationToken">The token canceling initialization.</param>
         /// <returns>A task that completes after the initialization transaction commits.</returns>
         /// <exception cref="InvalidOperationException">Configuration is invalid, or a script or its history cannot be applied.</exception>
-        /// <exception cref="OperationCanceledException">Initialization is canceled or exceeds its configured deadline.</exception>
+        /// <exception cref="OperationCanceledException">
+        /// The caller cancels initialization, logged as a warning, or initialization exceeds its configured deadline, logged as an error.
+        /// </exception>
         public async Task InitializeAsync(CancellationToken cancellationToken)
         {
             var timeout = this.ReadInitializationTimeout();
@@ -153,11 +155,17 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
                     this.logger.LogInformation("Functional Data initialization completed. Applied scripts: {AppliedScriptCount}.", pendingScripts.Count);
                 }
             }
+            catch (Exception exception) when (cancellationToken.IsCancellationRequested)
+            {
+                this.logger.LogWarning(exception, "Functional Data initialization was canceled.");
+
+                throw new OperationCanceledException("Functional Data initialization was canceled.", exception, token);
+            }
             catch (Exception exception) when (token.IsCancellationRequested)
             {
-                this.logger.LogWarning(exception, "Functional Data initialization was canceled or exceeded its deadline.");
+                this.logger.LogError(exception, "Functional Data initialization exceeded its deadline of {TimeoutSeconds} seconds.", commandTimeout);
 
-                throw new OperationCanceledException("Functional Data initialization was canceled or exceeded its deadline.", exception, token);
+                throw new OperationCanceledException("Functional Data initialization exceeded its deadline.", exception, token);
             }
             catch (Exception exception)
             {
