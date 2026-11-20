@@ -43,6 +43,34 @@ namespace Mycelium.Fabric.Common.Tests.DependencyInjection
         }
 
         [Test]
+        public void VerifyAddEnumerableImplementationsOf()
+        {
+            Assert.That(() => ((IServiceCollection)null).AddEnumerableImplementationsOf<IMarker>(), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(() => new ServiceCollection().AddEnumerableImplementationsOf<MarkerOnly>(), Throws.TypeOf<ArgumentException>());
+
+            var services = new ServiceCollection();
+
+            Assert.That(services.AddEnumerableImplementationsOf<IAmbiguousMarker>(), Is.SameAs(services));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(services, Has.Count.EqualTo(2));
+                Assert.That(services, Has.All.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IAmbiguousMarker)
+                                                                                       && descriptor.Lifetime == ServiceLifetime.Scoped));
+                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ImplementationType == typeof(FirstAmbiguous)));
+                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ImplementationType == typeof(SecondAmbiguous)));
+            }
+
+            services.AddEnumerableImplementationsOf<IAmbiguousMarker>(ServiceLifetime.Transient);
+
+            Assert.That(services, Has.Count.EqualTo(2));
+
+            var markers = new ServiceCollection().AddEnumerableImplementationsOf<IMarker>(ServiceLifetime.Transient, typeof(ServiceCollectionExtensionsTestFixture).Assembly);
+
+            Assert.That(markers, Has.Count.EqualTo(2));
+        }
+
+        [Test]
         public void VerifyAddImplementationsOf()
         {
             Assert.That(() => ((IServiceCollection)null).AddImplementationsOf<IMarker>(), Throws.TypeOf<ArgumentNullException>());

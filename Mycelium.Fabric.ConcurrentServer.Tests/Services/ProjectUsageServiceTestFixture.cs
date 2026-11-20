@@ -218,12 +218,21 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             dataVersionRepository.Setup(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<DataVersion>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.Unexpected("store.failed"));
 
+            var changeValidator = new Mock<IChangeValidator>(MockBehavior.Strict);
+
+            changeValidator.Setup(validator => validator.ValidateAsync(It.IsAny<IChangeContext>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
+
+            var changeExpander = new Mock<IChangeExpander>(MockBehavior.Strict);
+
+            changeExpander.Setup(expander => expander.ComputeEffectsAsync(It.IsAny<IChangeContext>(), It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ErrorOrFactory.From<IReadOnlyList<DataVersion>>(Array.Empty<DataVersion>()));
+
             var versioningLogger = new Mock<ILogger<ProjectDataVersioningService>>();
             versioningLogger.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
             var versioning = new ProjectDataVersioningService(databaseHandler, this.serviceMocks.ProjectScope.Object, this.serviceMocks.ProjectRepository.Object,
                 branchRepository.Object, new Mock<ITagRepository>().Object, commitRepository.Object, dataVersionRepository.Object, dataIdentityRepository.Object,
-                commitGraphRepository.Object, this.dataRepository.Object, versioningLogger.Object);
+                commitGraphRepository.Object, this.dataRepository.Object, changeExpander.Object, changeValidator.Object, versioningLogger.Object);
 
             var usageService = new ProjectUsageService(databaseHandler, this.serviceMocks.ProjectScope.Object, this.serviceMocks.ProjectRepository.Object,
                 commitRepository.Object, this.dataRepository.Object, versioning, this.projectUsageRepository.Object, this.logger.Object);

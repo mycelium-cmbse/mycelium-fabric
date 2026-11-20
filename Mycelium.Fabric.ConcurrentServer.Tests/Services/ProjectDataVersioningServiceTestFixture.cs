@@ -86,6 +86,10 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
 
         private Mock<IDataRepository> dataRepository;
 
+        private Mock<IChangeExpander> changeExpander;
+
+        private Mock<IChangeValidator> changeValidator;
+
         private Dictionary<Guid, Commit> commits;
 
         private Dictionary<Guid, List<DataVersion>> states;
@@ -107,6 +111,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             this.dataIdentityRepository = new Mock<IDataIdentityRepository>();
             this.commitGraphRepository = new Mock<ICommitGraphRepository>();
             this.dataRepository = new Mock<IDataRepository>();
+            this.changeExpander = new Mock<IChangeExpander>(MockBehavior.Strict);
+
+            this.changeExpander.Setup(expander => expander.ComputeEffectsAsync(It.IsAny<IChangeContext>(), It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ErrorOrFactory.From<IReadOnlyList<DataVersion>>(Array.Empty<DataVersion>()));
+
+            this.changeValidator = new Mock<IChangeValidator>(MockBehavior.Strict);
+
+            this.changeValidator.Setup(validator => validator.ValidateAsync(It.IsAny<IChangeContext>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
 
             this.commits = new Dictionary<Guid, Commit>
             {
@@ -192,7 +204,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
 
             this.service = new ProjectDataVersioningService(this.serviceMocks.DatabaseHandler.Object, this.serviceMocks.ProjectScope.Object,
                 this.serviceMocks.ProjectRepository.Object, this.branchRepository.Object, this.tagRepository.Object, this.commitRepository.Object,
-                this.dataVersionRepository.Object, this.dataIdentityRepository.Object, this.commitGraphRepository.Object, this.dataRepository.Object, this.logger.Object);
+                this.dataVersionRepository.Object, this.dataIdentityRepository.Object, this.commitGraphRepository.Object, this.dataRepository.Object, this.changeExpander.Object,
+                this.changeValidator.Object, this.logger.Object);
         }
 
         [Test]
@@ -439,7 +452,33 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
             this.dataIdentityRepository.Verify(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.Is<DataIdentity>(identity => identity.Id == ElementXId),
                 It.IsAny<CancellationToken>()), Times.Never);
 
+            this.changeValidator.Verify(validator => validator.ValidateAsync(
+                It.Is<IChangeContext>(context => context.Change.Count == 2 && context.Change.Any(version => version.Payload == updatedElement)), It.IsAny<CancellationToken>()),
+                Times.Once);
+
+            this.logger.VerifyLogged(LogLevel.Information, $"Created commit {commit.Value.Id} in project {ProjectId}, recording 2 versions for 2 requested", Times.Once());
+
             this.branch.Head = HeadCommitId;
+            this.serviceMocks.Reset();
+            this.commitRepository.Invocations.Clear();
+
+            this.changeValidator.Setup(validator => validator.ValidateAsync(It.IsAny<IChangeContext>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.Validation("element.invalid"));
+
+            var invalid = await this.service.CreateCommitAsync([Version(ElementZId)], BranchId, new Commit { OwningProject = ProjectId }, CancellationToken.None);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(invalid.FirstError.Code, Is.EqualTo("element.invalid"));
+                Assert.That(this.branch.Head, Is.EqualTo(HeadCommitId));
+                this.serviceMocks.VerifyRolledBack();
+            }
+
+            this.logger.VerifyLogged(LogLevel.Warning, "CreateCommitAsync failed with element.invalid", Times.Once());
+
+            this.commitRepository.Verify(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Commit>(), It.IsAny<CancellationToken>()), Times.Never);
+
+            this.changeValidator.Setup(validator => validator.ValidateAsync(It.IsAny<IChangeContext>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success);
             this.serviceMocks.Reset();
 
             this.commitGraphRepository.Setup(repository => repository.MoveHeadAsync(It.IsAny<IDataStoreTransaction>(), BranchId, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -560,6 +599,62 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 this.dataRepository.Verify(repository => repository.ReadDependentDataClosureAsync(It.IsAny<IDataStoreTransaction>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyList<Guid>>(),
                     It.IsAny<CancellationToken>()), Times.Never);
             }
+        }
+
+        [Test]
+        public async Task CreateCommitAsync_WithEffects_CommitsWhatTheyEntail()
+        {
+            var created = new PartUsage { Id = Guid.NewGuid() };
+            var entailed = new PartUsage { Id = Guid.NewGuid() };
+            List<DataVersion> effects = [new() { Payload = entailed }, new() { Identity = new DataIdentity { Id = ElementYId } }];
+
+            this.changeExpander.Setup(expander => expander.ComputeEffectsAsync(It.IsAny<IChangeContext>(),
+                    It.Is<IReadOnlyList<DataVersion>>(versions => versions.Any(version => version.Payload == created)), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ErrorOrFactory.From<IReadOnlyList<DataVersion>>(effects));
+
+            var commit = await this.service.CreateCommitAsync([new DataVersion { Payload = created }], BranchId, new Commit { OwningProject = ProjectId }, CancellationToken.None);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(commit.Value.Change, Has.Count.EqualTo(3));
+
+                this.dataVersionRepository.Verify(repository => repository.CreateAsync(It.IsAny<IDataStoreTransaction>(),
+                    It.Is<DataVersion>(version => version.Identity.Id == ElementYId && version.Payload == null), It.IsAny<CancellationToken>()), Times.Once);
+
+                this.dataRepository.Verify(repository => repository.ReadDependentDataClosureAsync(It.IsAny<IDataStoreTransaction>(), HeadCommitId,
+                    It.Is<IReadOnlyList<Guid>>(elementIds => elementIds.Count == 1 && elementIds[0] == ElementYId), It.IsAny<CancellationToken>()), Times.Once);
+
+                this.changeExpander.Verify(expander => expander.ComputeEffectsAsync(It.Is<IChangeContext>(context => context.Change.Count == 3),
+                    It.Is<IReadOnlyList<DataVersion>>(versions => versions.Count == 2 && versions.Any(version => version.Payload == entailed)), It.IsAny<CancellationToken>()),
+                    Times.Once);
+
+                this.changeValidator.Verify(validator => validator.ValidateAsync(It.Is<IChangeContext>(context => context.Change.Count == 3), It.IsAny<CancellationToken>()),
+                    Times.Once);
+            }
+
+            this.branch.Head = HeadCommitId;
+
+            var duplicate = await this.service.CreateCommitAsync([new DataVersion { Payload = created }, new DataVersion { Payload = entailed }], BranchId,
+                new Commit { OwningProject = ProjectId }, CancellationToken.None);
+
+            Assert.That(duplicate.FirstError.Code, Is.EqualTo("change.identity.duplicate"));
+
+            this.serviceMocks.Reset();
+
+            this.changeExpander.Setup(expander => expander.ComputeEffectsAsync(It.IsAny<IChangeContext>(), It.IsAny<IReadOnlyList<DataVersion>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Error.Validation("element.effect"));
+
+            var failed = await this.service.CreateCommitAsync([new DataVersion { Payload = created }], BranchId, new Commit { OwningProject = ProjectId }, CancellationToken.None);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(failed.FirstError.Code, Is.EqualTo("element.effect"));
+                Assert.That(this.branch.Head, Is.EqualTo(HeadCommitId));
+                this.serviceMocks.VerifyRolledBack();
+            }
+
+            this.logger.VerifyLogged(LogLevel.Warning, "CreateCommitAsync failed with element.effect", Times.Once());
+            this.logger.VerifyLogged(LogLevel.Information, "Created commit", Times.Once());
         }
 
         [Test]

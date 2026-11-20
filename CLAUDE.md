@@ -208,6 +208,31 @@ Direct pushes to `development` or `main` are forbidden. All work lives on a feat
 **Why this split**: the user is the reviewer of record. The commit is the review and the push is the
 delivery — both are the user's calls.
 
+## Logging
+
+Every layer (modules, services, pipeline components, hosting) logs through `Microsoft.Extensions.Logging`
+— and stays quiet. A log line must help someone diagnose production; anything else is noise.
+
+- **Inject `ILogger<T>`** through the constructor, null-guarded and kept in a private get-only `Logger`
+  property. Classes deriving from `ServiceBase` use its `Logger`. No static loggers, no `NullLogger`.
+- **Guard every call** with `if (this.Logger.IsEnabled(level))`, so arguments are not computed when the
+  level is off (CA1873).
+- **Structured templates only**: PascalCase placeholders (`{ProjectId}`, `{VersionCount}`), no string
+  interpolation, no trailing period. Hoist a template used by several methods to a `const`.
+- **Levels:**
+  - `Information` — one line per completed business operation or API invocation, with its identifiers.
+  - `Debug` — one summary per internal phase (validation, effect expansion): counts, not elements.
+  - `Warning` — failures the caller caused and recoverable conditions (validation errors, merge conflicts).
+  - `Error` — unexpected failures, with the exception when there is one.
+- **Log a failure once**, where the request or transaction is owned (`ApiBase`, `ServiceBase`); inner
+  layers return their `ErrorOr` errors without logging them again. That line carries the operation, the
+  error codes and their descriptions, so the **`Error` description is the "why"**: name the offending
+  identifiers and the rule broken. A `Debug` phase summary reports its failures as well as its successes.
+- **Log a success once its outcome is settled** — after the transaction scope returns, not inside it.
+- **Never inside a per-element loop**: aggregate, then log once.
+- **Identifiers and counts only** — never payloads, element content, credentials or connection strings.
+- **Tests** assert logging with `FakeLogger<T>` (see `TESTING.md` §2).
+
 ## Quality rules
 
 - Prefer comparing `Count` to 0 rather than using `Any()`, both for clarity and for performance.
