@@ -45,7 +45,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [SetUp]
         public void SetUp()
         {
-            this.modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            this.modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             this.modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             Assert.That(this.modelProvider.ApplyChanges(ConnectionChangesHelper.CreateChanges()).Problems, Is.Empty);
         }

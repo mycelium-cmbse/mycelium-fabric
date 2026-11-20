@@ -88,7 +88,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
             [
                 new ModelChange { Identity = RequirementIds[0], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[0], SatisfyingPart = Eosat1Id } },
@@ -168,7 +168,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
             // The camera weighs 35 instead of the 38 of OpticalCamera: it meets a limit of 36.
             var model = RedefinedValueHelper.CreateDtos();
 
-            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
             [
                 new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId, Name = "cameraMass", ReqId = "REQ-PL-001", Text = "The camera shall weigh at most 36 kg." } },
                 new ModelChange { Identity = "cameraMass", Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 36 } } },
@@ -254,7 +254,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
             [
                 new ModelChange { Identity = RequirementIds[0], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Identity = RequirementIds[1], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "power", Operator = "<", Limit = 70 } } },
@@ -382,7 +382,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
 
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
             [
                 .. cases.SelectMany((_, index) => new[]
                 {
@@ -446,7 +446,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Requirements
         {
             var model = ModelDtoHelper.ReadSatelliteDtos();
 
-            var result = new ModelChangeApplier(new Serializer(), new DeSerializer()).Apply(model,
+            var result = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
             [
                 new ModelChange { Identity = RequirementIds[0], Payload = new ElementPayload { Constraint = new ConstraintPayload { Attribute = "mass", Operator = "<=", Limit = 150, Margin = 20 } } },
                 new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = RequirementIds[0], SatisfyingPart = Eosat1Id } },

@@ -25,5 +25,13 @@ namespace Mycelium.Fabric.Mcp.Tools
     /// <param name="Issues">The matching issues of the requested page, the most serious first.</param>
     /// <param name="NextOffset">The offset that gives the next page, or <c>null</c> when this page is the last one.</param>
     public sealed record ValidationReport(int ElementCount, int ErrorCount, int WarningCount, int InformationCount, IReadOnlyList<RuleSummary> Rules,
-        int TotalFound, IReadOnlyList<ValidationIssue> Issues, int? NextOffset);
+        int TotalFound, IReadOnlyList<ValidationIssue> Issues, int? NextOffset)
+    {
+        /// <summary>
+        /// Gets the problems met while loading the standard library, such as a missing folder, or while reading its units, or
+        /// <c>null</c> when there is none: without the library, the model cannot use the quantities, the units or the
+        /// <c>Refinement</c> metadata of the library.
+        /// </summary>
+        public IReadOnlyList<string> LibraryProblems { get; init; }
+    }
 }

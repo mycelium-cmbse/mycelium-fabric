@@ -187,7 +187,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         [Test]
         public void CheckRequirements_OnAPartTypedByADefinition_AddsUpThePartsOfTheDefinition()
         {
-            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
             var batch = emptyModelProvider.ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());
@@ -210,7 +210,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="InMemoryModelProvider"/> with the loaded model.</returns>
         private static InMemoryModelProvider CreateSatelliteModelProvider()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var satelliteModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return satelliteModelProvider;

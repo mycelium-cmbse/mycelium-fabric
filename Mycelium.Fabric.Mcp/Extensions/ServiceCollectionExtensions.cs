@@ -17,6 +17,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
     using Microsoft.Extensions.AI;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging.Abstractions;
     using Microsoft.Extensions.Options;
 
     using Mycelium.Fabric.Mcp.Changes;
@@ -33,6 +35,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
     using SysML2.NET.Serializer.Json;
 
+    using IModelLibraryLoader = SysML2.NET.Serializer.Xmi.IModelLibraryLoader;
+    using ModelLibraryLoader = SysML2.NET.Serializer.Xmi.ModelLibraryLoader;
+
     /// <summary>
     /// Extension methods that register the Mycelium Fabric MCP server in an <see cref="IServiceCollection"/>.
     /// </summary>
@@ -43,7 +48,9 @@ namespace Mycelium.Fabric.Mcp.Extensions
         {
             /// <summary>
             /// Registers the MCP server, its tools and prompts, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/>
-            /// unless the host has registered its own, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
+            /// unless the host has registered its own, the <see cref="StandardLibrary"/> read from the folder of the
+            /// <see cref="StandardLibraryOptions"/>, one instance that is also the hosted service that loads it in the background
+            /// from the start of the host, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
             /// an <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a
             /// <see cref="JsonModelExporter"/> that writes the model to the export folder of the <see cref="ModelExportOptions"/>,
             /// a <see cref="DocumentReader"/> that reads the document folder of the <see cref="DocumentReaderOptions"/>, the
@@ -69,12 +76,29 @@ namespace Mycelium.Fabric.Mcp.Extensions
 
                 services.TryAddSingleton<ISerializer, Serializer>();
                 services.TryAddSingleton<IDeSerializer, DeSerializer>();
+
+                services.AddOptions<StandardLibraryOptions>().BindConfiguration(StandardLibraryOptions.SectionName);
+                services.TryAddSingleton<IModelLibraryLoader>(serviceProvider => new ModelLibraryLoader(serviceProvider.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance));
+
+                services.AddSingleton(serviceProvider =>
+                {
+                    var libraryOptions = serviceProvider.GetRequiredService<IOptions<StandardLibraryOptions>>().Value;
+                    var libraryDirectory = Path.GetFullPath(libraryOptions.LibraryDirectory ?? "StandardLibrary", AppContext.BaseDirectory);
+
+                    return new StandardLibrary(serviceProvider.GetRequiredService<IModelLibraryLoader>(), new Uri(libraryDirectory));
+                });
+
+                // The same instance is the library of the tools and the hosted service that loads it: a second instance would
+                // load the library a second time.
+                services.AddSingleton<IStandardLibrary>(serviceProvider => serviceProvider.GetRequiredService<StandardLibrary>());
+                services.AddHostedService(serviceProvider => serviceProvider.GetRequiredService<StandardLibrary>());
+
                 services.AddSingleton<IModelChangeApplier, ModelChangeApplier>();
                 services.AddSingleton<ITradeOffSolver, CpSatTradeOffSolver>();
 
                 services.AddSingleton<IModelProvider>(serviceProvider =>
                 {
-                    var modelProvider = new InMemoryModelProvider(serviceProvider.GetRequiredService<IModelChangeApplier>(), serviceProvider.GetRequiredService<IDeSerializer>());
+                    var modelProvider = new InMemoryModelProvider(serviceProvider.GetRequiredService<IModelChangeApplier>(), serviceProvider.GetRequiredService<IDeSerializer>(), serviceProvider.GetRequiredService<IStandardLibrary>());
                     modelProvider.LoadModel(modelPath);
                     return modelProvider;
                 });

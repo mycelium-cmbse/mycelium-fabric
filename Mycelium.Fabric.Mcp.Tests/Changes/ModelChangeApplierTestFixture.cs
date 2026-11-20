@@ -58,8 +58,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
 
+    using DtoAnnotation = SysML2.NET.Core.DTO.Root.Annotations.Annotation;
+    using DtoDependency = SysML2.NET.Core.DTO.Root.Dependencies.Dependency;
+    using DtoDocumentation = SysML2.NET.Core.DTO.Root.Annotations.Documentation;
     using DtoElement = SysML2.NET.Core.DTO.Root.Elements.IElement;
     using DtoFeatureTyping = SysML2.NET.Core.DTO.Core.Features.FeatureTyping;
+    using DtoMetadataUsage = SysML2.NET.Core.DTO.Systems.Metadata.MetadataUsage;
+    using DtoOwningMembership = SysML2.NET.Core.DTO.Root.Namespaces.OwningMembership;
+    using DtoRequirementUsage = SysML2.NET.Core.DTO.Systems.Requirements.RequirementUsage;
     using DtoMembership = SysML2.NET.Core.DTO.Root.Namespaces.Membership;
     using DtoRelationship = SysML2.NET.Core.DTO.Root.Elements.IRelationship;
     using DtoSatisfyRequirementUsage = SysML2.NET.Core.DTO.Systems.Requirements.ISatisfyRequirementUsage;
@@ -141,7 +147,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
         [SetUp]
         public void SetUp()
         {
-            this.applier = new ModelChangeApplier(new Serializer(), new DeSerializer());
+            this.applier = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty);
         }
 
         [Test]
@@ -153,9 +159,10 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(() => new ModelChangeApplier(null, deSerializer.Object), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ModelChangeApplier(serializer.Object, null), Throws.TypeOf<ArgumentNullException>());
-                Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object).Apply([], [], new Dictionary<string, Guid>()), Throws.Nothing);
+                Assert.That(() => new ModelChangeApplier(null, deSerializer.Object, StandardLibraryHelper.Empty), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ModelChangeApplier(serializer.Object, null, StandardLibraryHelper.Empty), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object, null), Throws.TypeOf<ArgumentNullException>());
+                Assert.That(() => new ModelChangeApplier(serializer.Object, deSerializer.Object, StandardLibraryHelper.Empty).Apply([], [], new Dictionary<string, Guid>()), Throws.Nothing);
 
                 serializer.Verify(mock => mock.Serialize(It.IsAny<IEnumerable<IIdentified>>(), SerializationModeKind.JSON, false, It.IsAny<Stream>(), It.IsAny<JsonWriterOptions>()),
                     Times.Once);
@@ -794,7 +801,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             string[] expectedProblems =
             [
                 "Change 1 (create): The unit 'kg' only applies to a numeric value.",
-                "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, a name such as kilogram, or a unit declared in a library of the model.",
+                "Change 2 (create): The unit 'furlong' is not known. Use a symbol such as kg, W, km/h, m/s^2, arcsec or hp, a name such as kilogram, or a unit declared in a library of the model.",
                 "Change 3 (create): The value is empty: give a number, a Boolean or a text.",
                 "Change 4 (create): 'nominal' names several enumeration values: write 'EOSat1::Requirements::ModeA::nominal' or 'EOSat1::Requirements::ModeB::nominal'.",
                 "Change 5 (update): The unit 'kg' only applies to a numeric value.",
@@ -1626,6 +1633,144 @@ namespace Mycelium.Fabric.Mcp.Tests.Changes
             return assembler.Cache.Values
                 .Select(lazyElement => lazyElement.Value)
                 .ToDictionary(element => element.Id);
+        }
+
+        [Test]
+        public void Apply_WithAStandardLibraryElement_ReferencesItButNeverModifiesIt()
+        {
+            var applier = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Loaded);
+            var dtos = ReadSatelliteDtos();
+
+            var result = applier.Apply(dtos,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "nominalMass", Definition = "ISQ::MassValue" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "dryMass", Definition = StandardLibraryHelper.MassValueId.ToString() } }
+            ], new Dictionary<string, Guid>());
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(result.Value.Change.Select(dataVersion => dataVersion.Payload).OfType<DtoFeatureTyping>().Select(typing => typing.Type), Is.EqualTo(new[] { StandardLibraryHelper.MassValueId, StandardLibraryHelper.MassValueId }));
+                Assert.That(result.Value.Change.Select(dataVersion => dataVersion.Identity.Id), Does.Not.Contain(StandardLibraryHelper.MassValueId));
+            }
+
+            // The membership that owns MassValue is an element of the library without a name, which the model cannot see.
+            var unnamedLibraryElementId = StandardLibraryHelper.Loaded.Elements[StandardLibraryHelper.MassValueId].OwningRelationship.Id;
+
+            var refusal = applier.Apply(dtos,
+            [
+                new ModelChange { Identity = "ModelingMetadata::Refinement", Payload = new ElementPayload { Name = "Refined" } },
+                new ModelChange { Identity = StandardLibraryHelper.RefinementId.ToString() },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = "ISQ", Name = "part" } },
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "unknownMass", Definition = "ISQ::UnknownQuantity" } },
+                new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = CameraId.ToString(), Name = "control", Definition = "Ports::Port", Conjugated = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = [CameraId.ToString()], Suppliers = [unnamedLibraryElementId.ToString()] } }
+            ], new Dictionary<string, Guid>());
+
+            var problems = refusal.Errors.Select(error => error.Description).ToList();
+
+            var withoutLibrary = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Missing).Apply(dtos,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "AttributeUsage", Owner = CameraId.ToString(), Name = "nominalMass", Definition = "ISQ::MassValue" } }
+            ], new Dictionary<string, Guid>());
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(withoutLibrary.FirstError.Description, Does.Contain("the standard library, where it may be, could not be loaded"));
+                Assert.That(refusal.IsError, Is.True);
+                Assert.That(problems, Has.Count.EqualTo(6));
+                Assert.That(problems[0], Does.Contain("is ModelingMetadata::Refinement, an element of the standard library, which is read-only: it cannot be updated or deleted"));
+                Assert.That(problems[1], Does.Contain("an element of the standard library, which is read-only: it cannot be updated or deleted"));
+                Assert.That(problems[2], Does.Contain("an element of the standard library, which is read-only: create the element in a package of the model"));
+                Assert.That(problems[3], Does.Contain("nor the qualified name of an element of the standard library"));
+                Assert.That(problems[4], Does.Contain("The change would modify Ports::Port, an element of the standard library, which is read-only"));
+                Assert.That(problems[5], Does.Contain($"The supplier '{unnamedLibraryElementId}' is an element of the standard library that has no name"));
+            }
+
+            // The library is left as it is: a later batch can still reference it.
+            var laterResult = applier.Apply(dtos,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "PortUsage", Owner = CameraId.ToString(), Name = "control", Definition = "Ports::Port" } }
+            ], new Dictionary<string, Guid>());
+
+            Assert.That(laterResult.IsError, Is.False);
+        }
+
+        [Test]
+        public void Apply_WithADependency_LinksItsClientsToItsSuppliersAndMarksARefinement()
+        {
+            var applier = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Loaded);
+            var dtos = ReadSatelliteDtos();
+
+            var result = applier.Apply(dtos,
+            [
+                new ModelChange { Identity = "missionMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId.ToString(), Name = "missionMass", Text = "The satellite shall weigh at most 150 kg." } },
+                new ModelChange { Identity = "platformMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId.ToString(), Name = "platformMass", Text = "The platform shall weigh at most 100 kg." } },
+                new ModelChange { Identity = "payloadMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = RequirementsPackageId.ToString(), Name = "payloadMass", Text = "The payload shall weigh at most 50 kg." } },
+                new ModelChange { Identity = "refinement", Payload = new ElementPayload { Type = "Dependency", Clients = ["platformMass"], Suppliers = ["missionMass"], IsRefinement = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Name = "massSplit", Clients = ["platformMass", "payloadMass"], Suppliers = ["missionMass", "ISQ::MassValue"], Text = "The mass is split." } }
+            ], new Dictionary<string, Guid>());
+
+            var created = result.Value.Change.Select(dataVersion => (DtoElement)dataVersion.Payload).ToDictionary(element => element.Id);
+            var requirementIds = created.Values.OfType<DtoRequirementUsage>().ToDictionary(requirement => requirement.DeclaredName, requirement => requirement.Id);
+            var dependencies = created.Values.OfType<DtoDependency>().ToList();
+            var refinement = dependencies.Single(dependency => dependency.DeclaredName == null);
+            var massSplit = dependencies.Single(dependency => dependency.DeclaredName == "massSplit");
+            var annotation = created.Values.OfType<DtoAnnotation>().Single(candidate => candidate.AnnotatedElement == refinement.Id);
+            var metadata = (DtoMetadataUsage)created[annotation.OwnedRelatedElement.Single()];
+            var metadataTyping = created.Values.OfType<DtoFeatureTyping>().Single(typing => typing.TypedFeature == metadata.Id);
+            var refinementMembership = (DtoOwningMembership)created[refinement.OwningRelationship.Value];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.IsError, Is.False);
+                Assert.That(refinement.Client, Is.EqualTo(new[] { requirementIds["platformMass"] }));
+                Assert.That(refinement.Supplier, Is.EqualTo(new[] { requirementIds["missionMass"] }));
+                Assert.That(refinementMembership.OwningRelatedElement, Is.EqualTo(RequirementsPackageId));
+                Assert.That(refinement.OwnedRelationship, Does.Contain(annotation.Id));
+                Assert.That(annotation.AnnotatedElement, Is.EqualTo(refinement.Id));
+                Assert.That(annotation.OwningRelatedElement, Is.EqualTo(refinement.Id));
+                Assert.That(metadataTyping.Type, Is.EqualTo(StandardLibraryHelper.RefinementId));
+                Assert.That(massSplit.Client, Is.EqualTo(new[] { requirementIds["platformMass"], requirementIds["payloadMass"] }));
+                Assert.That(massSplit.Supplier, Is.EqualTo(new[] { requirementIds["missionMass"], StandardLibraryHelper.MassValueId }));
+                Assert.That(massSplit.OwnedRelationship.Select(relationshipId => created[relationshipId]).OfType<DtoAnnotation>().Select(documentation => created[documentation.OwnedRelatedElement.Single()]).OfType<DtoDocumentation>().Single().Body, Is.EqualTo("The mass is split."));
+            }
+
+            // A dependency is deleted, but not updated; the properties of a dependency are refused on other elements.
+            var model = CommitRequestHelper.Apply(dtos, result.Value);
+            var refusal = applier.Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = ["unknownRequirement"], Suppliers = [requirementIds["missionMass"].ToString()] } },
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = [requirementIds["payloadMass"].ToString()] } },
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = [requirementIds["payloadMass"].ToString()], Suppliers = [requirementIds["missionMass"].ToString()], Value = 3 } },
+                new ModelChange { Payload = new ElementPayload { Type = "PartUsage", Owner = CameraId.ToString(), Name = "lens", Clients = [requirementIds["payloadMass"].ToString()] } },
+                new ModelChange { Identity = massSplit.Id.ToString(), Payload = new ElementPayload { Name = "massShare" } }
+            ], new Dictionary<string, Guid>());
+
+            var problems = refusal.Errors.Select(error => error.Description).ToList();
+            var deletion = applier.Apply(model, [new ModelChange { Identity = refinement.Id.ToString() }], new Dictionary<string, Guid>());
+
+            // A refined requirement cannot be deleted while the unnamed refinement, designated by its identifier, holds it.
+            var referencedDeletion = applier.Apply(model, [new ModelChange { Identity = requirementIds["missionMass"].ToString() }], new Dictionary<string, Guid>());
+
+            var withoutLibrary = new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty).Apply(model,
+            [
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = [requirementIds["payloadMass"].ToString()], Suppliers = [requirementIds["missionMass"].ToString()], IsRefinement = true } }
+            ], new Dictionary<string, Guid>());
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(problems, Has.Count.EqualTo(5));
+                Assert.That(problems[0], Does.Contain("The client 'unknownRequirement' is neither the identifier"));
+                Assert.That(problems[1], Does.Contain("needs at least one client and one supplier"));
+                Assert.That(problems[2], Does.Contain("A Dependency takes clients and suppliers"));
+                Assert.That(problems[3], Does.Contain("only apply to the creation of a Dependency"));
+                Assert.That(problems[4], Does.Contain("an element that is not a relationship"));
+                Assert.That(deletion.IsError, Is.False);
+                Assert.That(deletion.Value.Change.Where(dataVersion => dataVersion.Payload == null).Select(dataVersion => dataVersion.Identity.Id), Does.Contain(refinement.Id).And.Contain(annotation.Id).And.Contain(metadata.Id));
+                Assert.That(referencedDeletion.FirstError.Description, Does.Contain($"is still referenced by the Dependency {refinement.Id}").And.Contain("'EOSat1::Requirements::massSplit'"));
+                Assert.That(withoutLibrary.FirstError.Description, Does.Contain("the standard library could not be loaded"));
+            }
         }
 
         [Test]

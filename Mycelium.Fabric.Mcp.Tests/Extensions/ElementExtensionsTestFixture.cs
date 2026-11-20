@@ -50,7 +50,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [SetUp]
         public void SetUp()
         {
-            var modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
+            var modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer(), StandardLibraryHelper.Empty);
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             this.payloadSubsystem = modelProvider.GetElementById(PayloadSubsystemId);
@@ -186,7 +186,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [Test]
         public void CollectContributions_OfPartsDeclaredInADefinition_CountsThemForEachTypedPart()
         {
-            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
 
             var result = modelProvider.ApplyChanges(DefinitionPartsChangesHelper.CreateChanges());

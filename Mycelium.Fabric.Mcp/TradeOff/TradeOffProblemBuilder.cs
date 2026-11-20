@@ -118,7 +118,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
                 throw new McpException($"No part under '{root.name}' and no variant has a value for '{unknownAttribute}'. Use get_attribute_values to get the attribute names.");
             }
 
-            var libraryUnits = LibraryUnits.Read(modelProvider.Elements);
+            var libraryUnits = modelProvider.Units;
             var units = ReadUnits(root, attributes, givenChoices, request.Constraints ?? [], limits, libraryUnits);
             limits = limits.Select((limit, index) => ConvertLimit(limit, request.Constraints[index], index, units, libraryUnits)).ToList();
 
@@ -190,7 +190,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
         /// <param name="constraints">The <see cref="TradeOffConstraint"/>s of the request.</param>
         /// <param name="limits">The checked <see cref="TradeOffLimit"/>s, in the order of the constraints.</param>
-        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
+        /// <param name="libraryUnits">The units of the model: the units of its libraries and of the standard library.</param>
         /// <returns>The unit of each attribute by name, <c>null</c> for an attribute without unit.</returns>
         /// <exception cref="McpException">
         /// Thrown when a unit is unknown or has an offset, or when two attributes that are compared have units of different
@@ -235,7 +235,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="attribute">The name of the attribute.</param>
         /// <param name="choices">The <see cref="TradeOffChoice"/>s of the request.</param>
         /// <param name="constraints">The <see cref="TradeOffConstraint"/>s of the request.</param>
-        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
+        /// <param name="libraryUnits">The units of the model: the units of its libraries and of the standard library.</param>
         /// <returns>The unit of the attribute, or <c>null</c> when nothing gives one.</returns>
         /// <exception cref="McpException">
         /// Thrown when a unit is unknown or has an offset.
@@ -258,11 +258,11 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         }
 
         /// <summary>
-        /// Finds a unit from its symbol or its name: a unit that the server knows or a unit of a library of the model.
+        /// Finds a unit from its symbol or its name: a unit that the server knows, a unit of the standard library or a unit of a library of the model.
         /// </summary>
         /// <param name="text">The symbol or name of the unit, or <c>null</c> or empty for none.</param>
         /// <param name="label">What the unit belongs to, for the messages.</param>
-        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
+        /// <param name="libraryUnits">The units of the model: the units of its libraries and of the standard library.</param>
         /// <returns>The unit, or <c>null</c> when <paramref name="text"/> is empty.</returns>
         /// <exception cref="McpException">
         /// Thrown when the unit is not known.
@@ -326,7 +326,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="constraint">The <see cref="TradeOffConstraint"/> that it comes from.</param>
         /// <param name="index">The index of the constraint in the request.</param>
         /// <param name="units">The unit of each attribute.</param>
-        /// <param name="libraryUnits">The units that the libraries of the model declare.</param>
+        /// <param name="libraryUnits">The units of the model: the units of its libraries and of the standard library.</param>
         /// <returns>The limit, in the unit of its attribute.</returns>
         /// <exception cref="McpException">
         /// Thrown when the unit of the limit is not known or has a different dimension from the attribute.
@@ -354,7 +354,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="variant">The <see cref="TradeOffVariant"/> to read.</param>
         /// <param name="choiceName">The name of the choice of the variant.</param>
         /// <param name="units">The unit of each attribute of the problem, by attribute name.</param>
-        /// <param name="libraryUnits">The units declared in the libraries of the model.</param>
+        /// <param name="libraryUnits">The units of the model: the units of its libraries and of the standard library.</param>
         /// <returns>The values, by attribute name, in the unit of the attribute, or else in the unit that the variant gives.</returns>
         /// <exception cref="McpException">
         /// Thrown when a unit is not known or cannot be converted, or when a converted value is out of the range of the solver.
@@ -594,7 +594,7 @@ namespace Mycelium.Fabric.Mcp.TradeOff
         /// <param name="part">The existing part of the choice, or <c>null</c> for equipment to add.</param>
         /// <param name="attributes">The attributes of the objectives and constraints.</param>
         /// <param name="units">The unit of each attribute of the problem, by attribute name.</param>
-        /// <param name="libraryUnits">The units declared in the libraries of the model.</param>
+        /// <param name="libraryUnits">The units of the model: the units of its libraries and of the standard library.</param>
         /// <returns>The <see cref="DecisionDraft"/>.</returns>
         /// <exception cref="McpException">
         /// Thrown when the choice has no variant, or when a variant is invalid.

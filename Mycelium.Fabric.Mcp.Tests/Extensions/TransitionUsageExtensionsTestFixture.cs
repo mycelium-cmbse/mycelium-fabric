@@ -30,7 +30,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [Test]
         public void VerifyGetEndPaths()
         {
-            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             Assert.That(modelProvider.ApplyChanges(ConnectionChangesHelper.CreateChanges()).Problems, Is.Empty);
             Assert.That(modelProvider.ApplyChanges(BehaviourChangesHelper.CreateChanges()).Problems, Is.Empty);

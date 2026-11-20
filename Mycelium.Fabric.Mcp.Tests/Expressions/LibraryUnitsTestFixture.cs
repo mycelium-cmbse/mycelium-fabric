@@ -26,6 +26,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
     using NUnit.Framework;
 
     using SysML2.NET.Core.POCO.Core.Features;
+    using SysML2.NET.Core.POCO.Kernel.Expressions;
     using SysML2.NET.Core.POCO.Systems.Attributes;
     using SysML2.NET.PSM.DTO;
     using SysML2.NET.Serializer.Json;
@@ -170,7 +171,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
         [Test]
         public void Tools_WithAUnitOfALibrary_ConvertTheValues()
         {
-            var provider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var provider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             provider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             // A library of the project, added to the model, that declares the slug.
@@ -223,7 +224,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(refused.Applied, Is.False);
-                Assert.That(refused.Problems, Has.Some.Contains("combines a unit of a library of the model with other units"));
+                Assert.That(refused.Problems, Has.Some.Contains("combines a unit of a library with other units"));
                 Assert.That(applied.Applied, Is.True);
                 Assert.That(payloadMass.Unit.Symbol, Is.EqualTo("slug"));
                 Assert.That(payloadMass.Total, Is.EqualTo(2 + (1.5 / SlugFactor)).Within(1e-3));
@@ -232,6 +233,96 @@ namespace Mycelium.Fabric.Mcp.Tests.Expressions
                 Assert.That(problem.GetUnit("mass").Symbol, Is.EqualTo("slug"));
                 Assert.That(problem.Decisions[0].Options.Single(option => option.Variant == "light").Values["mass"] * SlugFactor, Is.EqualTo(20).Within(1e-9));
             }
+        }
+
+        [Test]
+        public void VerifyReadWithOtherUnits()
+        {
+            var dtos = new List<DtoElement>();
+            var builder = new ConstraintDtoBuilder(dtos);
+            var projectUnits = builder.Library("ProjectUnits");
+            var projectSlug = builder.UnitIn(projectUnits.Id, "slug", "slug", builder.NamedReference("kg"), builder.Integer(15));
+            builder.UnitIn(projectUnits.Id, "shot", "hp", builder.NamedReference("kg"), builder.Integer(1));
+            builder.UnitIn(builder.Library("OtherUnits").Id, "shot", "hp", builder.NamedReference("g"), builder.Integer(1));
+
+            var standardUnits = StandardLibraryHelper.Loaded.Units;
+            var units = LibraryUnits.Read(ModelDtoHelper.Assemble(dtos), standardUnits);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(() => LibraryUnits.Read([], null), Throws.ArgumentNullException);
+
+                // A name that a library of the model gives hides the standard library, even when it is ambiguous in the model.
+                Assert.That(units.FindDeclaration("slug").Id, Is.EqualTo(projectSlug.Id));
+                Assert.That(units.TryParse("slug", out var slug) ? slug.Factor : 0, Is.EqualTo(15));
+                Assert.That(units.TryParse("hp", out _), Is.False);
+                Assert.That(standardUnits.TryParse("hp", out _), Is.True);
+
+                // The other names come from the standard library.
+                Assert.That(units.TryParse("lbf", out var poundForce) ? poundForce.Factor : 0, Is.EqualTo(4.448222).Within(1e-9));
+                Assert.That(units.FindDeclaration("kg").qualifiedName, Is.EqualTo("SI::kilogram"));
+                Assert.That(LibraryUnits.None.TryParse("kg", out _), Is.True);
+                Assert.That(LibraryUnits.None.FindDeclaration("kg"), Is.Null);
+            }
+        }
+
+        [Test]
+        public void Tools_WithAUnitOfTheStandardLibrary_ReferenceItAndConvertTheValues()
+        {
+            var modelPath = new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json"));
+            var library = StandardLibraryHelper.Loaded;
+            var provider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), library), new DeSerializer(), library);
+            provider.LoadModel(modelPath);
+            var missingLibrary = StandardLibraryHelper.Missing;
+            var providerWithoutLibrary = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), missingLibrary), new DeSerializer(), missingLibrary);
+            providerWithoutLibrary.LoadModel(modelPath);
+
+            ModelChange MassChange(IModelProvider modelProvider, Guid partId, double value, string unit) =>
+                new() { Identity = MassOf(modelProvider, partId).Id.ToString(), Payload = new ElementPayload { Value = value, Unit = unit } };
+
+            bool IsReferenced(Guid unitId) => provider.Elements.OfType<IFeatureReferenceExpression>().Any(reference => reference.referent?.Id == unitId);
+
+            // The camera weighs 2 slug (29.1878 kg), a unit of USCustomaryUnits, and the mass memory 1500 g.
+            var refused = providerWithoutLibrary.ApplyChanges([MassChange(providerWithoutLibrary, CameraId, 2, "slug")]);
+            var applied = provider.ApplyChanges([MassChange(provider, CameraId, 2, "slug"), MassChange(provider, MassMemoryId, 1500, "g")]);
+            var payloadMass = new BudgetTools(provider).SumAttribute(PayloadSubsystemId, "mass");
+
+            var variant = new TradeOffVariant
+            {
+                Name = "light", Values = new Dictionary<string, double> { ["mass"] = 1 }, Units = new Dictionary<string, string> { ["mass"] = "slug" }
+            };
+
+            var choice = new TradeOffChoice { PartId = CameraId, Variants = [variant] };
+            var request = new TradeOffRequest(PayloadSubsystemId, [choice], [new TradeOffObjective { Attribute = "mass" }], null, null, 1, null);
+            var problem = TradeOffProblemBuilder.Build(provider, request);
+            var lightMass = problem.Decisions[0].Options.Single(option => option.Variant == "light").Values["mass"] * problem.GetUnit("mass").Factor;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(refused.Applied, Is.False);
+                Assert.That(refused.Problems, Has.Some.Contains("The unit 'slug' is not known."));
+                Assert.That(applied.Applied, Is.True);
+                Assert.That(IsReferenced(library.Units.FindDeclaration("slug").Id), Is.True);
+                Assert.That(IsReferenced(library.Units.FindDeclaration("g").Id), Is.True);
+                Assert.That(payloadMass.Unit.Symbol, Is.EqualTo("slug"));
+                Assert.That(payloadMass.Total, Is.EqualTo(2 + (1.5 / SlugFactor)).Within(1e-3));
+                Assert.That(lightMass, Is.EqualTo(SlugFactor).Within(1e-3));
+                Assert.That(() => TradeOffProblemBuilder.Build(providerWithoutLibrary, request), Throws.TypeOf<ModelContextProtocol.McpException>().With.Message.Contains("slug"));
+            }
+        }
+
+        /// <summary>
+        /// Gets the mass attribute that the definition of a part of EOSat-1 gives.
+        /// </summary>
+        /// <param name="modelProvider">The <see cref="IModelProvider"/> of EOSat-1.</param>
+        /// <param name="partId">The <c>Id</c> of the part.</param>
+        /// <returns>The mass attribute.</returns>
+        private static IAttributeUsage MassOf(IModelProvider modelProvider, Guid partId)
+        {
+            return ((IFeature)modelProvider.GetRequiredElementById(partId)).type
+                .SelectMany(type => type.ownedFeature)
+                .OfType<IAttributeUsage>()
+                .Single(attribute => attribute.DeclaredName == "mass");
         }
     }
 }

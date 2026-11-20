@@ -123,9 +123,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 {
                     $"changes[0].payload.type: \"Paquet\" is not one of the {metaclassCount} values that the schema lists: Create only: the SysML v2 metaclass of the new element, "
                         + "for example Package, PartDefinition, PartUsage, AttributeUsage or RequirementUsage. Relationships are not created directly: the server builds them from owner, "
-                        + "definition and value.",
+                        + "definition and value, except a Dependency (clients, suppliers), which can be a refinement.",
                     "changes[0].payload: there is no property 'colour'; the properties are type, owner, name, definition, value, unit, text, reqId, constraint, constraints, multiplicity, "
-                        + "redefines, isDefault, isVariation, variant, satisfiedRequirement, satisfyingPart, ends, specializes, performed, direction, conjugated, isEnd, trigger, guard, effect, stateAction, item.",
+                        + "redefines, isDefault, isVariation, variant, satisfiedRequirement, satisfyingPart, ends, clients, suppliers, isRefinement, specializes, performed, direction, conjugated, isEnd, trigger, guard, effect, stateAction, item.",
                     "changes[1].payload.multiplicity: a text is expected, not 4.",
                     "changes[1].payload.value: a number, a Boolean or a text is expected, not [1, 2].",
                     "changes[2].payload.constraint: there is no property 'op'; the properties are kind, attribute, operator, limit, limitAttribute, unit, margin.",

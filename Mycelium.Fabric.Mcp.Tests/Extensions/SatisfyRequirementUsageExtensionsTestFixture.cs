@@ -15,6 +15,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
     using Mycelium.Fabric.Mcp.Changes;
     using Mycelium.Fabric.Mcp.Extensions;
     using Mycelium.Fabric.Mcp.Services;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.Core.Types;
     using SysML2.NET.Core.POCO.Kernel.Expressions;
@@ -43,7 +44,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Extensions
         [Test]
         public void VerifyResolveSatisfyingFeature()
         {
-            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var modelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             var satisfyId = modelProvider.ApplyChanges([new ModelChange { Payload = new ElementPayload { Type = "SatisfyRequirementUsage", SatisfiedRequirement = MassBudgetId, SatisfyingPart = Eosat1Id.ToString() } }]).CreatedElements[0].Id;

@@ -27,6 +27,7 @@
       <PackageReference Include="ModelContextProtocol.Extensions.Apps" />
       <PackageReference Include="SysML2.NET.Dal" />
       <PackageReference Include="SysML2.NET.Serializer.Json" />
+      <PackageReference Include="SysML2.NET.Serializer.Xmi" />
     </ItemGroup>
 
     <ItemGroup>

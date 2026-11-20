@@ -54,6 +54,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         {
             this.modelProvider = new Mock<IModelProvider>();
             this.modelProvider.Setup(provider => provider.GetRequiredElementById(It.IsAny<Guid>())).Throws(new McpException("No element has this identifier."));
+            this.modelProvider.Setup(provider => provider.GetRequiredModelOrLibraryElementById(It.IsAny<Guid>())).Throws(new McpException("No element has this identifier."));
         }
 
         [Test]
@@ -176,7 +177,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
             }
 
             // Once connected, the camera lists the interface that goes through it, the connection and the binding to its port.
-            var connectedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var connectedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             connectedModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             var createdElements = connectedModelProvider.ApplyChanges(ConnectionChangesHelper.CreateChanges()).CreatedElements;
 
@@ -203,7 +204,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
 
             // Once related, the camera lists what it specializes, its perform gives the performed action, and the action lists
             // its succession and its allocation among its connectors.
-            var relatedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var relatedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             relatedModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             var relatedElements = relatedModelProvider.ApplyChanges(RelationshipChangesHelper.CreateChanges()).CreatedElements;
 
@@ -245,6 +246,34 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
                 Assert.That(GetDetails("bogies").Multiplicity, Is.EqualTo("2"));
                 Assert.That(GetDetails("heaters").Multiplicity, Is.EqualTo("1..4"));
                 Assert.That(GetDetails("battery").Multiplicity, Is.Null);
+            }
+
+            // A refinement shows on both requirements; an element of the standard library opens by its identifier.
+            var refinedModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Loaded), new DeSerializer(), StandardLibraryHelper.Loaded);
+            refinedModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
+
+            var refinedResult = refinedModelProvider.ApplyChanges(
+            [
+                new ModelChange { Identity = "missionMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = "9d4b1232-b67b-5023-5163-7bdc6de8ff50", Name = "missionMass", Text = "The satellite shall weigh at most 150 kg." } },
+                new ModelChange { Identity = "platformMass", Payload = new ElementPayload { Type = "RequirementUsage", Owner = "9d4b1232-b67b-5023-5163-7bdc6de8ff50", Name = "platformMass", Text = "The platform shall weigh at most 100 kg." } },
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = ["platformMass"], Suppliers = ["missionMass"], IsRefinement = true } },
+                new ModelChange { Payload = new ElementPayload { Type = "Dependency", Clients = ["missionMass"], Suppliers = ["platformMass"] } }
+            ]);
+
+            var refinedTools = new NavigationTools(refinedModelProvider);
+            var missionMass = refinedTools.GetElementDetails(refinedModelProvider.Elements.Single(element => element.DeclaredName == "missionMass").Id);
+            var platformMass = refinedTools.GetElementDetails(refinedModelProvider.Elements.Single(element => element.DeclaredName == "platformMass").Id);
+            var massValue = refinedTools.GetElementDetails(StandardLibraryHelper.MassValueId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(refinedResult.Applied, Is.True);
+                Assert.That(platformMass.Refines, Is.EqualTo(new[] { missionMass.QualifiedName }));
+                Assert.That(platformMass.RefinedBy, Is.Null);
+                Assert.That(missionMass.RefinedBy, Is.EqualTo(new[] { platformMass.QualifiedName }));
+                Assert.That(missionMass.Refines, Is.Null);
+                Assert.That(massValue.QualifiedName, Is.EqualTo("ISQBase::MassValue"));
+                Assert.That(refinedTools.GetElementDetails(CameraId).Refines, Is.Null);
             }
         }
 
@@ -295,7 +324,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="NavigationTools"/> on the loaded model.</returns>
         private static NavigationTools CreateSatelliteTools()
         {
-            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
+            var satelliteModelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer(), StandardLibraryHelper.Empty);
             satelliteModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
 
             return new NavigationTools(satelliteModelProvider);

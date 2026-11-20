@@ -31,7 +31,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// Gets the name of the SysML v2 metaclass of the element to create, for example <c>PartUsage</c>. A payload with a
         /// type creates an element.
         /// </summary>
-        [Description("Create only: the SysML v2 metaclass of the new element, for example Package, PartDefinition, PartUsage, AttributeUsage or RequirementUsage. Relationships are not created directly: the server builds them from owner, definition and value.")]
+        [Description("Create only: the SysML v2 metaclass of the new element, for example Package, PartDefinition, PartUsage, AttributeUsage or RequirementUsage. Relationships are not created directly: the server builds them from owner, definition and value, except a Dependency (clients, suppliers), which can be a refinement.")]
         public string Type { get; init; }
 
         /// <summary>
@@ -49,7 +49,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the definition that types the element, which must be a feature.
         /// </summary>
-        [Description("Create or update, for a feature such as a part: the definition that types it, for example the part definition of a part, as an identifier (Id) or a temporary name. An update replaces the current definition.")]
+        [Description("Create or update, for a feature such as a part: the definition that types it, for example the part definition of a part, as an identifier (Id), a temporary name, or the qualified name of an element of the standard library (ISQ::MassValue for a mass). An update replaces the current definition.")]
         public string Definition { get; init; }
 
         /// <summary>
@@ -61,7 +61,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the unit of the numeric value of the element.
         /// </summary>
-        [Description("Optional, with a numeric value: its unit, as a symbol (kg, W, km/h, m/s^2, arcsec, kWh, Mbit/s) or a name (kilogram). The value is then 38 [kg], and the budgets and checks convert the units.")]
+        [Description("Optional, with a numeric value: its unit, as a symbol (kg, W, km/h, m/s^2, arcsec, kWh, Mbit/s), a name (kilogram) or a unit of the SI and USCustomaryUnits libraries (hp, lbf). The value is then 38 [kg], and the budgets and checks convert the units.")]
         public string Unit { get; init; }
 
         /// <summary>
@@ -146,9 +146,27 @@ namespace Mycelium.Fabric.Mcp.Changes
         public IReadOnlyList<string> Ends { get; init; }
 
         /// <summary>
+        /// Gets the clients of the created <c>Dependency</c>: the elements that depend on its suppliers.
+        /// </summary>
+        [Description("Create, for a Dependency: the elements that depend on the suppliers, at least one, as identifiers (Id), temporary names or qualified names of the standard library. For a refinement (isRefinement), the clients refine the suppliers: 'FLR-R001 refines HLR-R001' gives the clients ['FLR-R001'] and the suppliers ['HLR-R001']. Any element can be a client or a supplier. Without owner, the dependency is created next to its first client. A dependency cannot be updated: delete it and create it again.")]
+        public IReadOnlyList<string> Clients { get; init; }
+
+        /// <summary>
+        /// Gets the suppliers of the created <c>Dependency</c>: the elements on which its clients depend.
+        /// </summary>
+        [Description("Create, for a Dependency: the elements on which the clients depend, at least one, as identifiers (Id), temporary names or qualified names of the standard library. For a refinement, the elements that the clients refine.")]
+        public IReadOnlyList<string> Suppliers { get; init; }
+
+        /// <summary>
+        /// Gets whether the created <c>Dependency</c> is a refinement.
+        /// </summary>
+        [Description("Create, for a Dependency: true makes it a refinement (#refinement dependency ... to ...;), marked with the Refinement metadata of the standard library package ModelingMetadata: the clients give a more precise representation of the suppliers, for example a lower-level requirement of a higher-level one.")]
+        public bool? IsRefinement { get; init; }
+
+        /// <summary>
         /// Gets the element that the created or updated definition or usage specializes.
         /// </summary>
-        [Description("Create or update, for a definition or a usage: the element it specializes (:>), as an identifier (Id) or a temporary name. A definition specializes a definition of the same kind or of a more general kind (a part definition can specialize an item definition), a usage a usage likewise. An update replaces the current specialization.")]
+        [Description("Create or update, for a definition or a usage: the element it specializes (:>), as an identifier (Id), a temporary name, or the qualified name of an element of the standard library. A definition specializes a definition of the same kind or of a more general kind (a part definition can specialize an item definition), a usage a usage likewise. An update replaces the current specialization.")]
         public string Specializes { get; init; }
 
         /// <summary>

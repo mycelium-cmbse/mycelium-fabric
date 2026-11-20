@@ -29,6 +29,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
     using Mycelium.Fabric.Mcp.Tools;
     using Mycelium.Fabric.Mcp.Validation;
     using Mycelium.Fabric.Mcp.Validation.Rules;
+    using Mycelium.Fabric.Mcp.Tests.TestHelpers;
 
     using SysML2.NET.Core.POCO.Root.Elements;
     using SysML2.NET.Serializer.Json;
@@ -683,7 +684,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Tools
         /// <returns>The <see cref="InMemoryModelProvider"/>.</returns>
         private static InMemoryModelProvider CreateEmptyModelProvider()
         {
-            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var emptyModelProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             emptyModelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Empty.json")));
             return emptyModelProvider;
         }

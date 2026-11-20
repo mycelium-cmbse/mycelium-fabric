@@ -13,6 +13,9 @@ namespace Mycelium.Fabric.Mcp.Changes
     using System.Collections.Generic;
     using System.Linq;
 
+    using Mycelium.Fabric.Mcp.Extensions;
+    using Mycelium.Fabric.Mcp.Services;
+
     using SysML2.NET.Core.DTO.Core.Classifiers;
     using SysML2.NET.Core.DTO.Core.Features;
     using SysML2.NET.Core.DTO.Core.Types;
@@ -20,6 +23,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.Core.DTO.Kernel.FeatureValues;
     using SysML2.NET.Core.DTO.Kernel.Packages;
     using SysML2.NET.Core.DTO.Root.Annotations;
+    using SysML2.NET.Core.DTO.Root.Dependencies;
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Root.Namespaces;
     using SysML2.NET.Core.DTO.Systems.Actions;
@@ -41,6 +45,7 @@ namespace Mycelium.Fabric.Mcp.Changes
     using SysML2.NET.PSM.DTO;
 
     using PocoConnector = SysML2.NET.Core.POCO.Kernel.Connectors.IConnector;
+    using PocoDependency = SysML2.NET.Core.POCO.Root.Dependencies.IDependency;
     using PocoElement = SysML2.NET.Core.POCO.Root.Elements.IElement;
     using PocoRelationship = SysML2.NET.Core.POCO.Root.Elements.IRelationship;
     using PocoSatisfyRequirementUsage = SysML2.NET.Core.POCO.Systems.Requirements.ISatisfyRequirementUsage;
@@ -89,12 +94,21 @@ namespace Mycelium.Fabric.Mcp.Changes
         private static readonly System.Type[] UnsupportedConnectionMetaclasses = [typeof(IAllocationDefinition)];
 
         /// <summary>
+        /// The concrete DTO classes of SysML2.NET indexed by their name, which is the name of their metaclass and of the POCO
+        /// class of the same metaclass, to build the stand-in of an element of the standard library. Declared before
+        /// <see cref="CreatableMetaclasses"/>, which is built from it.
+        /// </summary>
+        private static readonly Dictionary<string, System.Type> ElementMetaclasses = typeof(IElement).Assembly.GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IElement).IsAssignableFrom(type))
+            .ToDictionary(type => type.Name);
+
+        /// <summary>
         /// The metaclasses that a change can create, indexed by their name: the concrete DTO classes of SysML2.NET that are
         /// packages, definitions or usages, but not relationships, whose related elements only the server can build, and the
         /// <see cref="ConnectionMetaclasses"/>.
         /// </summary>
-        private static readonly Dictionary<string, System.Type> CreatableMetaclasses = typeof(IElement).Assembly.GetTypes()
-            .Where(type => type is { IsClass: true, IsAbstract: false } && IsCreatable(type))
+        private static readonly Dictionary<string, System.Type> CreatableMetaclasses = ElementMetaclasses.Values
+            .Where(IsCreatable)
             .ToDictionary(type => type.Name, StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
@@ -154,6 +168,16 @@ namespace Mycelium.Fabric.Mcp.Changes
         private readonly HashSet<Guid> unassembledIds = [];
 
         /// <summary>
+        /// The <see cref="IStandardLibrary"/> whose elements the working copy can reference.
+        /// </summary>
+        private readonly IStandardLibrary standardLibrary;
+
+        /// <summary>
+        /// The stand-ins of the elements of the standard library that the changes reference, indexed by their <c>Id</c>.
+        /// </summary>
+        private readonly Dictionary<Guid, IElement> libraryStandIns = [];
+
+        /// <summary>
         /// The SysML2.NET <see cref="Assembler"/> that holds the POCOs of the working copy, or <c>null</c> until they are first
         /// read and after a removal.
         /// </summary>
@@ -166,11 +190,13 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="earlierTemporaryNames">
         /// The <c>Id</c> of the elements created by the previous batches, indexed by their temporary name.
         /// </param>
-        public ModelChangeBatch(IEnumerable<IElement> workingCopy, IReadOnlyDictionary<string, Guid> earlierTemporaryNames)
+        /// <param name="standardLibrary">The <see cref="IStandardLibrary"/> whose elements the working copy can reference.</param>
+        public ModelChangeBatch(IEnumerable<IElement> workingCopy, IReadOnlyDictionary<string, Guid> earlierTemporaryNames, IStandardLibrary standardLibrary)
         {
             this.elementsById = workingCopy.ToDictionary(element => element.Id);
             this.originalIds = [.. this.elementsById.Keys];
             this.earlierTemporaryNames = earlierTemporaryNames;
+            this.standardLibrary = standardLibrary;
         }
 
         /// <summary>
@@ -276,8 +302,8 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Tells whether a change can create an element of the given DTO class: a package, a definition or a usage that is
-        /// not a relationship, or one of the <see cref="ConnectionMetaclasses"/>. A conjugated port definition is built by the
-        /// server with its port definition.
+        /// not a relationship, one of the <see cref="ConnectionMetaclasses"/>, or a dependency. A conjugated port definition is
+        /// built by the server with its port definition.
         /// </summary>
         /// <param name="type">The DTO class.</param>
         /// <returns><c>true</c> when a change can create an element of this class.</returns>
@@ -286,7 +312,8 @@ namespace Mycelium.Fabric.Mcp.Changes
             var isPackageDefinitionOrUsage = typeof(IPackage).IsAssignableFrom(type) || typeof(IDefinition).IsAssignableFrom(type) || typeof(IUsage).IsAssignableFrom(type);
 
             return (isPackageDefinitionOrUsage && !typeof(IRelationship).IsAssignableFrom(type) && !typeof(IConjugatedPortDefinition).IsAssignableFrom(type))
-                || (ConnectionMetaclasses.Any(metaclass => metaclass.IsAssignableFrom(type)) && !UnsupportedConnectionMetaclasses.Any(metaclass => metaclass.IsAssignableFrom(type)));
+                || (ConnectionMetaclasses.Any(metaclass => metaclass.IsAssignableFrom(type)) && !UnsupportedConnectionMetaclasses.Any(metaclass => metaclass.IsAssignableFrom(type)))
+                || typeof(IDependency).IsAssignableFrom(type);
         }
 
         /// <summary>
@@ -375,6 +402,14 @@ namespace Mycelium.Fabric.Mcp.Changes
             this.CheckTemporaryName(change.Identity);
 
             var member = CreateElement(payload.Type);
+
+            if (member is IDependency)
+            {
+                this.CreateDependency(member, change);
+                return;
+            }
+
+            CheckDependencyProperties(payload);
             CheckRedefinitionProperties(member, payload);
 
             if (payload.StateAction != null)
@@ -649,6 +684,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             this.CheckRequirementProperties(element, payload);
+            CheckDependencyProperties(payload);
 
             return payload switch
             {
@@ -668,7 +704,7 @@ namespace Mycelium.Fabric.Mcp.Changes
         private void MarkForDeletion(ModelChange change, int changeNumber)
         {
             var element = this.Resolve(change.Identity, ElementRole);
-            CheckKind(element, IsChangeable(element), ElementRole, "an element that is not a relationship");
+            CheckKind(element, IsChangeable(element) || element is IDependency, ElementRole, "an element that is not a relationship, or a dependency");
 
             this.deletions.Add((changeNumber, element));
         }
@@ -722,12 +758,14 @@ namespace Mycelium.Fabric.Mcp.Changes
 
         /// <summary>
         /// Gets the POCOs of the working copy, built by SysML2.NET, which computes their derived properties, such as
-        /// <c>qualifiedName</c> or the <c>feature</c> of a type, from the whole working copy.
+        /// <c>qualifiedName</c> or the <c>feature</c> of a type, from the whole working copy and the standard library.
         /// </summary>
-        /// <returns>The POCOs of the working copy.</returns>
+        /// <returns>The POCOs of the working copy, without the elements of the standard library.</returns>
         private IEnumerable<PocoElement> AssembleElements()
         {
-            return this.GetAssembler().Cache.Values.Select(lazyElement => lazyElement.Value);
+            var assembledElements = this.GetAssembler().Cache;
+
+            return this.elementsById.Keys.Select(elementId => assembledElements[elementId].Value);
         }
 
         /// <summary>
@@ -754,7 +792,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Gets the SysML2.NET <see cref="Assembler"/> that holds the POCOs of the working copy. It builds them all the first
         /// time and after a removal, and otherwise only brings up to date the POCOs of the elements that the batch has added or
-        /// modified since, which is much faster on a large model.
+        /// modified since, which is much faster on a large model. Its cache also holds the named elements of the standard
+        /// library, which the working copy can reference.
         /// </summary>
         /// <returns>The assembler, whose cache holds the POCOs of the working copy.</returns>
         private Assembler GetAssembler()
@@ -762,6 +801,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             if (this.assembler == null)
             {
                 this.assembler = new Assembler();
+                this.assembler.AddElements(this.standardLibrary.NamedElements.Values, this.elementsById.Values);
                 this.assembler.Synchronize(this.elementsById.Values);
             }
             else if (this.unassembledIds.Count > 0)
@@ -798,9 +838,9 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Describes, in a message, the element that holds a reference: the transition that contains the referencing
         /// relationship, since its source, target, trigger, guard and effect are deleted with it, or else the nearest owner
-        /// that has a qualified name (for example the part typed by a definition), or the satisfy link or the unnamed
-        /// connector that contains it. An unnamed element is designated by its identifier, so that it can be deleted. A
-        /// connector, owned through a membership, is itself the referencing relationship.
+        /// that has a qualified name (for example the part typed by a definition), or the satisfy link, the unnamed connector
+        /// or the unnamed dependency that contains it. An unnamed element is designated by its identifier, so that it can be
+        /// deleted. A connector or a dependency, owned through a membership, is itself the referencing relationship.
         /// </summary>
         /// <param name="relationship">The referencing relationship.</param>
         /// <returns>The description of the referencing element.</returns>
@@ -814,7 +854,7 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             var holder = owners.OfType<PocoTransitionUsage>().FirstOrDefault<PocoElement>()
-                ?? owners.FirstOrDefault(element => element is PocoSatisfyRequirementUsage or PocoConnector { qualifiedName: null } || element.qualifiedName != null);
+                ?? owners.FirstOrDefault(element => element is PocoSatisfyRequirementUsage or PocoConnector { qualifiedName: null } or PocoDependency { qualifiedName: null } || element.qualifiedName != null);
 
             return holder switch
             {
@@ -876,13 +916,17 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Gets the element designated by an identifier or by the temporary name of an element created by a previous change.
+        /// Gets the element designated by an identifier, by the temporary name of an element created by a previous change, or
+        /// by the qualified name of an element of the standard library, such as <c>ISQ::MassValue</c>. An element of the
+        /// library is read-only: it can be referenced, for example as a definition, but neither owns an element nor is updated
+        /// or deleted.
         /// </summary>
-        /// <param name="reference">The <c>Id</c> or temporary name of the element.</param>
+        /// <param name="reference">The <c>Id</c>, temporary name or qualified name of the element.</param>
         /// <param name="role">The role of the element in the change, for example <c>owner</c>, used in the messages.</param>
-        /// <returns>The designated element.</returns>
+        /// <returns>The designated element, a stand-in when it is an element of the standard library.</returns>
         /// <exception cref="InvalidChangeException">
-        /// Thrown when the reference is missing, designates no element, or designates an element marked for deletion.
+        /// Thrown when the reference is missing, designates no element, designates an element marked for deletion, or
+        /// designates an element of the standard library as the owner or the updated or deleted element.
         /// </exception>
         private IElement Resolve(string reference, string role)
         {
@@ -899,14 +943,29 @@ namespace Mycelium.Fabric.Mcp.Changes
 
                 if (!isEarlierName)
                 {
+                    if (!this.failedTemporaryNames.Contains(reference) && this.standardLibrary.Resolve(reference) is { } namedLibraryElement)
+                    {
+                        return this.GetLibraryStandIn(namedLibraryElement, reference, role);
+                    }
+
+                    if (reference.Contains("::", StringComparison.Ordinal) && this.standardLibrary.NamedElements.Count == 0 && this.standardLibrary.Problems.Count > 0)
+                    {
+                        throw new InvalidChangeException($"The {role} '{reference}' is not an element of the model, and the standard library, where it may be, could not be loaded: validate_model tells why.");
+                    }
+
                     throw new InvalidChangeException(this.failedTemporaryNames.Contains(reference)
                         ? $"The {role} '{reference}' has not been created, because the change that creates it has failed."
-                        : $"The {role} '{reference}' is neither the identifier of an element nor the temporary name of an element created so far. Use the identifier of the element: find_elements_by_name or the createdElements of a previous batch give it.");
+                        : $"The {role} '{reference}' is neither the identifier of an element nor the temporary name of an element created so far, nor the qualified name of an element of the standard library, such as ISQ::MassValue. Use the identifier of the element: find_elements_by_name or the createdElements of a previous batch give it.");
                 }
             }
 
             if (!this.elementsById.TryGetValue(elementId, out var element))
             {
+                if (!isEarlierName && this.standardLibrary.Elements.TryGetValue(elementId, out var libraryElement))
+                {
+                    return this.GetLibraryStandIn(libraryElement, reference, role);
+                }
+
                 throw new InvalidChangeException(isEarlierName
                     ? $"The {role} '{reference}' is the temporary name of an element that no longer exists. Use find_elements_by_name or list_children to get the identifier of the element."
                     : $"No element has the identifier '{reference}'. Use find_elements_by_name or list_children to get a valid identifier.");
@@ -918,6 +977,49 @@ namespace Mycelium.Fabric.Mcp.Changes
             }
 
             return element;
+        }
+
+        /// <summary>
+        /// Gets the stand-in of an element of the standard library in the batch: a DTO of the same metaclass, with its
+        /// identifier and names, that the changes can reference but that is never added to the working copy. The same element
+        /// always has the same stand-in.
+        /// </summary>
+        /// <param name="libraryElement">The element of the standard library.</param>
+        /// <param name="reference">The reference of the change to the element, used in the messages.</param>
+        /// <param name="role">The role of the element in the change, used in the messages.</param>
+        /// <returns>The stand-in of the element.</returns>
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when the element has no name, since the POCOs of the model only see the named elements of the library, or
+        /// when it is designated as the owner of an element or as the element to update or delete.
+        /// </exception>
+        private IElement GetLibraryStandIn(PocoElement libraryElement, string reference, string role)
+        {
+            if (!this.standardLibrary.NamedElements.ContainsKey(libraryElement.Id))
+            {
+                throw new InvalidChangeException($"The {role} '{reference}' is an element of the standard library that has no name, which a model cannot reference: use a named element of the library, such as ISQ::MassValue.");
+            }
+
+            if (role == OwnerRole)
+            {
+                throw new InvalidChangeException($"The owner '{reference}' is {libraryElement.qualifiedName}, an element of the standard library, which is read-only: create the element in a package of the model.");
+            }
+
+            if (role == ElementRole)
+            {
+                throw new InvalidChangeException($"The element '{reference}' is {libraryElement.qualifiedName}, an element of the standard library, which is read-only: it cannot be updated or deleted.");
+            }
+
+            if (!this.libraryStandIns.TryGetValue(libraryElement.Id, out var standIn))
+            {
+                standIn = (IElement)Activator.CreateInstance(ElementMetaclasses[libraryElement.GetType().Name]);
+                standIn.Id = libraryElement.Id;
+                standIn.ElementId = libraryElement.ElementId;
+                standIn.DeclaredName = libraryElement.DeclaredName;
+                standIn.DeclaredShortName = libraryElement.DeclaredShortName;
+                this.libraryStandIns[libraryElement.Id] = standIn;
+            }
+
+            return standIn;
         }
 
         /// <summary>
@@ -1045,13 +1147,15 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <param name="owner">The element that owns the relationship.</param>
         /// <param name="relationship">The new relationship.</param>
         /// <param name="ownedRelatedElement">The element owned by the relationship, or <c>null</c> when it owns none.</param>
+        /// <exception cref="InvalidChangeException">Thrown when the owner is an element of the standard library.</exception>
         private void AddOwnedRelationship(IElement owner, IRelationship relationship, IElement ownedRelatedElement = null)
         {
+            // Marked first, so that an owner of the standard library is refused before anything is added.
+            this.MarkModified(owner);
             this.Add(relationship);
 
             relationship.OwningRelatedElement = owner.Id;
             owner.OwnedRelationship.Add(relationship.Id);
-            this.MarkModified(owner);
 
             if (ownedRelatedElement != null)
             {
@@ -1083,8 +1187,17 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// its POCO is brought up to date before it is read again.
         /// </summary>
         /// <param name="element">The modified element.</param>
+        /// <exception cref="InvalidChangeException">
+        /// Thrown when the element is an element of the standard library, which is read-only, for example the port definition
+        /// of the library that a conjugated port would give a conjugate.
+        /// </exception>
         private void MarkModified(IElement element)
         {
+            if (this.libraryStandIns.ContainsKey(element.Id))
+            {
+                throw new InvalidChangeException($"The change would modify {this.standardLibrary.NamedElements[element.Id].qualifiedName}, an element of the standard library, which is read-only: use an element of the model instead, for example one that specializes it.");
+            }
+
             this.modifiedIds.Add(element.Id);
             this.unassembledIds.Add(element.Id);
         }

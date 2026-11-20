@@ -43,7 +43,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         private const string QualifiedNameSeparator = "::";
 
         /// <summary>
-        /// The units that the libraries of the model declare, read the first time that a unit is written.
+        /// The units that the libraries of the model and the standard library declare, read the first time that a unit is
+        /// written.
         /// </summary>
         private LibraryUnits libraryUnits;
 
@@ -74,8 +75,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         }
 
         /// <summary>
-        /// Finds a unit from its symbol or name: a unit of <see cref="UnitCatalog"/>, simple or compound, or a unit declared
-        /// in a library of the model.
+        /// Finds a unit from its symbol or name: a unit of <see cref="UnitCatalog"/>, simple or compound, a unit of the
+        /// standard library, such as <c>hp</c>, or a unit declared in a library of the model.
         /// </summary>
         /// <param name="unit">The symbol or name of the unit, for example <c>kg</c>.</param>
         /// <returns>The <see cref="Unit"/>.</returns>
@@ -85,17 +86,17 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// </exception>
         private Unit ParseUnit(string unit)
         {
-            this.libraryUnits ??= LibraryUnits.Read(this.AssembleElements());
+            this.libraryUnits ??= LibraryUnits.Read(this.AssembleElements(), this.standardLibrary.Units);
 
             if (!this.libraryUnits.TryParse(unit, out var parsedUnit))
             {
-                throw new InvalidChangeException($"The unit '{unit}' is not known. Use a symbol such as kg, W, km/h, m/s^2 or arcsec, a name such as kilogram, "
+                throw new InvalidChangeException($"The unit '{unit}' is not known. Use a symbol such as kg, W, km/h, m/s^2, arcsec or hp, a name such as kilogram, "
                     + "or a unit declared in a library of the model.");
             }
 
             return UnitCatalog.TryParse(unit, out _) || this.libraryUnits.FindDeclaration(unit) != null
                 ? parsedUnit
-                : throw new InvalidChangeException($"The unit '{unit}' combines a unit of a library of the model with other units: declare it as one unit in a library.");
+                : throw new InvalidChangeException($"The unit '{unit}' combines a unit of a library with other units: use or declare it as one unit in a library.");
         }
 
         /// <summary>
@@ -153,8 +154,9 @@ namespace Mycelium.Fabric.Mcp.Changes
         /// <summary>
         /// Creates a reference to a unit, as <c>kg</c> in <c>38 [kg]</c>: a <c>FeatureReferenceExpression</c> whose membership
         /// names the unit. It designates the unit that a library of the model declares (<c>SI</c>, or a library of the
-        /// project), or else the unit of the SI library by a stable identifier. An element of the user that has the same short
-        /// name outside a library is not a unit.
+        /// project), or else the unit of the standard library, or else, when the standard library has not been loaded or does
+        /// not declare the unit (<c>m/s^2</c>), the unit of the SI library by a stable identifier. An element of the user that
+        /// has the same short name outside a library is not a unit.
         /// </summary>
         /// <param name="unitText">The symbol or name of the unit, already checked by <see cref="CheckValue"/>.</param>
         /// <returns>The new expression.</returns>
@@ -162,7 +164,8 @@ namespace Mycelium.Fabric.Mcp.Changes
         {
             var unit = this.ParseUnit(unitText);
             var declaration = this.libraryUnits.FindDeclaration(unitText) ?? this.libraryUnits.FindDeclaration(unit.Symbol);
-            var unitElement = declaration == null || this.IsMarkedForDeletion(this.elementsById[declaration.Id]) ? null : declaration;
+            var isDeleted = declaration != null && this.elementsById.TryGetValue(declaration.Id, out var declarationDto) && this.IsMarkedForDeletion(declarationDto);
+            var unitElement = isDeleted ? null : declaration;
 
             var reference = this.Add(new FeatureReferenceExpression());
             var unitId = unitElement?.Id ?? CreateUnitId(unit.Symbol);

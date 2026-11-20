@@ -19,6 +19,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
     using Moq;
 
     using Mycelium.Fabric.Mcp.Changes;
+    using Mycelium.Fabric.Mcp.Expressions;
     using Mycelium.Fabric.Mcp.Services;
     using Mycelium.Fabric.Mcp.Tests.TestHelpers;
     using Mycelium.Fabric.Mcp.TradeOff;
@@ -87,7 +88,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         [SetUp]
         public void SetUp()
         {
-            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer());
+            this.modelProvider = new InMemoryModelProvider(new Mock<IModelChangeApplier>().Object, new DeSerializer(), StandardLibraryHelper.Empty);
             this.modelProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
         }
 
@@ -251,7 +252,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
         [Test]
         public void VerifyBuildWithUnits()
         {
-            var unitProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer()), new DeSerializer());
+            var unitProvider = new InMemoryModelProvider(new ModelChangeApplier(new Serializer(), new DeSerializer(), StandardLibraryHelper.Empty), new DeSerializer(), StandardLibraryHelper.Empty);
             unitProvider.LoadModel(new Uri(Path.Combine(TestContext.CurrentContext.TestDirectory, "Data", "Satellite.json")));
             var massMemoryId = unitProvider.Elements.Single(element => element.DeclaredName == "massMemory").Id;
 
@@ -355,6 +356,7 @@ namespace Mycelium.Fabric.Mcp.Tests.TradeOff
             provider.Setup(modelProvider => modelProvider.GetRequiredElementById(root.Id)).Returns(root);
             provider.Setup(modelProvider => modelProvider.GetRequiredElementById(unit.Id)).Returns(unit);
             provider.Setup(modelProvider => modelProvider.Elements).Returns([]);
+            provider.Setup(modelProvider => modelProvider.Units).Returns(LibraryUnits.None);
 
             var massRequest = new TradeOffRequest(root.Id, [Choice(unit.Id, Variant("light", ("mass", 1)))], [new TradeOffObjective { Attribute = "mass" }], null, null, 1, null);
             var powerProblem = TradeOffProblemBuilder.Build(provider.Object, massRequest with { Objectives = [new TradeOffObjective { Attribute = "power" }] });
