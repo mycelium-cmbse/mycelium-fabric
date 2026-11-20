@@ -45,6 +45,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Persistence
         Task<ErrorOr<TData>> ReadByIdAsync<TData>(IDataStoreTransaction transaction, Guid commitId, Guid dataId, CancellationToken cancellationToken) where TData : class, IData;
 
         /// <summary>
+        /// Reads, in one query, the payload with any of the given identifiers as it stands at a commit.
+        /// </summary>
+        /// <typeparam name="TData">The type of payload that is read.</typeparam>
+        /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the operation takes part in.</param>
+        /// <param name="commitId">The identifier of the commit the payload is read at.</param>
+        /// <param name="dataIds">The identifiers of the payload that is read.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
+        /// <returns>The payload that exists at the commit, none for an identifier that does not, or the errors that prevented reading it.</returns>
+        Task<ErrorOr<IReadOnlyList<TData>>> ReadByIdsAsync<TData>(IDataStoreTransaction transaction, Guid commitId, IReadOnlyCollection<Guid> dataIds,
+            CancellationToken cancellationToken) where TData : class, IData;
+
+        /// <summary>
         /// Reads one page of the payload of a given type as it stands at a commit.
         /// </summary>
         /// <typeparam name="TData">The type of payload that is read.</typeparam>

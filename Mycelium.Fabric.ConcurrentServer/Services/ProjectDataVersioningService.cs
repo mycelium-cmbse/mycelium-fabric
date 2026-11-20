@@ -60,13 +60,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <param name="dataIdentityRepository">The <see cref="IDataIdentityRepository"/> of the data identities.</param>
         /// <param name="commitGraphRepository">The <see cref="ICommitGraphRepository"/> that walks the commit graph.</param>
         /// <param name="dataRepository">The <see cref="IDataRepository"/> of the versioned payload.</param>
+        /// <param name="changeExpander">The <see cref="IChangeExpander"/> that adds the effects of a change to it before it is validated.</param>
+        /// <param name="changeValidator">The <see cref="IChangeValidator"/> that validates a change before it is committed.</param>
         /// <param name="logger">The <see cref="ILogger{TCategoryName}"/> that records the warnings and failures of the operations.</param>
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
         public ProjectDataVersioningService(IDatabaseHandler databaseHandler, IProjectScope projectScope, IProjectRepository projectRepository, IBranchRepository branchRepository,
             ITagRepository tagRepository, ICommitRepository commitRepository, IDataVersionRepository dataVersionRepository, IDataIdentityRepository dataIdentityRepository,
-            ICommitGraphRepository commitGraphRepository, IDataRepository dataRepository, ILogger<ProjectDataVersioningService> logger)
+            ICommitGraphRepository commitGraphRepository, IDataRepository dataRepository, IChangeExpander changeExpander, IChangeValidator changeValidator,
+            ILogger<ProjectDataVersioningService> logger)
             : base(databaseHandler, projectScope, projectRepository, logger)
         {
+            this.ChangeExpander = changeExpander ?? throw new ArgumentNullException(nameof(changeExpander));
+            this.ChangeValidator = changeValidator ?? throw new ArgumentNullException(nameof(changeValidator));
             this.BranchRepository = branchRepository ?? throw new ArgumentNullException(nameof(branchRepository));
             this.TagRepository = tagRepository ?? throw new ArgumentNullException(nameof(tagRepository));
             this.CommitRepository = commitRepository ?? throw new ArgumentNullException(nameof(commitRepository));
@@ -80,6 +85,16 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// Gets the <see cref="IBranchRepository"/> of the branches.
         /// </summary>
         private IBranchRepository BranchRepository { get; }
+
+        /// <summary>
+        /// Gets the <see cref="IChangeExpander"/> that adds the effects of a change to it before it is validated.
+        /// </summary>
+        private IChangeExpander ChangeExpander { get; }
+
+        /// <summary>
+        /// Gets the <see cref="IChangeValidator"/> that validates a change before it is committed.
+        /// </summary>
+        private IChangeValidator ChangeValidator { get; }
 
         /// <summary>
         /// Gets the <see cref="ICommitGraphRepository"/> that walks the commit graph.
@@ -179,7 +194,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         /// <remarks>
         /// Annex A (PIM-PCB-010): the previous commits are the head of the branch together with the given ones, and the head moves to the
         /// created commit. The recorded change can exceed the requested one: §7.2.3 adds the deletion of the data a deleted element takes with
-        /// it, and §7.1.2 the versions that settle what the previous commits disagree on.
+        /// it, §7.1.2 the versions that settle what the previous commits disagree on, and each <see cref="IElementEffect"/> what the change of
+        /// an element entails.
         /// </remarks>
         public async Task<ErrorOr<Commit>> CreateCommitAsync(IReadOnlyList<DataVersion> change, Guid? branchId, Commit commit, CancellationToken cancellationToken)
         {
@@ -193,7 +209,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
 
             var projectId = commit.OwningProject;
 
-            return await this.WriteInProjectAsync(projectId, async transaction =>
+            var created = await this.WriteInProjectAsync(projectId, async transaction =>
             {
                 var branch = await this.ReadBranchOrDefaultAsync(transaction, projectId, branchId, cancellationToken);
 
@@ -210,6 +226,14 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
                     ? fullChange.Errors
                     : await this.CommitChangeAsync(transaction, projectId, branch.Value, fullChange.Value, otherParents, commit, cancellationToken);
             }, cancellationToken);
+
+            if (!created.IsError && this.Logger.IsEnabled(LogLevel.Information))
+            {
+                this.Logger.LogInformation("Created commit {CommitId} in project {ProjectId}, recording {VersionCount} versions for {RequestedCount} requested", created.Value.Id,
+                    projectId, created.Value.Change.Count, change.Count);
+            }
+
+            return created;
         }
 
         /// <summary>
@@ -823,11 +847,18 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
                 return previousState.Errors;
             }
 
-            var versions = await this.ResolveChangeAsync(transaction, previousIds, change, previousState.Value, cancellationToken);
+            var versions = await this.ExpandChangeAsync(transaction, previousIds, change, previousState.Value, cancellationToken);
 
             if (versions.IsError)
             {
                 return versions.Errors;
+            }
+
+            var validated = await this.ChangeValidator.ValidateAsync(new ChangeContext(transaction, versions.Value, previousState.Value, this.DataRepository), cancellationToken);
+
+            if (validated.IsError)
+            {
+                return validated.Errors;
             }
 
             var heldIdentities = await this.VerifyNewIdentitiesAsync(transaction, projectId, versions.Value, previousState.Value, cancellationToken);
@@ -919,6 +950,50 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
             }
 
             return commitIds.Where(commitId => !ancestorsOfOthers.Contains(commitId)).ToList();
+        }
+
+        /// <summary>
+        /// Resolves a change into the versions that are written, together with the versions its effects entail.
+        /// </summary>
+        /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the reads take part in.</param>
+        /// <param name="previousIds">The identifiers of the previous commits.</param>
+        /// <param name="change">The change.</param>
+        /// <param name="previousState">The state at the previous commits, by data identity.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
+        /// <returns>The versions that are written, or the errors that prevented resolving them.</returns>
+        /// <remarks>
+        /// The effects of the versions added in one round are resolved in the next, until a round adds none; since an effect cannot version
+        /// data the change already versions, the change only grows.
+        /// </remarks>
+        private async Task<ErrorOr<List<DataVersion>>> ExpandChangeAsync(IDataStoreTransaction transaction, IReadOnlyList<Guid> previousIds, IReadOnlyList<DataVersion> change,
+            Dictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
+        {
+            List<DataVersion> versions = [];
+            var requested = change;
+
+            while (requested.Count > 0)
+            {
+                var added = await this.ResolveChangeAsync(transaction, previousIds, versions, requested, previousState, cancellationToken);
+
+                if (added.IsError)
+                {
+                    return added.Errors;
+                }
+
+                versions.AddRange(added.Value);
+
+                var context = new ChangeContext(transaction, versions, previousState, this.DataRepository);
+                var effects = await this.ChangeExpander.ComputeEffectsAsync(context, added.Value, cancellationToken);
+
+                if (effects.IsError)
+                {
+                    return effects.Errors;
+                }
+
+                requested = effects.Value;
+            }
+
+            return versions;
         }
 
         /// <summary>
@@ -1247,35 +1322,35 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
         }
 
         /// <summary>
-        /// Resolves a change into the versions that are written, adding the deletion of the data a deleted element takes with it.
+        /// Resolves versions requested for a change into the versions that are written, adding the deletion of the data a deleted element takes with it.
         /// </summary>
         /// <param name="transaction">The <see cref="IDataStoreTransaction"/> the reads take part in.</param>
         /// <param name="previousIds">The identifiers of the previous commits the dependent data is read at.</param>
-        /// <param name="change">The change.</param>
+        /// <param name="resolved">The versions of the change resolved so far.</param>
+        /// <param name="requested">The versions requested.</param>
         /// <param name="previousState">The state at the previous commits, by data identity.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> that cancels the operation.</param>
-        /// <returns>The versions that are written, or the errors that prevented resolving them.</returns>
+        /// <returns>The versions to add to the change, or the errors that prevented resolving them.</returns>
         /// <remarks>
         /// Systems Modeling API and Services 1.0 §7.2.3: deleting an element deletes its incoming relationships, read at every previous
         /// commit so that a merge also drops those only one parent holds; §7.1.2 keeps the identity of a version unique within a change.
-        /// The references other data hold in their stored properties, which §7.2.3 also removes, are left to the core-data services.
         /// </remarks>
         private async Task<ErrorOr<List<DataVersion>>> ResolveChangeAsync(IDataStoreTransaction transaction, IReadOnlyList<Guid> previousIds,
-            IReadOnlyList<DataVersion> change, Dictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
+            IReadOnlyList<DataVersion> resolved, IReadOnlyList<DataVersion> requested, Dictionary<Guid, DataVersion> previousState, CancellationToken cancellationToken)
         {
             List<DataVersion> versions = [];
-            var identityIds = new HashSet<Guid>();
+            var byIdentity = resolved.ToDictionary(version => version.Identity.Id);
 
-            foreach (var requested in change)
+            foreach (var request in requested)
             {
-                var version = ResolveVersion(requested, previousState);
+                var version = ResolveVersion(request, previousState);
 
                 if (version.IsError)
                 {
                     return version.Errors;
                 }
 
-                if (!identityIds.Add(version.Value.Identity.Id))
+                if (!byIdentity.TryAdd(version.Value.Identity.Id, version.Value))
                 {
                     return Error.Validation("change.identity.duplicate", $"The change versions the data {version.Value.Identity.Id} more than once.");
                 }
@@ -1306,11 +1381,13 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
 
                 foreach (var dataId in dependent.Value.Where(previousState.ContainsKey))
                 {
-                    if (identityIds.Add(dataId))
+                    if (!byIdentity.TryGetValue(dataId, out var existing))
                     {
-                        versions.Add(new DataVersion { Id = Guid.NewGuid(), Identity = ExistingOrNewIdentity(dataId, previousState) });
+                        var cascaded = new DataVersion { Id = Guid.NewGuid(), Identity = ExistingOrNewIdentity(dataId, previousState) };
+                        byIdentity.Add(dataId, cascaded);
+                        versions.Add(cascaded);
                     }
-                    else if (versions.Find(version => version.Identity.Id == dataId).Payload != null)
+                    else if (existing.Payload != null)
                     {
                         updatedDependents.Add(dataId);
                     }
