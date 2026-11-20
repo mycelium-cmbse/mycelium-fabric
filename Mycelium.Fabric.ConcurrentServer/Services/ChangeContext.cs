@@ -117,7 +117,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
                 unresolved.RemoveAll(found.ContainsKey);
             }
 
-            return ErrorOrFactory.From<IReadOnlyDictionary<Guid, IData>>(found);
+            return await ErrorOrFactory.FromAsync<IReadOnlyDictionary<Guid, IData>>(found);
         }
 
         /// <summary>

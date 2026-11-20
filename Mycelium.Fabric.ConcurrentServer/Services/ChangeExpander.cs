@@ -90,7 +90,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Services
                     errors.Count);
             }
 
-            return errors.Count == 0 ? ErrorOrFactory.From<IReadOnlyList<DataVersion>>(effects) : errors;
+            return errors.Count == 0 ? await ErrorOrFactory.FromAsync<IReadOnlyList<DataVersion>>(effects) : errors;
         }
 
         /// <summary>
