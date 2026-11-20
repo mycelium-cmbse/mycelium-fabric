@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
 {
     using System;
     using System.IO;
+    using System.Threading;
 
     using Moq;
 
@@ -186,22 +187,43 @@ namespace Mycelium.Fabric.Mcp.Tests.Services
         }
 
         [Test]
-        public void VerifyStartLoading()
+        public void VerifyStartAsync()
         {
             var libraryLoader = new Mock<IModelLibraryLoader>();
             libraryLoader.Setup(loader => loader.Load(It.IsAny<string>())).Returns([]);
 
+            // A start of the host that has been aborted does not start the loading.
+            var abortedLibrary = new StandardLibrary(libraryLoader.Object, this.missingDirectory);
+
+            Assert.That(abortedLibrary.StartAsync(new CancellationToken(canceled: true)).IsCompletedSuccessfully, Is.True);
+
+            libraryLoader.Verify(loader => loader.Load(It.IsAny<string>()), Times.Never);
+
+            // Started twice, the library is loaded once.
             var library = new StandardLibrary(libraryLoader.Object, this.missingDirectory);
-            library.StartLoading();
-            library.StartLoading();
+            var firstStart = library.StartAsync(CancellationToken.None);
+            var secondStart = library.StartAsync(CancellationToken.None);
 
             using (Assert.EnterMultipleScope())
             {
+                Assert.That(firstStart.IsCompletedSuccessfully, Is.True);
+                Assert.That(secondStart.IsCompletedSuccessfully, Is.True);
                 Assert.That(library.Elements, Is.Empty);
                 Assert.That(library.Problems, Is.Empty);
             }
 
             libraryLoader.Verify(loader => loader.Load(this.missingDirectory.LocalPath), Times.Once);
+        }
+
+        [Test]
+        public void VerifyStopAsync()
+        {
+            var libraryLoader = new Mock<IModelLibraryLoader>();
+            var library = new StandardLibrary(libraryLoader.Object, this.missingDirectory);
+
+            Assert.That(library.StopAsync(CancellationToken.None).IsCompletedSuccessfully, Is.True);
+
+            libraryLoader.Verify(loader => loader.Load(It.IsAny<string>()), Times.Never);
         }
     }
 }

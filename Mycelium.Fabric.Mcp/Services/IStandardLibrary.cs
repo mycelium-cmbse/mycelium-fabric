@@ -23,8 +23,8 @@ namespace Mycelium.Fabric.Mcp.Services
     /// export it.
     /// </summary>
     /// <remarks>
-    /// Loading the library takes several seconds: it starts in the background with the server (see
-    /// <see cref="StartLoading"/>), and the members that read the library wait for it to end.
+    /// Loading the library takes several seconds: the <see cref="StandardLibrary"/> starts it in the background when the host
+    /// starts, and the members that read the library wait for it to end.
     /// </remarks>
     public interface IStandardLibrary
     {
@@ -53,11 +53,6 @@ namespace Mycelium.Fabric.Mcp.Services
         /// the catalog. It holds no unit when the library or its units could not be read. Waits for the end of the loading.
         /// </summary>
         LibraryUnits Units { get; }
-
-        /// <summary>
-        /// Starts loading the library in the background, unless it has already started.
-        /// </summary>
-        void StartLoading();
 
         /// <summary>
         /// Gets the element of the library that a qualified name designates, such as <c>ISQ::MassValue</c> or <c>SI::kg</c>.

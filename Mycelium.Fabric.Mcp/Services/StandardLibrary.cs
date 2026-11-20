@@ -12,7 +12,10 @@ namespace Mycelium.Fabric.Mcp.Services
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
     using System.Threading.Tasks;
+
+    using Microsoft.Extensions.Hosting;
 
     using Mycelium.Fabric.Mcp.Expressions;
     using Mycelium.Fabric.Mcp.Values;
@@ -27,9 +30,11 @@ namespace Mycelium.Fabric.Mcp.Services
 
     /// <summary>
     /// The SysML v2 standard library, loaded once from the XMI files of a folder by the <see cref="IModelLibraryLoader"/> of
-    /// SysML2.NET, which resolves the references between the files.
+    /// SysML2.NET, which resolves the references between the files. As an <see cref="IHostedService"/>, it starts loading
+    /// in the background when the host starts, so that the server answers at once and the library is ready, or nearly, when
+    /// a tool first needs it.
     /// </summary>
-    public class StandardLibrary : IStandardLibrary
+    public class StandardLibrary : IStandardLibrary, IHostedService
     {
         /// <summary>
         /// The separator of the segments of a qualified name.
@@ -58,7 +63,7 @@ namespace Mycelium.Fabric.Mcp.Services
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StandardLibrary"/> class. The library is loaded by
-        /// <see cref="StartLoading"/>, or by the first read of its elements.
+        /// <see cref="StartAsync"/>, or by the first read of its elements.
         /// </summary>
         /// <param name="libraryLoader">The <see cref="IModelLibraryLoader"/> that reads the XMI files of the library.</param>
         /// <param name="libraryDirectory">The <see cref="Uri"/> of the folder that holds the XMI files of the library.</param>
@@ -115,11 +120,26 @@ namespace Mycelium.Fabric.Mcp.Services
         public LibraryUnits Units => this.loadedLibrary.Value.Units;
 
         /// <summary>
-        /// Starts loading the library on a thread of the thread pool, unless it has already started.
+        /// Starts loading the library on a thread of the thread pool, unless it has already started, without waiting for the
+        /// end of the loading: the host starts the next services, such as the transport of the MCP server, at once.
         /// </summary>
-        public void StartLoading()
+        /// <param name="cancellationToken">Signals that the start of the host has been aborted: the loading is then not started.</param>
+        /// <returns>A completed <see cref="Task"/>.</returns>
+        public Task StartAsync(CancellationToken cancellationToken)
         {
-            _ = Task.Run(() => this.loadedLibrary.Value);
+            _ = Task.Run(() => this.loadedLibrary.Value, cancellationToken);
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Does nothing: the library stays in memory until the server stops, and a loading that has started cannot be stopped.
+        /// </summary>
+        /// <param name="cancellationToken">Not used.</param>
+        /// <returns>A completed <see cref="Task"/>.</returns>
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
         }
 
         /// <summary>

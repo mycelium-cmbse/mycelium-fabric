@@ -49,8 +49,8 @@ namespace Mycelium.Fabric.Mcp.Extensions
             /// <summary>
             /// Registers the MCP server, its tools and prompts, the JSON <see cref="Serializer"/> and <see cref="DeSerializer"/>
             /// unless the host has registered its own, the <see cref="StandardLibrary"/> read from the folder of the
-            /// <see cref="StandardLibraryOptions"/> and loaded in the background from the start of the host by the
-            /// <see cref="StandardLibraryWarmUp"/>, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
+            /// <see cref="StandardLibraryOptions"/>, one instance that is also the hosted service that loads it in the background
+            /// from the start of the host, the <see cref="ModelChangeApplier"/>, the <see cref="CpSatTradeOffSolver"/>,
             /// an <see cref="InMemoryModelProvider"/> that loads the model from the given JSON file, a
             /// <see cref="JsonModelExporter"/> that writes the model to the export folder of the <see cref="ModelExportOptions"/>,
             /// a <see cref="DocumentReader"/> that reads the document folder of the <see cref="DocumentReaderOptions"/>, the
@@ -80,7 +80,7 @@ namespace Mycelium.Fabric.Mcp.Extensions
                 services.AddOptions<StandardLibraryOptions>().BindConfiguration(StandardLibraryOptions.SectionName);
                 services.TryAddSingleton<IModelLibraryLoader>(serviceProvider => new ModelLibraryLoader(serviceProvider.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance));
 
-                services.AddSingleton<IStandardLibrary>(serviceProvider =>
+                services.AddSingleton(serviceProvider =>
                 {
                     var libraryOptions = serviceProvider.GetRequiredService<IOptions<StandardLibraryOptions>>().Value;
                     var libraryDirectory = Path.GetFullPath(libraryOptions.LibraryDirectory ?? "StandardLibrary", AppContext.BaseDirectory);
@@ -88,7 +88,10 @@ namespace Mycelium.Fabric.Mcp.Extensions
                     return new StandardLibrary(serviceProvider.GetRequiredService<IModelLibraryLoader>(), new Uri(libraryDirectory));
                 });
 
-                services.AddHostedService<StandardLibraryWarmUp>();
+                // The same instance is the library of the tools and the hosted service that loads it: a second instance would
+                // load the library a second time.
+                services.AddSingleton<IStandardLibrary>(serviceProvider => serviceProvider.GetRequiredService<StandardLibrary>());
+                services.AddHostedService(serviceProvider => serviceProvider.GetRequiredService<StandardLibrary>());
 
                 services.AddSingleton<IModelChangeApplier, ModelChangeApplier>();
                 services.AddSingleton<ITradeOffSolver, CpSatTradeOffSolver>();
