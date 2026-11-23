@@ -100,12 +100,11 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Services
                 Assert.That(valid.IsError, Is.False);
                 Assert.That(this.logger.LatestRecord.Level, Is.EqualTo(LogLevel.Debug));
                 Assert.That(this.logger.LatestRecord.Message, Is.EqualTo("Validated 2 elements of a change of 4 versions, with 0 errors"));
+                this.partUsageValidator.Verify(validator => validator.ValidateAsync(this.context.Object, It.IsAny<IElement>(), It.IsAny<CancellationToken>()), Times.Once);
+                this.partUsageValidator.Verify(validator => validator.ValidateAsync(this.context.Object, partUsage, It.IsAny<CancellationToken>()), Times.Once);
+                this.dependencyValidator.Verify(validator => validator.ValidateAsync(this.context.Object, It.IsAny<IElement>(), It.IsAny<CancellationToken>()), Times.Once);
+                this.dependencyValidator.Verify(validator => validator.ValidateAsync(this.context.Object, dependency, It.IsAny<CancellationToken>()), Times.Once);
             }
-
-            this.partUsageValidator.Verify(validator => validator.ValidateAsync(this.context.Object, It.IsAny<IElement>(), It.IsAny<CancellationToken>()), Times.Once);
-            this.partUsageValidator.Verify(validator => validator.ValidateAsync(this.context.Object, partUsage, It.IsAny<CancellationToken>()), Times.Once);
-            this.dependencyValidator.Verify(validator => validator.ValidateAsync(this.context.Object, It.IsAny<IElement>(), It.IsAny<CancellationToken>()), Times.Once);
-            this.dependencyValidator.Verify(validator => validator.ValidateAsync(this.context.Object, dependency, It.IsAny<CancellationToken>()), Times.Once);
 
             this.partUsageValidator.Setup(validator => validator.ValidateAsync(It.IsAny<IChangeContext>(), It.IsAny<IElement>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Error.Validation("partUsage.invalid"));
