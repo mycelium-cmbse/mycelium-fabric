@@ -44,6 +44,7 @@ namespace Mycelium.Fabric.ConcurrentServer
             builder.Services.AddLogging();
             builder.Services.AddExceptionHandler<NegotiatedExceptionHandler>();
             builder.Services.AddRequiredServices();
+            builder.Services.AddCoreDataServices();
 
             var schemaConnectionString = builder.Configuration.GetConnectionString(SqlSchemaMigrator.ConnectionStringName);
 

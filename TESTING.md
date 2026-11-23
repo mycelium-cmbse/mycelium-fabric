@@ -74,6 +74,12 @@ canonical example: it must genuinely collect `EndpointDataSource` entries so `Ad
 exercised, so it is a real (if minimal) implementation, not a canned-value double. Use judgement, and
 prefer a mock whenever the double exists only to be *passed in*.
 
+**Loggers: use `FakeLogger<T>`** (`Microsoft.Extensions.Logging.Testing`, package
+`Microsoft.Extensions.Diagnostics.Testing`) in new tests. It records every entry, so it falls under the
+carve-out above, not under the no-op ban: assert what was logged through `LatestRecord` (`Level`,
+`Message`) and `Collector.Count` / `Collector.GetSnapshot()`. Existing `Mock<ILogger<T>>` +
+`VerifyLogged` fixtures can stay as they are until they are touched for another reason.
+
 ---
 
 ## 3. One `[Test]` per method-under-test (default)

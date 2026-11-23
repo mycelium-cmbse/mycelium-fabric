@@ -16,18 +16,44 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
 
+    using Mycelium.Fabric.Common.DependencyInjection;
     using Mycelium.Fabric.ConcurrentServer.Persistence;
+    using Mycelium.Fabric.ConcurrentServer.Services;
 
     using SysML2.NET.Serializer.Json;
 
     /// <summary>
-    /// Registers the services the REST/HTTP PSM endpoints require with the dependency injection container.
+    /// Registers the services of the concurrent server with the dependency injection container.
     /// </summary>
     public static class ServiceCollectionExtensions
     {
         /// <param name="services">The service collection the registrations are added to.</param>
         extension(IServiceCollection services)
         {
+            /// <summary>
+            /// Registers the <see cref="IChangeExpander"/> and <see cref="IChangeValidator"/>, the <see cref="ICoreDataServiceProvider"/> they
+            /// dispatch through, the <see cref="ICoreDataService{TElement}"/> of every metaclass, and every <see cref="IElementEffect"/> and <see cref="IElementRule"/>.
+            /// </summary>
+            /// <returns>The same service collection, so that registrations chain.</returns>
+            /// <exception cref="ArgumentNullException">The service collection is <c>null</c>.</exception>
+            /// <remarks>
+            /// Every <see cref="IElementEffect"/> and <see cref="IElementRule"/> of this assembly is found by scan and registered as a singleton, like
+            /// the services that hold it.
+            /// </remarks>
+            public IServiceCollection AddCoreDataServices()
+            {
+                ArgumentNullException.ThrowIfNull(services);
+
+                services.AddSingleton(typeof(ICoreDataService<>), typeof(CoreDataService<>));
+                services.AddEnumerableImplementationsOf<IElementEffect>(ServiceLifetime.Singleton);
+                services.AddEnumerableImplementationsOf<IElementRule>(ServiceLifetime.Singleton);
+                services.AddSingleton<ICoreDataServiceProvider, CoreDataServiceProvider>();
+                services.AddSingleton<IChangeExpander, ChangeExpander>();
+                services.AddSingleton<IChangeValidator, ChangeValidator>();
+
+                return services;
+            }
+
             /// <summary>
             /// Registers the Carter modules, the SysML2.NET JSON serializers with the request body readers built on them,
             /// <see cref="JsonResponseNegotiator"/> as the only response negotiator, and the per-request <see cref="IProjectScope"/>.

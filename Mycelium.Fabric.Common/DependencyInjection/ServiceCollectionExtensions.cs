@@ -26,6 +26,31 @@ namespace Mycelium.Fabric.Common.DependencyInjection
         extension(IServiceCollection services)
         {
             /// <summary>
+            /// Registers every concrete class that implements <typeparamref name="TMarker"/> under <typeparamref name="TMarker"/> itself, so that
+            /// all of them resolve together as an enumeration of it.
+            /// </summary>
+            /// <typeparam name="TMarker">The interface the registered classes implement.</typeparam>
+            /// <param name="lifetime">The <see cref="ServiceLifetime"/> of the registrations.</param>
+            /// <param name="assemblies">The assemblies scanned, the one declaring <typeparamref name="TMarker"/> when none is given.</param>
+            /// <returns>The same service collection, so that registrations chain.</returns>
+            /// <exception cref="ArgumentException"><typeparamref name="TMarker"/> is not an interface.</exception>
+            /// <remarks>
+            /// A class already registered under <typeparamref name="TMarker"/> is not registered twice.
+            /// </remarks>
+            public IServiceCollection AddEnumerableImplementationsOf<TMarker>(ServiceLifetime lifetime = ServiceLifetime.Scoped, params Assembly[] assemblies)
+                where TMarker : class
+            {
+                ArgumentNullException.ThrowIfNull(services);
+
+                var marker = typeof(TMarker);
+
+                services.TryAddEnumerable(QueryImplementations(marker, assemblies)
+                    .Select(implementation => new ServiceDescriptor(marker, implementation, lifetime)));
+
+                return services;
+            }
+
+            /// <summary>
             /// Registers every concrete class that implements <typeparamref name="TMarker"/> under the interfaces closest to its implementation.
             /// </summary>
             /// <typeparam name="TMarker">The interface the registered classes implement.</typeparam>
@@ -44,16 +69,9 @@ namespace Mycelium.Fabric.Common.DependencyInjection
 
                 var marker = typeof(TMarker);
 
-                if (!marker.IsInterface)
-                {
-                    throw new ArgumentException($"The marker {marker.Name} is not an interface.");
-                }
-
-                var scannedAssemblies = assemblies is { Length: > 0 } ? assemblies : [marker.Assembly];
-
-                var descriptors = scannedAssemblies.SelectMany(assembly => assembly.GetTypes())
-                    .Where(type => type is { IsClass: true, IsAbstract: false, IsGenericTypeDefinition: false } && marker.IsAssignableFrom(type))
-                    .SelectMany(implementation => ClosestInterfaces(implementation, marker).Select(serviceType => new ServiceDescriptor(serviceType, implementation, lifetime)))
+                var descriptors = QueryImplementations(marker, assemblies)
+                    .SelectMany(implementation => ClosestInterfaces(implementation, marker)
+                        .Select(serviceType => new ServiceDescriptor(serviceType, implementation, lifetime)))
                     .ToList();
 
                 var ambiguous = descriptors.GroupBy(descriptor => descriptor.ServiceType).FirstOrDefault(implementations => implementations.Count() > 1);
@@ -83,6 +101,29 @@ namespace Mycelium.Fabric.Common.DependencyInjection
             List<Type> closest = [.. candidates.Where(candidate => !candidates.Exists(other => other != candidate && candidate.IsAssignableFrom(other)))];
 
             return closest.Count > 0 ? closest : [marker];
+        }
+
+        /// <summary>
+        /// Gives the concrete, closed classes of the scanned assemblies that implement a marker interface.
+        /// </summary>
+        /// <param name="marker">The marker interface.</param>
+        /// <param name="assemblies">The assemblies scanned, the one declaring <paramref name="marker"/> when none is given.</param>
+        /// <returns>The implementing classes.</returns>
+        /// <exception cref="ArgumentException"><paramref name="marker"/> is not an interface.</exception>
+        private static List<Type> QueryImplementations(Type marker, Assembly[] assemblies)
+        {
+            if (!marker.IsInterface)
+            {
+                throw new ArgumentException($"The marker {marker.Name} is not an interface.");
+            }
+
+            var scannedAssemblies = assemblies is { Length: > 0 } ? assemblies : [marker.Assembly];
+
+            return
+            [
+                .. scannedAssemblies.SelectMany(assembly => assembly.GetTypes())
+                    .Where(type => type is { IsClass: true, IsAbstract: false, IsGenericTypeDefinition: false } && marker.IsAssignableFrom(type))
+            ];
         }
     }
 }
