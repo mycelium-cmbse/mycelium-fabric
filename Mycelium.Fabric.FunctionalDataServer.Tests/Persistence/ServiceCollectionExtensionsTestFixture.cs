@@ -66,7 +66,20 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             {
                 Assert.That(provider.GetRequiredService<ISerializer>(), Is.TypeOf<Serializer>());
                 Assert.That(provider.GetRequiredService<IDeSerializer>(), Is.TypeOf<DeSerializer>());
+                Assert.That(provider.GetRequiredService<IDaoProvider>(), Is.TypeOf<DaoProvider>());
+                Assert.That(provider.GetRequiredService<IThingRepository>(), Is.TypeOf<ThingRepository>());
             }
+
+            var daoProvider = provider.GetRequiredService<IDaoProvider>();
+
+            foreach (var daoInterface in services.Select(descriptor => descriptor.ServiceType).Where(IsDaoInterface))
+            {
+                var classKind = daoInterface.GetGenericArguments()[0].Name[1..];
+
+                Assert.That(daoProvider.Resolve(classKind), Is.SameAs(provider.GetRequiredService(daoInterface)), classKind);
+            }
+
+            Assert.That(() => daoProvider.Resolve("UnknownClass"), Throws.ArgumentException);
         }
 
         private static bool IsDaoInterface(Type type)
