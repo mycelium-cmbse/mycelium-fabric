@@ -17,7 +17,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using Mycelium.SDK.Serializer.Json;
 
     /// <summary>
-    /// Registers Functional Data access: the JSON serializers and the generated data access objects.
+    /// Registers Functional Data access: the JSON serializers, the generated data access objects, their provider and the generic read repository.
     /// </summary>
     public static class ServiceCollectionExtensions
     {
@@ -26,7 +26,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         {
             /// <summary>
             /// Registers, as singletons, the JSON <see cref="ISerializer"/> and <see cref="IDeSerializer"/> injected into the data access objects, and every
-            /// <see cref="IBaseDao"/> implementation of this assembly under its <see cref="IDao{TDto}"/> interface.
+            /// <see cref="IBaseDao"/> implementation of this assembly under its <see cref="IDao{TDto}"/> interface, <see cref="DaoProvider"/> under
+            /// <see cref="IDaoProvider"/> and <see cref="ThingRepository"/> under <see cref="IThingRepository"/>.
             /// </summary>
             /// <returns>The same service collection, so that registrations chain.</returns>
             /// <exception cref="ArgumentNullException">The service collection is null.</exception>
@@ -37,6 +38,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 services.AddSingleton<ISerializer, Serializer>();
                 services.AddSingleton<IDeSerializer, DeSerializer>();
+                services.AddSingleton<IDaoProvider, DaoProvider>();
+                services.AddSingleton<IThingRepository, ThingRepository>();
 
                 return services.AddImplementationsOf<IBaseDao>(ServiceLifetime.Singleton);
             }
