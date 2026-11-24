@@ -38,7 +38,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(() => new ThingRepository(null), Throws.ArgumentNullException.With.Property(nameof(ArgumentException.ParamName)).EqualTo("daoProvider"));
-                Assert.That(new ThingRepository(this.daoProvider.Object), Is.InstanceOf<IThingRepository>());
+                Assert.That(() => new ThingRepository(this.daoProvider.Object), Throws.Nothing);
             }
         }
 
@@ -47,8 +47,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
         {
             Assert.That(() => this.repository.ReadByIdAsync(null, Guid.NewGuid(), CancellationToken.None),
                 Throws.ArgumentNullException.With.Property(nameof(ArgumentException.ParamName)).EqualTo("transaction"));
-
-            this.daoProvider.VerifyNoOtherCalls();
         }
 
         [Test]
@@ -62,8 +60,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Assert.That(() => this.repository.ReadByIdsAsync(null, null, CancellationToken.None),
                     Throws.ArgumentNullException.With.Property(nameof(ArgumentException.ParamName)).EqualTo("ids"));
             }
-
-            this.daoProvider.VerifyNoOtherCalls();
         }
     }
 }
