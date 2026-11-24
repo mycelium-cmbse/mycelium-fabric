@@ -27,8 +27,9 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
     /// <summary>
     /// Implements the <see cref="IDao{TDto}"/> operations once for the generated data access objects. Each generated data access object supplies the
-    /// class kind and statements of its concrete class and binds their reference parameters; this base binds the <c>id</c>, <c>class_kind</c> and
-    /// <c>data</c> parameters, decides which bindings each command uses and writes no SQL.
+    /// class kind and statements of its concrete class and binds their reference parameters; this base binds the <c>id</c>, <c>ids</c>,
+    /// <c>class_kind</c> and <c>data</c> parameters, decides which bindings each command uses, implements the untyped reads of
+    /// <see cref="IBaseDao"/> and writes no SQL.
     /// </summary>
     /// <typeparam name="TDto">The DTO interface of the concrete model class.</typeparam>
     [ExcludeFromCodeCoverage]
@@ -72,6 +73,12 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         protected abstract string ReadByIdSql { get; }
 
         /// <summary>
+        /// Gets the query that reads the JSON documents of the stored objects of the concrete class among the bound identifiers, in no guaranteed
+        /// order.
+        /// </summary>
+        protected abstract string ReadByIdsSql { get; }
+
+        /// <summary>
         /// Gets the batch that stores a new object: its root row, one row per class of its inheritance chain and its link-table rows.
         /// </summary>
         protected abstract string CreateSql { get; }
@@ -103,16 +110,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
             this.AddClassKindParameter(command);
 
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            List<TDto> dtos = [];
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                dtos.Add(this.DeSerialize(reader));
-            }
-
-            return dtos;
+            return await this.ReadDtosAsync(command, cancellationToken);
         }
 
         /// <summary>
@@ -137,6 +135,70 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
             return await reader.ReadAsync(cancellationToken) ? this.DeSerialize(reader) : null;
+        }
+
+        /// <summary>
+        /// Reads the stored objects of the exact concrete class among the specified identifiers.
+        /// </summary>
+        /// <param name="transaction">The caller's open transaction, whose connection executes the query.</param>
+        /// <param name="ids">The identifiers of the objects to read.</param>
+        /// <param name="cancellationToken">The token canceling the operation.</param>
+        /// <returns>
+        /// The stored objects found, in no guaranteed order; identifiers with no object of the class are skipped, and an empty list of identifiers
+        /// gives an empty list without a query.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="ids"/> is null.</exception>
+        /// <exception cref="NpgsqlException">The database rejects or fails the query.</exception>
+        /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
+        public async Task<IReadOnlyList<TDto>> ReadByIdsAsync(NpgsqlTransaction transaction, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            ArgumentNullException.ThrowIfNull(ids);
+
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+
+            await using var command = CreateCommand(transaction, this.ReadByIdsSql);
+
+            this.AddIdentitiesParameter(command, ids);
+            this.AddClassKindParameter(command);
+
+            return await this.ReadDtosAsync(command, cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads the stored object of the exact concrete class that has the specified identifier, as an <see cref="IThing"/>.
+        /// </summary>
+        /// <param name="transaction">The caller's open transaction, whose connection executes the query.</param>
+        /// <param name="id">The identifier of the object to read.</param>
+        /// <param name="cancellationToken">The token canceling the operation.</param>
+        /// <returns>The stored object, or <see langword="null"/> when no object of the class has <paramref name="id"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="transaction"/> is null.</exception>
+        /// <exception cref="NpgsqlException">The database rejects or fails the query.</exception>
+        /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
+        public async Task<IThing> ReadThingByIdAsync(NpgsqlTransaction transaction, Guid id, CancellationToken cancellationToken)
+        {
+            return await this.ReadByIdAsync(transaction, id, cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads the stored objects of the exact concrete class among the specified identifiers, as <see cref="IThing"/>.
+        /// </summary>
+        /// <param name="transaction">The caller's open transaction, whose connection executes the query.</param>
+        /// <param name="ids">The identifiers of the objects to read.</param>
+        /// <param name="cancellationToken">The token canceling the operation.</param>
+        /// <returns>
+        /// The stored objects found, in no guaranteed order; identifiers with no object of the class are skipped, and an empty list of identifiers
+        /// gives an empty list without a query.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="ids"/> is null.</exception>
+        /// <exception cref="NpgsqlException">The database rejects or fails the query.</exception>
+        /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
+        public async Task<IReadOnlyList<IThing>> ReadThingsByIdsAsync(NpgsqlTransaction transaction, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+        {
+            return await this.ReadByIdsAsync(transaction, ids, cancellationToken);
         }
 
         /// <summary>
@@ -246,6 +308,19 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
+        /// Adds the <c>ids</c> parameter, bound as an array of <see cref="NpgsqlDbType.Uuid"/>, that selects several stored objects.
+        /// </summary>
+        /// <param name="command">The command that receives the parameter.</param>
+        /// <param name="ids">The identifiers of the objects.</param>
+        protected virtual void AddIdentitiesParameter(NpgsqlCommand command, IReadOnlyList<Guid> ids)
+        {
+            command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
+            {
+                Value = ids as Guid[] ?? [.. ids]
+            });
+        }
+
+        /// <summary>
         /// Adds the <c>class_kind</c> parameter, bound as <see cref="NpgsqlDbType.Text"/> with the value of <see cref="ClassKind"/>, that restricts
         /// the statements to objects of the exact concrete class.
         /// </summary>
@@ -328,6 +403,26 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private static ReadOnlyMemory<byte> GetBytes(MemoryStream data)
         {
             return new ReadOnlyMemory<byte>(data.GetBuffer(), 0, (int)data.Length);
+        }
+
+        /// <summary>
+        /// Executes a read query and deserializes the JSON document of every row it returns.
+        /// </summary>
+        /// <param name="command">The read query, with its parameters bound.</param>
+        /// <param name="cancellationToken">The token canceling the operation.</param>
+        /// <returns>The DTOs the returned documents describe, in the order of the rows.</returns>
+        private async Task<IReadOnlyList<TDto>> ReadDtosAsync(NpgsqlCommand command, CancellationToken cancellationToken)
+        {
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            List<TDto> dtos = [];
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                dtos.Add(this.DeSerialize(reader));
+            }
+
+            return dtos;
         }
 
         /// <summary>

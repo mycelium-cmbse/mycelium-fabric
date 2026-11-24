@@ -119,6 +119,14 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             """;
 
         /// <summary>
+        /// Gets the query that reads the stored objects of this class among several identifiers, in no guaranteed order.
+        /// </summary>
+        protected override string ReadByIdsSql => $"""
+            {ReadSql}
+                AND thing.id = ANY(@ids);
+            """;
+
+        /// <summary>
         /// Gets the statements that store a new object: the root row with its JSON document without reference members, one row per class from
         /// the root down to this class with the scalar reference columns declared there, and the rows of every link-table collection.
         /// </summary>
