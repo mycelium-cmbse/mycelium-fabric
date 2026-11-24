@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics.CodeAnalysis;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -24,6 +25,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Services
     /// <c>I&lt;ConcreteClass&gt;Service</c> derives.
     /// </summary>
     /// <typeparam name="TThing">The DTO interface of the concrete model class the service is for.</typeparam>
+    [SuppressMessage("Major Code Smell", "S2326:Unused type parameters should be removed",
+        Justification = "TThing names the concrete class the service is for, so that each generated I<ConcreteClass>Service is a distinct contract.")]
     public interface IBaseService<TThing> where TThing : class, IThing
     {
         /// <summary>
