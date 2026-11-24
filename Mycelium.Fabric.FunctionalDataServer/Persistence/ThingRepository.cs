@@ -20,8 +20,6 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
     using Npgsql;
 
-    using NpgsqlTypes;
-
     /// <summary>
     /// Reads stored objects of any concrete class: it first reads their class kinds from the <c>fabric.thing</c> root table, then reads the
     /// objects of each class kind through the data access object that the <see cref="IDaoProvider"/> resolves.
@@ -125,10 +123,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         {
             await using var command = new NpgsqlCommand(ReadClassKindsSql, transaction.Connection, transaction);
 
-            command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
-            {
-                Value = ids as Guid[] ?? [.. ids]
-            });
+            command.Parameters.Add(new NpgsqlParameter<Guid[]>("ids", ids as Guid[] ?? [.. ids]));
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 

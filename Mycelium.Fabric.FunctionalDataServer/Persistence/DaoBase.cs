@@ -314,10 +314,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <param name="ids">The identifiers of the objects.</param>
         protected virtual void AddIdentitiesParameter(NpgsqlCommand command, IReadOnlyList<Guid> ids)
         {
-            command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
-            {
-                Value = ids as Guid[] ?? [.. ids]
-            });
+            command.Parameters.Add(new NpgsqlParameter<Guid[]>("ids", ids as Guid[] ?? [.. ids]));
         }
 
         /// <summary>
