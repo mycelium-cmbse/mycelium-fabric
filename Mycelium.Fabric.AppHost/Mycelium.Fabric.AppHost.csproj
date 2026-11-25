@@ -25,6 +25,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="../Mycelium.Fabric.Agent/Mycelium.Fabric.Agent.csproj" />
         <ProjectReference Include="../Mycelium.Fabric.ConcurrentServer/Mycelium.Fabric.ConcurrentServer.csproj" />
         <ProjectReference Include="../Mycelium.Fabric.FunctionalDataServer/Mycelium.Fabric.FunctionalDataServer.csproj" />
     </ItemGroup>

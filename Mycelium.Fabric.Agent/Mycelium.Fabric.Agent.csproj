@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>14.0</LangVersion>
+        <Version>0.0.1</Version>
+        <Description>The Mycelium Fabric Agent project: the Fabric MCP server over HTTP and Hypha, the assistant that Bloom talks to through AG-UI.</Description>
+        <Company>Starion Group S.A.</Company>
+        <Copyright>Copyright © Starion Group S.A.</Copyright>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <RepositoryUrl>https://github.com/mycelium-cmbse/mycelium-fabric.git</RepositoryUrl>
+        <RepositoryType>Git</RepositoryType>
+        <Authors>Sam Gerene, Antoine Théate, Régis André, Tanase-Marius Manafu, Omrane Haj Mohamed</Authors>
+        <ImplicitUsings>false</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <IsPackable>false</IsPackable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- Experimental APIs: the MCP Apps of the C# SDK (MCPEXP003), with which the agent hides from the LLM the tools that only
+             the views call, and the compaction of the Agent Framework (MAAI001), which summarizes the older messages of a conversation. -->
+        <NoWarn>$(NoWarn);MCPEXP003;MAAI001</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AGUI.Formatting" />
+        <PackageReference Include="AGUI.Server" />
+        <PackageReference Include="Carter" />
+        <PackageReference Include="Microsoft.Agents.AI" />
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+        <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Mycelium.Fabric.Mcp\Mycelium.Fabric.Mcp.csproj" />
+    </ItemGroup>
+
+</Project>
