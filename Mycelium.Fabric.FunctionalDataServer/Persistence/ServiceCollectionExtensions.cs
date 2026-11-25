@@ -25,9 +25,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         extension(IServiceCollection services)
         {
             /// <summary>
-            /// Registers, as singletons, the JSON <see cref="ISerializer"/> and <see cref="IDeSerializer"/> injected into the data access objects, and every
-            /// <see cref="IBaseDao"/> implementation of this assembly under its <see cref="IDao{TDto}"/> interface, <see cref="DaoProvider"/> under
-            /// <see cref="IDaoProvider"/> and <see cref="ThingRepository"/> under <see cref="IThingRepository"/>.
+            /// Registers, as singletons, the stateless JSON <see cref="ISerializer"/> and <see cref="IDeSerializer"/> injected into the data access objects;
+            /// registers, as scoped so that no scope shares database access with another, every <see cref="IBaseDao"/> implementation of this assembly under
+            /// its <see cref="IDao{TDto}"/> interface, <see cref="DaoProvider"/> under <see cref="IDaoProvider"/> and <see cref="ThingRepository"/> under
+            /// <see cref="IThingRepository"/>.
             /// </summary>
             /// <returns>The same service collection, so that registrations chain.</returns>
             /// <exception cref="ArgumentNullException">The service collection is null.</exception>
@@ -38,10 +39,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 services.AddSingleton<ISerializer, Serializer>();
                 services.AddSingleton<IDeSerializer, DeSerializer>();
-                services.AddSingleton<IDaoProvider, DaoProvider>();
-                services.AddSingleton<IThingRepository, ThingRepository>();
+                services.AddScoped<IDaoProvider, DaoProvider>();
+                services.AddScoped<IThingRepository, ThingRepository>();
 
-                return services.AddImplementationsOf<IBaseDao>(ServiceLifetime.Singleton);
+                return services.AddImplementationsOf<IBaseDao>(ServiceLifetime.Scoped);
             }
         }
     }

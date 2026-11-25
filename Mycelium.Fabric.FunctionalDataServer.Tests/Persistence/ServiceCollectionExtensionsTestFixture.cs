@@ -24,6 +24,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
     [TestFixture]
     public class ServiceCollectionExtensionsTestFixture
     {
+        private static readonly HashSet<Type> SingletonServices = [typeof(ISerializer), typeof(IDeSerializer)];
+
         private static readonly Dictionary<Type, Type> ExpectedDaos = new()
         {
             [typeof(IDao<IBranchProtectionRule>)] = typeof(BranchProtectionRuleDao),
@@ -52,31 +54,37 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(services.Select(descriptor => descriptor.ServiceType).Where(IsDaoInterface), Is.EquivalentTo(ExpectedDaos.Keys));
-                Assert.That(services.Select(descriptor => descriptor.Lifetime), Is.All.EqualTo(ServiceLifetime.Singleton));
+                Assert.That(services.Where(descriptor => SingletonServices.Contains(descriptor.ServiceType)).Select(descriptor => descriptor.Lifetime),
+                    Is.EqualTo(new[] { ServiceLifetime.Singleton, ServiceLifetime.Singleton }));
+
+                Assert.That(services.Where(descriptor => !SingletonServices.Contains(descriptor.ServiceType)).Select(descriptor => descriptor.Lifetime),
+                    Is.All.EqualTo(ServiceLifetime.Scoped));
             }
 
             using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
 
+            using var scope = provider.CreateScope();
+
             foreach (var (serviceType, implementationType) in ExpectedDaos)
             {
-                Assert.That(provider.GetRequiredService(serviceType), Is.TypeOf(implementationType));
+                Assert.That(scope.ServiceProvider.GetRequiredService(serviceType), Is.TypeOf(implementationType));
             }
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(provider.GetRequiredService<ISerializer>(), Is.TypeOf<Serializer>());
                 Assert.That(provider.GetRequiredService<IDeSerializer>(), Is.TypeOf<DeSerializer>());
-                Assert.That(provider.GetRequiredService<IDaoProvider>(), Is.TypeOf<DaoProvider>());
-                Assert.That(provider.GetRequiredService<IThingRepository>(), Is.TypeOf<ThingRepository>());
+                Assert.That(scope.ServiceProvider.GetRequiredService<IDaoProvider>(), Is.TypeOf<DaoProvider>());
+                Assert.That(scope.ServiceProvider.GetRequiredService<IThingRepository>(), Is.TypeOf<ThingRepository>());
             }
 
-            var daoProvider = provider.GetRequiredService<IDaoProvider>();
+            var daoProvider = scope.ServiceProvider.GetRequiredService<IDaoProvider>();
 
             foreach (var daoInterface in services.Select(descriptor => descriptor.ServiceType).Where(IsDaoInterface))
             {
                 var classKind = daoInterface.GetGenericArguments()[0].Name[1..];
 
-                Assert.That(daoProvider.Resolve(classKind), Is.SameAs(provider.GetRequiredService(daoInterface)), classKind);
+                Assert.That(daoProvider.Resolve(classKind), Is.SameAs(scope.ServiceProvider.GetRequiredService(daoInterface)), classKind);
             }
 
             Assert.That(() => daoProvider.Resolve("UnknownClass"), Throws.ArgumentException);
