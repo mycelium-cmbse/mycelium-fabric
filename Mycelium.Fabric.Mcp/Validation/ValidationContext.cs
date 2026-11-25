@@ -102,7 +102,7 @@ namespace Mycelium.Fabric.Mcp.Validation
 
             try
             {
-                return element.qualifiedName;
+                return HasMemberOutsideModel(element) ? null : element.qualifiedName;
             }
             catch (IncompleteModelException)
             {
@@ -177,5 +177,14 @@ namespace Mycelium.Fabric.Mcp.Validation
 
             return this.qualifiedNameCounts.Value.GetValueOrDefault(qualifiedName);
         }
+
+        /// <summary>
+        /// Tells whether a namespace that contains an element has a membership whose member is not in the model, which SysML2.NET
+        /// resolves to a <c>null</c> owned member.
+        /// </summary>
+        /// <param name="element">The element.</param>
+        /// <returns><c>true</c> when the owning namespace of the element, or one of its own owning namespaces, misses a member.</returns>
+        private static bool HasMemberOutsideModel(IElement element) =>
+            element.owningNamespace is { } owningNamespace && (owningNamespace.ownedMember.Contains(null) || HasMemberOutsideModel(owningNamespace));
     }
 }

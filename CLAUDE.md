@@ -35,6 +35,10 @@ dotnet-coverage collect "dotnet test Mycelium.Fabric.sln --no-build" -f xml -o c
 
 Test framework: **NUnit**. Test classes use `[TestFixture]` and `[Test]`.
 
+Fixtures in `Category=Integration` (`Persistence/Integration/`) run against a PostgreSQL 18 Testcontainer with the
+`SysML2.NET.Dal` schema installed; they are ignored when no container engine is reachable (`DOCKER_HOST`, Docker Desktop
+or the podman machine pipe). Exclude them with `--filter "TestCategory!=Integration"`.
+
 **When writing or modifying unit tests** in `Mycelium.Fabric.ConcurrentServer.Tests/`: read `TESTING.md`
 at the repo root for the binding NUnit conventions (one `[Test]` per method-under-test, `Assert.That`
 everywhere, `Assert.EnterMultipleScope` only for consecutive asserts, mandatory positive + negative
@@ -126,6 +130,8 @@ Mycelium.Fabric.ConcurrentServer            (net10.0, Microsoft.NET.Sdk.Worker)
   ├── Program.cs                            - host entry point
   ├── Modules/                              - hand-coded Carter handler partials
   │   └── AutoGenModules/                   - GENERATED route registration; do not edit
+  ├── Persistence/                          - store contracts, PostgreSQL transaction, ElementDaoBase, ElementDaoProviderBase
+  │   └── AutoGenElementDao/                - GENERATED element DAO per metaclass (SQL only) + ElementDaoProvider; scoped; do not edit
   └── appsettings.json
 
 Mycelium.Fabric.ConcurrentServer.Tests      (net10.0, NUnit + Moq + coverlet)
