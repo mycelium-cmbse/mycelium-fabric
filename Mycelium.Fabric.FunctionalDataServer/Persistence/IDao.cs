@@ -48,6 +48,21 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         Task<TDto> ReadByIdAsync(NpgsqlTransaction transaction, Guid id, CancellationToken cancellationToken);
 
         /// <summary>
+        /// Reads the stored objects of the exact concrete class among the specified identifiers.
+        /// </summary>
+        /// <param name="transaction">The caller's open transaction, whose connection executes the query.</param>
+        /// <param name="ids">The identifiers of the objects to read.</param>
+        /// <param name="cancellationToken">The token canceling the operation.</param>
+        /// <returns>
+        /// The stored objects found, in no guaranteed order; identifiers with no object of the class are skipped, and an empty list of identifiers
+        /// gives an empty list.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="ids"/> is null.</exception>
+        /// <exception cref="NpgsqlException">The database rejects or fails the query.</exception>
+        /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
+        Task<IReadOnlyList<TDto>> ReadByIdsAsync(NpgsqlTransaction transaction, IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+        /// <summary>
         /// Stores a new object: its JSON document, one row per class of its inheritance chain and its link-table rows.
         /// </summary>
         /// <param name="transaction">The caller's open transaction, whose connection executes the statements.</param>

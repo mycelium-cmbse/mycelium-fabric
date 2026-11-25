@@ -52,12 +52,14 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests
             {
                 dataSource = host.Services.GetService<NpgsqlDataSource>();
 
+                using var scope = host.Services.CreateScope();
+
                 using (Assert.EnterMultipleScope())
                 {
                     Assert.That(dataSource, Is.Not.Null);
                     Assert.That(host.Services.GetService<IFunctionalDataInitializer>(), Is.TypeOf<FunctionalDataInitializer>());
                     Assert.That(host.Services.GetServices<IHostedService>().OfType<FunctionalDataInitializationService>().ToList(), Has.Count.EqualTo(1));
-                    Assert.That(host.Services.GetService<IDao<IUser>>(), Is.TypeOf<UserDao>());
+                    Assert.That(scope.ServiceProvider.GetService<IDao<IUser>>(), Is.TypeOf<UserDao>());
                 }
             }
 
