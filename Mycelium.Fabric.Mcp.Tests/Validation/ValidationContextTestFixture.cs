@@ -44,13 +44,14 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
         [Test]
         public void VerifyGetQualifiedName()
         {
-            // A package owns two parts and an anonymous part. When the camera is removed, the qualified name of the lens cannot be
-            // computed.
+            // A package owns two parts and an anonymous part, and the lens owns a barrel. When the camera is removed, neither the
+            // qualified name of the lens nor that of the barrel, one namespace further down, can be computed.
             var builder = new DtoModelBuilder();
             var package = builder.AddMember(builder.RootNamespace, new Package { DeclaredName = "Model" });
             var camera = builder.AddMember(package, new PartUsage { DeclaredName = "camera" });
             var anonymousPart = builder.AddMember(package, new PartUsage());
             var lens = builder.AddMember(package, new PartUsage { DeclaredName = "lens" });
+            var barrel = builder.AddMember(lens, new PartUsage { DeclaredName = "barrel" });
             var elements = builder.Build();
 
             builder.Remove(camera);
@@ -61,7 +62,9 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation
                 Assert.That(() => ValidationContext.GetQualifiedName(null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(ValidationContext.GetQualifiedName(elements.Single(element => element.Id == lens.Id)), Is.EqualTo("Model::lens"));
                 Assert.That(ValidationContext.GetQualifiedName(elements.Single(element => element.Id == anonymousPart.Id)), Is.Null);
+                Assert.That(ValidationContext.GetQualifiedName(elements.Single(element => element.Id == barrel.Id)), Is.EqualTo("Model::lens::barrel"));
                 Assert.That(ValidationContext.GetQualifiedName(elementsWithoutCamera.Single(element => element.Id == lens.Id)), Is.Null);
+                Assert.That(ValidationContext.GetQualifiedName(elementsWithoutCamera.Single(element => element.Id == barrel.Id)), Is.Null);
             }
         }
 

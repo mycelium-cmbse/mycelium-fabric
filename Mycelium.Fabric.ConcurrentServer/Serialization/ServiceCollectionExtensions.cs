@@ -31,6 +31,27 @@ namespace Mycelium.Fabric.ConcurrentServer.Serialization
         extension(IServiceCollection services)
         {
             /// <summary>
+            /// Registers the SQL <see cref="IDataStoreTransactionFactory"/>, and per request the <see cref="IDatabaseHandler"/>, the
+            /// <see cref="IElementDao{TElement}"/> of every metaclass and the generated <see cref="IElementDaoProvider"/> that resolves them.
+            /// </summary>
+            /// <returns>The same service collection, so that registrations chain.</returns>
+            /// <exception cref="ArgumentNullException">The service collection is <c>null</c>.</exception>
+            /// <remarks>
+            /// The <c>DbDataSource</c> of the SysML v2 database and the SysML2.NET JSON serializers are registered elsewhere.
+            /// </remarks>
+            public IServiceCollection AddCoreDataAccess()
+            {
+                ArgumentNullException.ThrowIfNull(services);
+
+                services.AddSingleton<IDataStoreTransactionFactory, SqlTransactionFactory>();
+                services.AddScoped<IDatabaseHandler, DatabaseHandler>();
+                services.AddImplementationsOf<IElementDao>();
+                services.AddScoped<IElementDaoProvider, ElementDaoProvider>();
+
+                return services;
+            }
+
+            /// <summary>
             /// Registers the <see cref="IChangeExpander"/> and <see cref="IChangeValidator"/>, the <see cref="ICoreDataServiceProvider"/> they
             /// dispatch through, the <see cref="ICoreDataService{TElement}"/> of every metaclass, and every <see cref="IElementEffect"/> and <see cref="IElementRule"/>.
             /// </summary>

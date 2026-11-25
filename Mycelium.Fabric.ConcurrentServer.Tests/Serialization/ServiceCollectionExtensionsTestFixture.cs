@@ -11,6 +11,7 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
 {
     using System;
     using System.Collections.Generic;
+    using System.Data.Common;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -27,6 +28,8 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
     using Mycelium.Fabric.ConcurrentServer.Serialization;
     using Mycelium.Fabric.ConcurrentServer.Services;
 
+    using Npgsql;
+
     using SysML2.NET.Core.DTO.Root.Dependencies;
     using SysML2.NET.Core.DTO.Root.Elements;
     using SysML2.NET.Core.DTO.Systems.Parts;
@@ -36,6 +39,52 @@ namespace Mycelium.Fabric.ConcurrentServer.Tests.Serialization
     [TestFixture]
     public class ServiceCollectionExtensionsTestFixture
     {
+        [Test]
+        public void VerifyAddCoreDataAccess()
+        {
+            Assert.That(() => ((IServiceCollection)null).AddCoreDataAccess(), Throws.TypeOf<ArgumentNullException>());
+
+            var services = new ServiceCollection();
+
+            Assert.That(services.AddCoreDataAccess(), Is.SameAs(services));
+
+            using var dataSource = NpgsqlDataSource.Create("Host=localhost");
+
+            services.AddSingleton<DbDataSource>(dataSource);
+            services.AddSingleton(new Mock<ISerializer>().Object);
+            services.AddSingleton(new Mock<IDeSerializer>().Object);
+
+            using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+            using var scope = provider.CreateScope();
+
+            var elementDaoProvider = scope.ServiceProvider.GetRequiredService<IElementDaoProvider>();
+
+            var elementDataTypes = typeof(IElement).Assembly.GetTypes()
+                .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IElement).IsAssignableFrom(type))
+                .ToList();
+
+            var daoRegistrations = services
+                .Where(descriptor => descriptor.ServiceType.IsGenericType && descriptor.ServiceType.GetGenericTypeDefinition() == typeof(IElementDao<>))
+                .ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.GetService<IDataStoreTransactionFactory>(), Is.TypeOf<SqlTransactionFactory>());
+                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IDatabaseHandler)
+                                                                                       && descriptor.ImplementationType == typeof(DatabaseHandler)
+                                                                                       && descriptor.Lifetime == ServiceLifetime.Scoped));
+                Assert.That(daoRegistrations.Select(descriptor => descriptor.ServiceType.GenericTypeArguments[0]), Is.EquivalentTo(elementDataTypes));
+                Assert.That(daoRegistrations, Has.All.Matches<ServiceDescriptor>(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped));
+                Assert.That(services, Has.One.Matches<ServiceDescriptor>(descriptor => descriptor.ServiceType == typeof(IElementDaoProvider)
+                                                                                       && descriptor.Lifetime == ServiceLifetime.Scoped));
+                Assert.That(() => provider.GetRequiredService<IElementDaoProvider>(), Throws.TypeOf<InvalidOperationException>());
+                Assert.That(elementDataTypes, Has.All.Matches<Type>(type => elementDaoProvider.Resolve(type).DataType == type
+                                                                            && elementDaoProvider.Resolve(type).ClassKind.ToString() == type.Name));
+                Assert.That(elementDaoProvider.Resolve(typeof(PartUsage)), Is.TypeOf<PartUsageDao>());
+                Assert.That(elementDaoProvider.Resolve<PartUsage>(), Is.SameAs(elementDaoProvider.Resolve(typeof(PartUsage))));
+            }
+        }
+
         [Test]
         public async Task VerifyAddCoreDataServices()
         {

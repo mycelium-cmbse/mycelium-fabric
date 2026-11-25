@@ -25,6 +25,7 @@
         <PackageReference Include="NUnit" />
         <PackageReference Include="NUnit.Console" />
         <PackageReference Include="NUnit3TestAdapter" />
+        <PackageReference Include="Testcontainers.PostgreSql" />
         <PackageReference Include="coverlet.collector" />
         <PackageReference Include="coverlet.msbuild" />
     </ItemGroup>

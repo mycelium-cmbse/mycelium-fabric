@@ -10,6 +10,7 @@
 namespace Mycelium.Fabric.ConcurrentServer
 {
     using System;
+    using System.Data.Common;
     using System.Threading.Tasks;
 
     using Carter;
@@ -43,8 +44,7 @@ namespace Mycelium.Fabric.ConcurrentServer
 
             builder.Services.AddLogging();
             builder.Services.AddExceptionHandler<NegotiatedExceptionHandler>();
-            builder.Services.AddRequiredServices();
-            builder.Services.AddCoreDataServices();
+            builder.Services.AddRequiredServices().AddCoreDataAccess().AddCoreDataServices();
 
             var schemaConnectionString = builder.Configuration.GetConnectionString(SqlSchemaMigrator.ConnectionStringName);
 
@@ -53,7 +53,10 @@ namespace Mycelium.Fabric.ConcurrentServer
                 throw new InvalidOperationException($"The '{SqlSchemaMigrator.ConnectionStringName}' connection string is required.");
             }
 
-            builder.Services.AddSingleton(NpgsqlDataSource.Create(schemaConnectionString));
+            var dataSource = NpgsqlDataSource.Create(schemaConnectionString);
+
+            builder.Services.AddSingleton(dataSource);
+            builder.Services.AddSingleton<DbDataSource>(dataSource);
             builder.Services.AddSingleton<ISqlSchemaMigrator, SqlSchemaMigrator>();
             builder.Services.AddHostedService<SqlSchemaInitializer>();
 

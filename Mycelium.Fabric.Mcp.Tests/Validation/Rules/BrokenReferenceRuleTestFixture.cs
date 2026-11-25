@@ -74,7 +74,8 @@ namespace Mycelium.Fabric.Mcp.Tests.Validation.Rules
                 Assert.That(() => rule.FindProblem(null, context), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(() => rule.FindProblem(elements[0], null), Throws.TypeOf<ArgumentNullException>());
                 Assert.That(FindProblem(cameraTyping.Id), Is.EqualTo("The FeatureTyping has no type, which the metamodel requires: the element it refers to has been removed, or it was never loaded."));
-                Assert.That(FindProblem(opticalCamera.OwningRelationship), Does.StartWith("The OwningMembership refers to an element that is not in the model"));
+                Assert.That(FindProblem(opticalCamera.OwningRelationship),
+                    Is.EqualTo("The OwningMembership has no ownedMemberElement, which the metamodel requires: the element it refers to has been removed, or it was never loaded."));
                 Assert.That(FindProblem(satelliteTyping.Id), Is.Null);
                 Assert.That(FindProblem(orphanMembershipId), Is.Null);
                 Assert.That(FindProblem(camera.Id), Is.Null);
