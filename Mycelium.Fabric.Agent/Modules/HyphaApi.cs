@@ -131,11 +131,11 @@ namespace Mycelium.Fabric.Agent.Modules
                 await Formatter.WriteAsync(events, context.Response.Body, context.RequestAborted);
                 await context.Response.Body.FlushAsync(context.RequestAborted);
             }
-            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (context.RequestAborted.IsCancellationRequested)
             {
                 if (logger.IsEnabled(LogLevel.Information))
                 {
-                    logger.LogInformation("Hypha stopped run {RunId} of thread {ThreadId}: the client closed the stream", input.RunId, input.ThreadId);
+                    logger.LogInformation(exception, "Hypha stopped run {RunId} of thread {ThreadId}: the client closed the stream", input.RunId, input.ThreadId);
                 }
 
                 return;

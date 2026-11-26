@@ -117,11 +117,25 @@ namespace Mycelium.Fabric.Agent.Hypha
         /// <exception cref="ArgumentException">Thrown when <paramref name="threadId"/> is <c>null</c> or blank.</exception>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="message"/> is <c>null</c>.</exception>
         /// <exception cref="TimeoutException">Thrown when the LLM stays silent for longer than <see cref="HyphaOptions.SilenceTimeout"/>.</exception>
-        public async IAsyncEnumerable<ChatResponseUpdate> RunAsync(string threadId, ChatMessage message, string context, [EnumeratorCancellation] CancellationToken cancellationToken)
+        public IAsyncEnumerable<ChatResponseUpdate> RunAsync(string threadId, ChatMessage message, string context, CancellationToken cancellationToken)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
             ArgumentNullException.ThrowIfNull(message);
 
+            return this.RunCheckedAsync(threadId, message, context, cancellationToken);
+        }
+
+        /// <summary>
+        /// Answers a message of a conversation whose arguments <see cref="RunAsync"/> has checked.
+        /// </summary>
+        /// <param name="threadId">The identifier of the conversation, one per user and project.</param>
+        /// <param name="message">The message of the user.</param>
+        /// <param name="context">What the user works on, for this answer only; <c>null</c> when none.</param>
+        /// <param name="cancellationToken">Cancels the answer.</param>
+        /// <returns>The parts of the answer as the LLM writes them, with the calls of tools and their results.</returns>
+        /// <exception cref="TimeoutException">Thrown when the LLM stays silent for longer than <see cref="HyphaOptions.SilenceTimeout"/>.</exception>
+        private async IAsyncEnumerable<ChatResponseUpdate> RunCheckedAsync(string threadId, ChatMessage message, string context, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
             var conversation = this.conversations.GetOrAdd(threadId, static _ => new Conversation());
             await conversation.Turn.WaitAsync(cancellationToken);
             var request = string.IsNullOrWhiteSpace(context) ? message : new ChatMessage(ChatRole.User, [new TextContent($"{context}\n\n"), .. message.Contents]);
