@@ -33,9 +33,11 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
             [typeof(IDao<IFunctionalProject>)] = typeof(FunctionalProjectDao),
             [typeof(IDao<IFunctionalProjectPolicy>)] = typeof(FunctionalProjectPolicyDao),
             [typeof(IDao<IOrganization>)] = typeof(OrganizationDao),
+            [typeof(IDao<IOrganizationInvitation>)] = typeof(OrganizationInvitationDao),
             [typeof(IDao<IOrganizationMember>)] = typeof(OrganizationMemberDao),
             [typeof(IDao<IOrganizationPolicy>)] = typeof(OrganizationPolicyDao),
             [typeof(IDao<IOwnership>)] = typeof(OwnershipDao),
+            [typeof(IDao<IProjectInvitation>)] = typeof(ProjectInvitationDao),
             [typeof(IDao<IProjectMember>)] = typeof(ProjectMemberDao),
             [typeof(IDao<IReply>)] = typeof(ReplyDao),
             [typeof(IDao<IReview>)] = typeof(ReviewDao),
@@ -76,6 +78,20 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Assert.That(provider.GetRequiredService<IDeSerializer>(), Is.TypeOf<DeSerializer>());
                 Assert.That(scope.ServiceProvider.GetRequiredService<IDaoProvider>(), Is.TypeOf<DaoProvider>());
                 Assert.That(scope.ServiceProvider.GetRequiredService<IThingRepository>(), Is.TypeOf<ThingRepository>());
+                Assert.That(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>(), Is.SameAs(scope.ServiceProvider.GetRequiredService<ManagedValueProvider>()));
+            }
+
+            using var otherScope = provider.CreateScope();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.GetRequiredService<IManagedValueProvider>, Throws.InvalidOperationException);
+
+                Assert.That(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>(),
+                    Is.SameAs(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>()));
+
+                Assert.That(otherScope.ServiceProvider.GetRequiredService<IManagedValueProvider>(),
+                    Is.Not.SameAs(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>()));
             }
 
             var daoProvider = scope.ServiceProvider.GetRequiredService<IDaoProvider>();

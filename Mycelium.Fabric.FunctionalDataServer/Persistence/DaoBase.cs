@@ -29,7 +29,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     /// Implements the <see cref="IDao{TDto}"/> operations once for the generated data access objects. Each generated data access object supplies the
     /// class kind and statements of its concrete class and binds their reference parameters; this base binds the <c>id</c>, <c>ids</c>,
     /// <c>class_kind</c> and <c>data</c> parameters, decides which bindings each command uses, implements the untyped reads of
-    /// <see cref="IBaseDao"/> and writes no SQL.
+    /// <see cref="IBaseDao"/> and writes no SQL. Before a create or update it reads the acting user once from the <see cref="IManagedValueProvider"/>
+    /// and passes it to the managed-value overrides of the generated data access object; it names no managed property and assigns no time.
     /// </summary>
     /// <typeparam name="TDto">The DTO interface of the concrete model class.</typeparam>
     [ExcludeFromCodeCoverage]
@@ -46,15 +47,26 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         private readonly IDeSerializer deSerializer;
 
         /// <summary>
+        /// The provider of the acting user's identifier, assigned to the managed user references of a created or updated object.
+        /// </summary>
+        private readonly IManagedValueProvider managedValueProvider;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="DaoBase{TDto}"/> class.
         /// </summary>
         /// <param name="serializer">The serializer that produces the JSON document stored in the <c>data</c> column.</param>
         /// <param name="deSerializer">The deserializer that turns a stored JSON document back into a DTO.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="serializer"/> or <paramref name="deSerializer"/> is null.</exception>
-        protected DaoBase(ISerializer serializer, IDeSerializer deSerializer)
+        /// <param name="managedValueProvider">
+        /// The provider of the acting user's identifier, assigned to the managed user references of a created or updated object.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="serializer"/>, <paramref name="deSerializer"/> or <paramref name="managedValueProvider"/> is null.
+        /// </exception>
+        protected DaoBase(ISerializer serializer, IDeSerializer deSerializer, IManagedValueProvider managedValueProvider)
         {
             this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             this.deSerializer = deSerializer ?? throw new ArgumentNullException(nameof(deSerializer));
+            this.managedValueProvider = managedValueProvider ?? throw new ArgumentNullException(nameof(managedValueProvider));
         }
 
         /// <summary>
@@ -202,52 +214,63 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         }
 
         /// <summary>
-        /// Stores a new object: its JSON document, one row per class of its inheritance chain and its link-table rows.
+        /// Assigns the acting user to the managed user references of a new object, then stores it: its JSON document, one row per class of its
+        /// inheritance chain and its link-table rows. The statements assign the creation and update times.
         /// </summary>
         /// <param name="transaction">The caller's open transaction, whose connection executes the statements.</param>
-        /// <param name="dto">The object to store, identified by its application-supplied <see cref="IThing.Id"/>.</param>
+        /// <param name="dto">The object to store, identified by its application-supplied <see cref="IThing.Id"/>; it receives the acting user.</param>
         /// <param name="cancellationToken">The token canceling the operation.</param>
-        /// <returns>A task that completes when every statement has been executed.</returns>
+        /// <returns>The stored object, read back in the same transaction with the values the database assigned.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="dto"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">No acting user is known for the current unit of work.</exception>
         /// <exception cref="NpgsqlException">The database rejects or fails a statement.</exception>
         /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
-        public async Task CreateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken)
+        public async Task<TDto> CreateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(transaction);
             ArgumentNullException.ThrowIfNull(dto);
+
+            this.AssignManagedValuesOnCreate(dto, this.managedValueProvider.QueryActingUserId());
 
             await using var data = new MemoryStream();
 
             await this.serializer.SerializeAsync(dto, data, new JsonWriterOptions(), cancellationToken);
 
-            await using var command = CreateCommand(transaction, this.CreateSql);
+            await using (var command = CreateCommand(transaction, this.CreateSql))
+            {
+                this.AddIdentityParameter(command, dto.Id);
+                this.AddClassKindParameter(command);
+                this.AddDataParameter(command, GetBytes(data));
+                this.AddReferenceParameters(command, dto);
 
-            this.AddIdentityParameter(command, dto.Id);
-            this.AddClassKindParameter(command);
-            this.AddDataParameter(command, GetBytes(data));
-            this.AddReferenceParameters(command, dto);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
 
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            return await this.ReadByIdAsync(transaction, dto.Id, cancellationToken);
         }
 
         /// <summary>
-        /// Writes the JSON document of a stored object, then only the scalar reference columns and link-table rows that differ from
-        /// <paramref name="dto"/>.
+        /// Assigns the acting user to the managed user references of a stored object, then writes its JSON document and only the scalar reference
+        /// columns and link-table rows that differ from <paramref name="dto"/>. The statements assign the update time and keep the creation-only
+        /// values.
         /// </summary>
         /// <param name="transaction">The caller's open transaction, whose connection executes the statements.</param>
-        /// <param name="dto">The new state of the object, identified by its <see cref="IThing.Id"/>.</param>
+        /// <param name="dto">The new state of the object, identified by its <see cref="IThing.Id"/>; it receives the acting user.</param>
         /// <param name="cancellationToken">The token canceling the operation.</param>
         /// <returns>
-        /// <see langword="true"/> when the object was updated; <see langword="false"/> when no object of the class has the identifier, in which case
-        /// nothing is written.
+        /// The stored object, read back in the same transaction with the values the database assigned; <see langword="null"/> when no object of the
+        /// class has the identifier, in which case nothing is written.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="dto"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">No acting user is known for the current unit of work.</exception>
         /// <exception cref="NpgsqlException">The database rejects or fails a statement.</exception>
         /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
-        public async Task<bool> UpdateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken)
+        public async Task<TDto> UpdateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(transaction);
             ArgumentNullException.ThrowIfNull(dto);
+
+            this.AssignManagedValuesOnUpdate(dto, this.managedValueProvider.QueryActingUserId());
 
             await using var data = new MemoryStream();
 
@@ -261,13 +284,13 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
 
                 if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
                 {
-                    return false;
+                    return null;
                 }
             }
 
             await this.UpdateRelationsAsync(transaction, dto, cancellationToken);
 
-            return true;
+            return await this.ReadByIdAsync(transaction, dto.Id, cancellationToken);
         }
 
         /// <summary>
@@ -379,6 +402,26 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             this.AddReferenceParameters(command, dto);
 
             await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Assigns the acting user to the managed user references a new object receives on creation; this base implementation assigns nothing, for a
+        /// class with no such reference.
+        /// </summary>
+        /// <param name="dto">The object to store.</param>
+        /// <param name="actingUserId">The identifier of the acting user, read once from the <see cref="IManagedValueProvider"/>.</param>
+        protected virtual void AssignManagedValuesOnCreate(TDto dto, Guid actingUserId)
+        {
+        }
+
+        /// <summary>
+        /// Assigns the acting user to the managed user references a stored object receives on update; this base implementation assigns nothing, for
+        /// a class with no such reference.
+        /// </summary>
+        /// <param name="dto">The new state of the object.</param>
+        /// <param name="actingUserId">The identifier of the acting user, read once from the <see cref="IManagedValueProvider"/>.</param>
+        protected virtual void AssignManagedValuesOnUpdate(TDto dto, Guid actingUserId)
+        {
         }
 
         /// <summary>
