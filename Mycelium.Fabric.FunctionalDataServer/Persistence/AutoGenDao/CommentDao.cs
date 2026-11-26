@@ -48,7 +48,7 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
                     'quotes', message.quotes
                 )
                 || jsonb_build_object(
-                    'replies', COALESCE((SELECT jsonb_agg(link.target_id ORDER BY link.target_id) FROM fabric.comment_replies AS link WHERE link.source_id = thing.id), '[]'::jsonb)
+                    'replies', COALESCE((SELECT jsonb_agg(link.target_id ORDER BY link.position) FROM fabric.comment_replies AS link WHERE link.source_id = thing.id), '[]'::jsonb)
                 )
             FROM fabric.thing
             JOIN fabric.auditable_thing ON auditable_thing.id = thing.id
@@ -57,25 +57,24 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             """;
 
         /// <summary>
-        /// The statements that write the relational state of a stored object that differs from its new state: each class row whose scalar reference
-        /// columns changed, and the link-table rows of each collection that are no longer listed or are new.
+        /// The statements that write the relational state of a stored object that differs from its new state: each class row whose updatable scalar
+        /// reference columns changed, and the link-table rows of each collection that are no longer listed or are new.
         /// </summary>
         private const string UpdateRelationSql = """
             UPDATE fabric.auditable_thing SET
-                created_by = @auditable_thing_created_by,
                 updated_by = @auditable_thing_updated_by
             WHERE id = @id
-                AND (created_by, updated_by) IS DISTINCT FROM (@auditable_thing_created_by, @auditable_thing_updated_by);
+                AND (updated_by) IS DISTINCT FROM (@auditable_thing_updated_by);
             UPDATE fabric.message SET
                 quotes = @message_quotes
             WHERE id = @id
                 AND (quotes) IS DISTINCT FROM (@message_quotes);
             DELETE FROM fabric.comment_replies
-            WHERE source_id = @id AND target_id <> ALL(@comment_replies);
-            INSERT INTO fabric.comment_replies (source_id, target_id)
-            SELECT @id, element.target_id
-            FROM unnest(@comment_replies) AS element(target_id)
-            ON CONFLICT (source_id, target_id) DO NOTHING;
+            WHERE source_id = @id AND (position > cardinality(@comment_replies) OR target_id IS DISTINCT FROM (@comment_replies)[position]);
+            INSERT INTO fabric.comment_replies (source_id, target_id, position)
+            SELECT @id, element.target_id, element.position
+            FROM unnest(@comment_replies) WITH ORDINALITY AS element(target_id, position)
+            ON CONFLICT (source_id, position) DO NOTHING;
             """;
 
         /// <summary>
@@ -87,11 +86,15 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <param name="deSerializer">
         /// The deserializer that turns a stored JSON document back into a DTO.
         /// </param>
+        /// <param name="managedValueProvider">
+        /// The provider of the acting user's identifier, which the server assigns to managed references.
+        /// </param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="serializer" /> or <paramref name="deSerializer" /> is <see langword="null" />.
+        /// Thrown when <paramref name="serializer" />, <paramref name="deSerializer" /> or <paramref name="managedValueProvider" /> is
+        /// <see langword="null" />.
         /// </exception>
-        public CommentDao(ISerializer serializer, IDeSerializer deSerializer)
-            : base(serializer, deSerializer)
+        public CommentDao(ISerializer serializer, IDeSerializer deSerializer, IManagedValueProvider managedValueProvider)
+            : base(serializer, deSerializer, managedValueProvider)
         {
         }
 
@@ -127,27 +130,31 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         /// <summary>
         /// Gets the statements that store a new object: the root row with its JSON document without reference members, one row per class from
         /// the root down to this class with the scalar reference columns declared there, and the rows of every link-table collection.
+        /// The database assigns the transaction time to the managed date and time values assigned on creation.
         /// </summary>
         protected override string CreateSql => """
             INSERT INTO fabric.thing (id, class_kind, data)
-            VALUES (@id, @class_kind, @data - ARRAY['createdBy', 'updatedBy', 'quotes', 'replies']);
+            VALUES (@id, @class_kind, @data - ARRAY['createdBy', 'updatedBy', 'quotes', 'replies'] || jsonb_build_object('createdOn', fabric.now_utc(), 'updatedOn', fabric.now_utc()));
             INSERT INTO fabric.auditable_thing (id, created_by, updated_by)
             VALUES (@id, @auditable_thing_created_by, @auditable_thing_updated_by);
             INSERT INTO fabric.message (id, quotes)
             VALUES (@id, @message_quotes);
             INSERT INTO fabric.comment (id)
             VALUES (@id);
-            INSERT INTO fabric.comment_replies (source_id, target_id)
-            SELECT @id, element.target_id
-            FROM unnest(@comment_replies) AS element(target_id);
+            INSERT INTO fabric.comment_replies (source_id, target_id, position)
+            SELECT @id, element.target_id, element.position
+            FROM unnest(@comment_replies) WITH ORDINALITY AS element(target_id, position);
             """;
 
         /// <summary>
         /// Gets the statement that replaces the JSON document of one stored object of this class, without its reference members.
+        /// The database assigns the transaction time to the managed date and time values assigned on update, and the stored values of those
+        /// assigned on creation only are kept.
         /// </summary>
         protected override string UpdateDataSql => """
             UPDATE fabric.thing
             SET data = @data - ARRAY['createdBy', 'updatedBy', 'quotes', 'replies']
+                || jsonb_build_object('createdOn', data -> 'createdOn', 'updatedOn', fabric.now_utc())
             WHERE id = @id AND class_kind = @class_kind;
             """;
 
@@ -158,6 +165,35 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
             DELETE FROM fabric.thing
             WHERE id = @id AND class_kind = @class_kind;
             """;
+
+        /// <summary>
+        /// Assigns the acting user to the managed references that the server sets when an object of this class is created.
+        /// </summary>
+        /// <param name="dto">
+        /// The object about to be stored, whose managed references are assigned.
+        /// </param>
+        /// <param name="actingUserId">
+        /// The identifier of the acting user.
+        /// </param>
+        protected override void AssignManagedValuesOnCreate(IComment dto, Guid actingUserId)
+        {
+            dto.CreatedBy = actingUserId;
+            dto.UpdatedBy = actingUserId;
+        }
+
+        /// <summary>
+        /// Assigns the acting user to the managed references that the server sets when an object of this class is updated.
+        /// </summary>
+        /// <param name="dto">
+        /// The new state of the object, whose managed references are assigned.
+        /// </param>
+        /// <param name="actingUserId">
+        /// The identifier of the acting user.
+        /// </param>
+        protected override void AssignManagedValuesOnUpdate(IComment dto, Guid actingUserId)
+        {
+            dto.UpdatedBy = actingUserId;
+        }
 
         /// <summary>
         /// Writes the scalar reference columns and link-table rows of a stored object that differ from <paramref name="dto" />.

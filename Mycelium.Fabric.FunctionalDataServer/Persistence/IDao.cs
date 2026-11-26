@@ -63,31 +63,35 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
         Task<IReadOnlyList<TDto>> ReadByIdsAsync(NpgsqlTransaction transaction, IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Stores a new object: its JSON document, one row per class of its inheritance chain and its link-table rows.
+        /// Assigns the managed values of a new object, then stores it: its JSON document, one row per class of its inheritance chain and its
+        /// link-table rows.
         /// </summary>
         /// <param name="transaction">The caller's open transaction, whose connection executes the statements.</param>
-        /// <param name="dto">The object to store, identified by its application-supplied <see cref="IThing.Id"/>.</param>
+        /// <param name="dto">The object to store, identified by its application-supplied <see cref="IThing.Id"/>; it receives the acting user.</param>
         /// <param name="cancellationToken">The token canceling the operation.</param>
-        /// <returns>A task that completes when every statement has been executed.</returns>
+        /// <returns>The stored object, read back in the same transaction with the values the database assigned.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="dto"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">No acting user is known for the current unit of work.</exception>
         /// <exception cref="NpgsqlException">The database rejects or fails a statement.</exception>
         /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
-        Task CreateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken);
+        Task<TDto> CreateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Replaces a stored object's JSON document, scalar reference columns and link-table rows with the values of <paramref name="dto"/>.
+        /// Assigns the managed values of a stored object, then writes its JSON document and only the scalar reference columns and link-table rows
+        /// that differ from <paramref name="dto"/>; the creation-only values keep their stored values.
         /// </summary>
         /// <param name="transaction">The caller's open transaction, whose connection executes the statements.</param>
-        /// <param name="dto">The new state of the object, identified by its <see cref="IThing.Id"/>.</param>
+        /// <param name="dto">The new state of the object, identified by its <see cref="IThing.Id"/>; it receives the acting user.</param>
         /// <param name="cancellationToken">The token canceling the operation.</param>
         /// <returns>
-        /// <see langword="true"/> when the object was updated; <see langword="false"/> when no object of the class has the identifier, in which case
-        /// nothing is written.
+        /// The stored object, read back in the same transaction with the values the database assigned; <see langword="null"/> when no object of the
+        /// class has the identifier, in which case nothing is written.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="transaction"/> or <paramref name="dto"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">No acting user is known for the current unit of work.</exception>
         /// <exception cref="NpgsqlException">The database rejects or fails a statement.</exception>
         /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
-        Task<bool> UpdateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken);
+        Task<TDto> UpdateAsync(NpgsqlTransaction transaction, TDto dto, CancellationToken cancellationToken);
 
         /// <summary>
         /// Deletes a stored object; the database removes its inheritance rows, link rows and contained objects.
