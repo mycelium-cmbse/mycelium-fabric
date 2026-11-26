@@ -11,7 +11,7 @@
     <ItemGroup>
         <PackageVersion Include="AGUI.Formatting" Version="1.0.1" />
         <PackageVersion Include="AGUI.Server" Version="1.0.1" />
-        <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.4" />
+        <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.5" />
         <PackageVersion Include="Carter" Version="10.0.0" />
         <PackageVersion Include="CsvHelper" Version="33.1.0" />
         <PackageVersion Include="ErrorOr" Version="2.1.1" />
