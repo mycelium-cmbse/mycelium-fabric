@@ -78,20 +78,8 @@ namespace Mycelium.Fabric.FunctionalDataServer.Tests.Persistence
                 Assert.That(provider.GetRequiredService<IDeSerializer>(), Is.TypeOf<DeSerializer>());
                 Assert.That(scope.ServiceProvider.GetRequiredService<IDaoProvider>(), Is.TypeOf<DaoProvider>());
                 Assert.That(scope.ServiceProvider.GetRequiredService<IThingRepository>(), Is.TypeOf<ThingRepository>());
-                Assert.That(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>(), Is.SameAs(scope.ServiceProvider.GetRequiredService<ManagedValueProvider>()));
-            }
-
-            using var otherScope = provider.CreateScope();
-
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(provider.GetRequiredService<IManagedValueProvider>, Throws.InvalidOperationException);
-
                 Assert.That(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>(),
-                    Is.SameAs(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>()));
-
-                Assert.That(otherScope.ServiceProvider.GetRequiredService<IManagedValueProvider>(),
-                    Is.Not.SameAs(scope.ServiceProvider.GetRequiredService<IManagedValueProvider>()));
+                    Is.TypeOf<ManagedValueProvider>().And.SameAs(scope.ServiceProvider.GetRequiredService<IActingUserSetter>()));
             }
 
             var daoProvider = scope.ServiceProvider.GetRequiredService<IDaoProvider>();

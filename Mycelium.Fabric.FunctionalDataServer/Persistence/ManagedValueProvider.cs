@@ -12,10 +12,10 @@ namespace Mycelium.Fabric.FunctionalDataServer.Persistence
     using System;
 
     /// <summary>
-    /// Holds the acting user of one scope, recorded by the caller of the unit of work before its first create or update, and provides it to the data
-    /// access objects of that scope.
+    /// Holds the acting user of one scope, recorded by the caller of the unit of work through <see cref="IActingUserSetter"/> before its first create
+    /// or update, and provides it to the data access objects of that scope through <see cref="IManagedValueProvider"/>.
     /// </summary>
-    public sealed class ManagedValueProvider : IManagedValueProvider
+    public sealed class ManagedValueProvider : IManagedValueProvider, IActingUserSetter
     {
         /// <summary>
         /// Gets or sets the identifier of the recorded acting user, or <see langword="null"/> while none has been recorded.
