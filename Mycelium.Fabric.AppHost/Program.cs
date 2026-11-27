@@ -63,6 +63,12 @@ namespace Mycelium.Fabric.AppHost
                 .WithReference(functionalData)
                 .WaitFor(functionalData, WaitBehavior.WaitOnResourceUnavailable);
 
+            // The model of the Fabric MCP server is a JSON file until the MCP server reads the Concurrent Server.
+            var fabricAgent = builder.AddProject<Projects.Mycelium_Fabric_Agent>("fabric-agent")
+                .WithEnvironment("FabricMcp__ModelPath", builder.Configuration["FabricAgent:ModelPath"] ?? string.Empty);
+
+            fabricAgent.WithEnvironment("Hypha__McpEndpoint", ReferenceExpression.Create($"{fabricAgent.GetEndpoint("http")}/mcp"));
+
             builder.Build().Run();
         }
     }
