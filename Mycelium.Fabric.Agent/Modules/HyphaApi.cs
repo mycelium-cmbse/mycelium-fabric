@@ -78,7 +78,7 @@ namespace Mycelium.Fabric.Agent.Modules
 
             var threadId = context.Request.RouteValues["threadId"] as string;
             var history = context.RequestServices.GetRequiredService<IHyphaAgent>().GetHistory(threadId);
-            List<AGUIMessage> messages = [.. history.AsAGUIMessages(SerializerOptions)];
+            List<AGUIMessage> messages = [.. history.SelectMany(ToAGUIMessages)];
 
             return context.Response.WriteAsJsonAsync(messages, SerializerOptions, context.RequestAborted);
         }
@@ -158,6 +158,27 @@ namespace Mycelium.Fabric.Agent.Modules
 
             app.MapPost(RunRoute, RunAgent);
             app.MapGet(ThreadRoute, GetThread);
+        }
+
+        /// <summary>
+        /// Converts one message of a conversation to AG-UI messages. The reasoning of an answer, which the AG-UI conversion
+        /// leaves out, comes first as a reasoning message, so that Bloom shows it again after a reload.
+        /// </summary>
+        /// <param name="message">The message of the conversation.</param>
+        /// <returns>The reasoning message, when the message has reasoning, then the AG-UI messages of the message.</returns>
+        private static IEnumerable<AGUIMessage> ToAGUIMessages(ChatMessage message)
+        {
+            var reasoning = string.Concat(message.Contents.OfType<TextReasoningContent>().Select(content => content.Text));
+
+            if (!string.IsNullOrWhiteSpace(reasoning))
+            {
+                yield return new AGUIReasoningMessage { Id = message.MessageId ?? string.Empty, Content = reasoning };
+            }
+
+            foreach (var converted in new[] { message }.AsAGUIMessages(SerializerOptions))
+            {
+                yield return converted;
+            }
         }
 
         /// <summary>

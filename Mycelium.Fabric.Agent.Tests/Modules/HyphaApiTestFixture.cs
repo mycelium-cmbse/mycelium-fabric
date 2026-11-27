@@ -115,6 +115,29 @@ namespace Mycelium.Fabric.Agent.Tests.Modules
                 Assert.That(messages.Select(message => message.GetProperty("role").GetString()), Is.EqualTo(["user", "assistant"]));
                 Assert.That(messages[^1].GetProperty("content").GetString(), Is.EqualTo("I am Hypha."));
             }
+
+            var reasonedAnswer = Guid.NewGuid().ToString();
+            List<ChatResponseUpdate> reasoningThenText =
+            [
+                new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("The user asks ")]) { MessageId = reasonedAnswer },
+                new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("for the mass.")]) { MessageId = reasonedAnswer },
+                new ChatResponseUpdate(ChatRole.Assistant, "125.8 kg.") { MessageId = reasonedAnswer }
+            ];
+            application.ChatClient.SetupAnswers(reasoningThenText);
+
+            using var reasoned = await PostRunAsync(client, Conversation, "run-2", "Give me the mass.");
+            var reasonedEvents = await ReadEventsAsync(reasoned);
+
+            using var reasonedThread = JsonDocument.Parse(await client.GetStringAsync(threadRoute));
+            var reasonedMessages = reasonedThread.RootElement.EnumerateArray().ToList();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(reasonedEvents, Does.Contain("REASONING_MESSAGE_CONTENT"));
+                Assert.That(reasonedMessages.Select(message => message.GetProperty("role").GetString()), Is.EqualTo(["user", "assistant", "user", "reasoning", "assistant"]));
+                Assert.That(reasonedMessages[3].GetProperty("content").GetString(), Is.EqualTo("The user asks for the mass."));
+                Assert.That(reasonedMessages[4].GetProperty("content").GetString(), Is.EqualTo("125.8 kg."));
+            }
         }
 
         private static Task<HttpResponseMessage> PostRunAsync(HttpClient client, string threadId, string runId, string text)
